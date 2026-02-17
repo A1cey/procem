@@ -86,7 +86,7 @@ where
     pub fn execute_next_instruction(&mut self) -> Result<(), ProgramError> {
         let program = self.program.as_ref().ok_or(ProgramError::NoProgramLoaded)?;
 
-        let instruction = program.fetch_instruction(self.registers.pc().into())?;
+        let instruction = program.try_fetch(self.registers.pc())?;
 
         self.registers.inc(Register::PC);
 
