@@ -26,6 +26,7 @@ pub(crate) struct Tokenizer<'a> {
     curr_idx: usize,
     token_start_idx: usize,
     input: &'a str,
+    bytes: &'a [u8],
     input_len: usize,
     errors: Option<Vec<TokenizerError>>,
 }
@@ -37,6 +38,7 @@ impl Tokenizer<'_> {
             curr_idx: 0,
             token_start_idx: 0,
             input,
+            bytes: input.as_bytes(),
             input_len: input.len(),
             errors: None,
         }
@@ -57,17 +59,17 @@ impl Tokenizer<'_> {
         while self.curr_idx < self.input_len {
             self.token_start_idx = self.curr_idx;
 
-            match self.get_curr_char() {
-                '.' => self.expect_label(),
-                'R' => self.expect_register(),
-                '#' => self.expect_literal(),
-                ',' => self.expect_comma(),
-                c if c.is_alphabetic() => self.expect_instruction(),
-                c if c.is_whitespace() => self.curr_idx += 1,
-                c => {
+            match self.get_curr_byte() {
+                b'.' => self.expect_label(),
+                b'R' => self.expect_register(),
+                b'#' => self.expect_literal(),
+                b',' => self.expect_comma(),
+                b if b.is_ascii_alphabetic() => self.expect_instruction(),
+                b if b.is_ascii_whitespace() => self.curr_idx += 1,
+                b => {
                     self.curr_idx += 1;
                     self.add_error(TokenizerError::TokenStart {
-                        start: c,
+                        start: char::from(b),
                         idx: self.curr_idx,
                     });
                 }
@@ -80,23 +82,23 @@ impl Tokenizer<'_> {
         self.errors.get_or_insert_default().push(err);
     }
 
-    fn get_curr_char(&self) -> char {
-        self.input.chars().nth(self.curr_idx).map_or_else(
+    fn get_curr_byte(&self) -> u8 {
+        self.bytes.get(self.curr_idx).map_or_else(
             || {
                 unreachable!(
                     "The index should not be greater or equal to the length of the input. This should never happen."
                 )
             },
-            |c| c.to_uppercase().next().expect("Not a valid character."),
+            |b| b.to_ascii_uppercase(),
         )
     }
 
     fn set_curr_idx_to_token_end(&mut self) {
-        if self.get_curr_char().is_whitespace() {
+        if self.get_curr_byte().is_ascii_whitespace() {
             return;
         }
 
-        while self.curr_idx < self.input_len && !self.get_curr_char().is_whitespace() {
+        while self.curr_idx < self.input_len && !self.get_curr_byte().is_ascii_whitespace() {
             self.curr_idx += 1;
         }
 
@@ -106,7 +108,7 @@ impl Tokenizer<'_> {
     fn expect_label(&mut self) {
         self.curr_idx += 1;
 
-        while self.curr_idx < self.input_len && self.get_curr_char().is_alphabetic() {
+        while self.curr_idx < self.input_len && self.get_curr_byte().is_ascii_alphabetic() {
             self.curr_idx += 1;
         }
 
@@ -118,7 +120,7 @@ impl Tokenizer<'_> {
     fn expect_instruction(&mut self) {
         self.curr_idx += 1;
 
-        while self.curr_idx < self.input_len && self.get_curr_char().is_alphabetic() {
+        while self.curr_idx < self.input_len && self.get_curr_byte().is_ascii_alphabetic() {
             self.curr_idx += 1;
         }
 
@@ -136,7 +138,7 @@ impl Tokenizer<'_> {
     fn expect_register(&mut self) {
         self.curr_idx += 1;
 
-        while self.curr_idx < self.input_len && self.get_curr_char().is_numeric() {
+        while self.curr_idx < self.input_len && self.get_curr_byte().is_ascii_digit() {
             self.curr_idx += 1;
         }
 
@@ -153,13 +155,13 @@ impl Tokenizer<'_> {
     fn expect_literal(&mut self) {
         self.curr_idx += 1;
 
-        match self.get_curr_char() {
-            '\'' => self.expect_char_literal(),
-            '"' => self.expect_string_literal(),
-            '-' => self.expect_numeric_literal(),
-            c if c.is_numeric() => self.expect_numeric_literal(),
-            'T' => self.expect_boolean_true_literal(),
-            'F' => self.expect_boolean_false_literal(),
+        match self.get_curr_byte() {
+            b'\'' => self.expect_char_literal(),
+            b'"' => self.expect_string_literal(),
+            b'-' => self.expect_numeric_literal(),
+            b if b.is_ascii_digit() => self.expect_numeric_literal(),
+            b'T' => self.expect_boolean_true_literal(),
+            b'F' => self.expect_boolean_false_literal(),
             _ => self.add_error(TokenizerError::Literal { idx: self.curr_idx }),
         }
 
@@ -169,12 +171,12 @@ impl Tokenizer<'_> {
     fn expect_char_literal(&mut self) {
         self.curr_idx += 1;
 
-        let c = self.get_curr_char();
+        let b = self.get_curr_byte();
 
         self.curr_idx += 1;
 
-        match self.get_curr_char() {
-            '\'' => self.tokens.push(Token::Literal(Literal::Char(c))),
+        match self.get_curr_byte() {
+            b'\'' => self.tokens.push(Token::Literal(Literal::Char(char::from(b)))),
             _ => self.add_error(TokenizerError::CharLiteral { idx: self.curr_idx }),
         }
     }
@@ -182,7 +184,7 @@ impl Tokenizer<'_> {
     fn expect_string_literal(&mut self) {
         self.curr_idx += 1;
 
-        while self.get_curr_char() != '"' {
+        while self.get_curr_byte() != b'"' {
             self.curr_idx += 1;
         }
 
@@ -193,23 +195,23 @@ impl Tokenizer<'_> {
     }
 
     fn expect_numeric_literal(&mut self) {
-        let literal = if self.get_curr_char() == '0' {
+        let literal = if self.get_curr_byte() == b'0' {
             self.curr_idx += 1;
             self.token_start_idx = self.curr_idx;
-            match self.get_curr_char() {
-                'B' => {
+            match self.get_curr_byte() {
+                b'B' => {
                     self.set_curr_idx_to_token_end();
                     Literal::Binary(&self.input[self.token_start_idx + 1..=self.curr_idx])
                 }
-                'X' => {
+                b'X' => {
                     self.set_curr_idx_to_token_end();
                     Literal::Hexadecimal(&self.input[self.token_start_idx + 1..=self.curr_idx])
                 }
-                'O' => {
+                b'O' => {
                     self.set_curr_idx_to_token_end();
                     Literal::Octal(&self.input[self.token_start_idx + 1..=self.curr_idx])
                 }
-                'D' => {
+                b'D' => {
                     self.set_curr_idx_to_token_end();
                     Literal::Decimal(&self.input[self.token_start_idx + 1..=self.curr_idx])
                 }
@@ -324,18 +326,18 @@ mod test {
     }
 
     #[test]
-    fn test_get_curr_char() {
+    fn test_get_curr_byte() {
         let t = Tokenizer::from(".main mov");
-        assert_eq!(t.get_curr_char(), '.');
+        assert_eq!(t.get_curr_byte(), b'.');
     }
 
     #[test]
     #[should_panic]
-    fn test_get_curr_char_out_of_bounds() {
+    fn test_get_curr_byte_out_of_bounds() {
         let mut t = Tokenizer::from(".main");
-        assert_eq!(t.get_curr_char(), '.');
+        assert_eq!(t.get_curr_byte(), b'.');
         t.curr_idx += 5;
-        let _ = t.get_curr_char(); // panic
+        let _ = t.get_curr_byte(); // panic
     }
 
     #[test]
