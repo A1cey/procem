@@ -52,5 +52,3 @@ pub mod program;
 pub mod register;
 pub mod stack;
 pub mod word;
-
-mod helper;

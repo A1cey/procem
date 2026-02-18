@@ -1,10 +1,11 @@
 //! The processor's [`Stack`].
 
-use crate::helper;
-use crate::program::ProgramError;
-use crate::word::Word;
+use ars::fmt::slice::FmtSlice;
 use core::fmt::{Debug, Display, Formatter};
 use core::ops::{Deref, DerefMut, Index, IndexMut};
+
+use crate::program::ProgramError;
+use crate::word::Word;
 
 /// The [`Stack`] is a wrapper around a fixed-size array of values implementing the [`Word`] trait.
 ///
@@ -64,7 +65,7 @@ impl<const STACK_SIZE: usize, W: Word> Default for Stack<STACK_SIZE, W> {
 
 impl<const STACK_SIZE: usize, W: Word> Display for Stack<STACK_SIZE, W> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
-        write!(f, "{}", helper::FmtArray(self.deref().as_slice()))
+        write!(f, "{}", FmtSlice(self.deref().as_slice()))
     }
 }
 
