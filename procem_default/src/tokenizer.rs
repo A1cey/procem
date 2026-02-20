@@ -1,7 +1,8 @@
 use thiserror::Error;
 
+#[doc(hidden("Only public for benchmarks."))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) enum Token<'a> {
+pub enum Token<'a> {
     Label(String),
     Register(String),
     Literal(Literal<'a>),
@@ -10,8 +11,9 @@ pub(crate) enum Token<'a> {
     End,
 }
 
+#[doc(hidden("Only public for benchmarks."))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) enum Literal<'a> {
+pub enum Literal<'a> {
     Decimal(&'a str),
     Binary(&'a str),
     Hexadecimal(&'a str),
@@ -21,7 +23,8 @@ pub(crate) enum Literal<'a> {
     Char(char),
 }
 
-pub(crate) struct Tokenizer<'a> {
+#[doc(hidden("Only public for benchmarks."))]
+pub struct Tokenizer<'a> {
     tokens: Vec<Token<'a>>,
     curr_idx: usize,
     token_start_idx: usize,
@@ -44,7 +47,8 @@ impl Tokenizer<'_> {
         }
     }
 
-    pub(crate) fn tokenize(input: &str) -> Result<Vec<Token<'_>>, Vec<TokenizerError>> {
+    #[doc(hidden("Only public for benchmarks."))]
+    pub fn tokenize(input: &str) -> Result<Vec<Token<'_>>, Vec<TokenizerError>> {
         let mut tokenizer = Tokenizer::from(input);
 
         tokenizer.run();
@@ -55,6 +59,7 @@ impl Tokenizer<'_> {
         }
     }
 
+    #[inline(never)]
     fn run(&mut self) {
         while self.curr_idx < self.input_len {
             self.token_start_idx = self.curr_idx;
@@ -77,11 +82,12 @@ impl Tokenizer<'_> {
         }
     }
 
-    #[inline]
+    #[inline(never)]
     fn add_error(&mut self, err: TokenizerError) {
         self.errors.get_or_insert_default().push(err);
     }
 
+    #[inline(never)]
     fn get_curr_byte(&self) -> u8 {
         self.bytes.get(self.curr_idx).map_or_else(
             || {
@@ -93,6 +99,7 @@ impl Tokenizer<'_> {
         )
     }
 
+    #[inline(never)]
     fn set_curr_idx_to_token_end(&mut self) {
         if self.get_curr_byte().is_ascii_whitespace() {
             return;
@@ -105,6 +112,7 @@ impl Tokenizer<'_> {
         self.curr_idx -= 1;
     }
 
+    #[inline(never)]
     fn expect_label(&mut self) {
         self.curr_idx += 1;
 
@@ -117,6 +125,7 @@ impl Tokenizer<'_> {
         ));
     }
 
+    #[inline(never)]
     fn expect_instruction(&mut self) {
         self.curr_idx += 1;
 
@@ -135,6 +144,7 @@ impl Tokenizer<'_> {
         self.tokens.push(token);
     }
 
+    #[inline(never)]
     fn expect_register(&mut self) {
         self.curr_idx += 1;
 
@@ -147,11 +157,13 @@ impl Tokenizer<'_> {
         ));
     }
 
+    #[inline(never)]
     fn expect_comma(&mut self) {
         self.tokens.push(Token::Comma);
         self.curr_idx += 1;
     }
 
+    #[inline(never)]
     fn expect_literal(&mut self) {
         self.curr_idx += 1;
 
@@ -168,6 +180,7 @@ impl Tokenizer<'_> {
         self.curr_idx += 1;
     }
 
+    #[inline(never)]
     fn expect_char_literal(&mut self) {
         self.curr_idx += 1;
 
@@ -181,6 +194,7 @@ impl Tokenizer<'_> {
         }
     }
 
+    #[inline(never)]
     fn expect_string_literal(&mut self) {
         self.curr_idx += 1;
 
@@ -194,6 +208,7 @@ impl Tokenizer<'_> {
         )));
     }
 
+    #[inline(never)]
     fn expect_numeric_literal(&mut self) {
         let literal = if self.get_curr_byte() == b'0' {
             self.curr_idx += 1;
@@ -228,6 +243,7 @@ impl Tokenizer<'_> {
         self.tokens.push(Token::Literal(literal));
     }
 
+    #[inline(never)]
     fn expect_boolean_true_literal(&mut self) {
         self.curr_idx += 4; // len of "true"
 
@@ -243,6 +259,7 @@ impl Tokenizer<'_> {
         }
     }
 
+    #[inline(never)]
     fn expect_boolean_false_literal(&mut self) {
         self.curr_idx += 5; // len of "false"
 

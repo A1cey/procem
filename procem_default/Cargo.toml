@@ -9,3 +9,15 @@ thiserror = { workspace = true }
 
 [lib]
 name = "procem_default"
+
+[dev-dependencies]
+criterion = "0.8.2"
+dev_utilities = { path = "../dev_utilities" }
+
+[[bench]]
+name = "tokenizer"
+harness = false
+
+[[bench]]
+name = "tokenizer_perf"
+harness = false
