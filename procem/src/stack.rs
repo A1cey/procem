@@ -1,13 +1,15 @@
 //! The processor's [`Stack`].
 
-use crate::helper;
-use crate::word::Word;
+use ars::fmt::slice::FmtSlice;
 use core::fmt::{Debug, Display, Formatter};
-use core::ops::{Deref, DerefMut};
+use core::ops::{Deref, DerefMut, Index, IndexMut};
+
+use crate::program::ProgramError;
+use crate::word::Word;
 
 /// The [`Stack`] is a wrapper around a fixed-size array of values implementing the [`Word`] trait.
 ///
-/// It can be read with the [`read`](Stack::read) method. It can also be written to with the [`write`](Stack::write) method.
+/// It can be read with the [`read`](Stack::read) or [`try_read`](Stack::try_read) methods. It can also be written to with the [`write`](Stack::write) or [`try_write`](Stack::try_write) methods.
 /// For both reading and writing, the stack pointer needs to be provided.
 /// ```
 /// # use procem::register::{Flag, Register};
@@ -63,7 +65,31 @@ impl<const STACK_SIZE: usize, W: Word> Default for Stack<STACK_SIZE, W> {
 
 impl<const STACK_SIZE: usize, W: Word> Display for Stack<STACK_SIZE, W> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
-        write!(f, "{}", helper::FmtArray(self.deref().as_slice()))
+        write!(f, "{}", FmtSlice(self.deref().as_slice()))
+    }
+}
+
+impl<const STACK_SIZE: usize, W: Word> Index<usize> for Stack<STACK_SIZE, W> {
+    type Output = W;
+
+    /// Get a reference to the value on the stack at the given stack pointer.
+    ///
+    /// # Panics
+    /// Panics if the stack pointer is out of bounds.
+    fn index(&self, sp: usize) -> &Self::Output {
+        self.get(sp)
+            .unwrap_or_else(|| panic!("Out of bounds stack access. Stack size: {STACK_SIZE}, Stack pointer: {sp}"))
+    }
+}
+
+impl<const STACK_SIZE: usize, W: Word> IndexMut<usize> for Stack<STACK_SIZE, W> {
+    /// Get a mutable reference to the value on the stack at the given stack pointer.
+    ///
+    /// # Panics
+    /// Panics if the stack pointer is out of bounds.
+    fn index_mut(&mut self, sp: usize) -> &mut Self::Output {
+        self.get_mut(sp)
+            .unwrap_or_else(|| panic!("Out of bounds stack access. Stack size: {STACK_SIZE}, Stack pointer: {sp}"))
     }
 }
 
@@ -76,22 +102,71 @@ impl<const STACK_SIZE: usize, W: Word> Stack<STACK_SIZE, W> {
 
     /// Read a value from the stack at the given stack pointer.
     ///
+    /// For a non-panicking alternative see [`try_read`](Stack::try_read).
+    ///
     /// # Panics
     /// Panics if the stack pointer is out of bounds.
     pub fn read(&self, sp: W) -> W {
-        self.get(sp.into())
-            .copied()
-            .unwrap_or_else(|| panic!("Out of bounds stack access. Stack size: {STACK_SIZE}, Stack pointer: {sp}"))
+        self[sp.into()]
+    }
+
+    /// Read a value from the stack at the given stack pointer.
+    ///
+    /// # Errors
+    /// Returns an [`OutOfBoundsStackAccess`](ProgramError::OutOfBoundsStackAccess) error if the stack pointer is out of bounds.
+    pub fn try_read(&mut self, sp: W) -> Result<W, ProgramError> {
+        let sp: usize = sp.into();
+
+        self.get(sp).copied().ok_or(ProgramError::OutOfBoundsStackAccess {
+            stack_size: STACK_SIZE,
+            stack_pointer: sp,
+        })
+    }
+
+    /// Read a value from the stack at the given stack pointer, without doing bounds checking.
+    ///
+    /// For a safe alternative see [`read`](Stack::read).
+    ///
+    /// # Safety
+    /// Calling this method with an out-of-bounds stack pointer value is undefined behavior.
+    pub unsafe fn read_unchecked(&mut self, sp: W) -> W {
+        // SAFETY: The caller must uphold safety and provide an in-bounds stack pointer value.
+        *unsafe { self.get_unchecked(sp.into()) }
     }
 
     /// Write a value to the stack at the given stack pointer.
     ///
+    /// For a non-panicking alternative see [`try_write`](Stack::try_write).
+    ///
     /// # Panics
     /// Panics if the stack pointer is out of bounds.
     pub fn write(&mut self, sp: W, value: W) {
-        *self
-            .get_mut(sp.into())
-            .unwrap_or_else(|| panic!("Out of bounds stack access. Stack size: {STACK_SIZE}, Stack pointer: {sp}")) =
-            value;
+        self[sp.into()] = value;
+    }
+
+    /// Write a value to the stack at the given stack pointer.
+    ///
+    /// # Errors
+    /// Returns an [`OutOfBoundsStackAccess`](ProgramError::OutOfBoundsStackAccess) error if the stack pointer is out of bounds.
+    pub fn try_write(&mut self, sp: W, value: W) -> Result<(), ProgramError> {
+        let sp: usize = sp.into();
+
+        *self.get_mut(sp).ok_or(ProgramError::OutOfBoundsStackAccess {
+            stack_size: STACK_SIZE,
+            stack_pointer: sp,
+        })? = value;
+
+        Ok(())
+    }
+
+    /// Write a value to the stack at the given stack pointer, without doing bounds checking.
+    ///
+    /// For a safe alternative see [`write`](Stack::write).
+    ///
+    /// # Safety
+    /// Calling this method with an out-of-bounds stack pointer value is undefined behavior.
+    pub unsafe fn write_unchecked(&mut self, sp: W, value: W) {
+        // SAFETY: The caller must uphold safety and provide an in-bounds stack pointer value.
+        *unsafe { self.get_unchecked_mut(sp.into()) } = value;
     }
 }

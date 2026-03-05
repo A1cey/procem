@@ -3,6 +3,11 @@
 version = 4
 
 [[package]]
+name = "ars"
+version = "0.1.0"
+source = "git+https://github.com/A1cey/ars.git#8bbd8852b05867b311a5e4a1b01ee957122f36bd"
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.101"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13,14 +18,15 @@ dependencies = [
 
 [[package]]
 name = "procem"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
+ "ars",
  "thiserror",
 ]
 
 [[package]]
 name = "procem_default"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "procem",
  "thiserror",

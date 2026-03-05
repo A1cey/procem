@@ -1,9 +1,9 @@
 //! The [`Registers`] struct, [`Register`] enum and [`Flag`] enum.
+use ars::fmt::slice::FmtSlice;
 use core::fmt::Debug;
 use core::str::FromStr;
 use thiserror::Error;
 
-use crate::helper::FmtArray;
 use crate::word::Word;
 
 #[cfg(feature = "alloc")]
@@ -123,7 +123,7 @@ impl<W: Word> Registers<W> {
 impl<W: Word> core::fmt::Display for Registers<W> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
         write!(f, "general:\t")?;
-        writeln!(f, "{}", FmtArray(self.general.as_slice()))?;
+        writeln!(f, "{}", FmtSlice(self.general.as_slice()))?;
         writeln!(f, "pc:\t\t{}\nsp:\t\t{}", self.pc, self.sp)?;
         writeln!(
             f,

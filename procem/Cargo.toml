@@ -1,6 +1,6 @@
 [package]
 name = "procem"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 repository = "https://github.com/A1cey/procem/tree/main/procem"
 license = "MIT"
@@ -13,3 +13,4 @@ alloc = []
 
 [dependencies]
 thiserror = {workspace = true}
+ars = {git = "https://github.com/A1cey/ars.git"}
