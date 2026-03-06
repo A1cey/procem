@@ -6,6 +6,7 @@
 
 ### Syntax
 
+All assembly is interpreted as ASCII. 
 All instructions can be written in mixed case.
 All operations that can be suffixed with an 'S', set the flag registers depending on the operation.
 

@@ -190,6 +190,41 @@ impl FromStr for Register {
     }
 }
 
+impl TryFrom<&[u8]> for Register {
+    type Error = RegisterError;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        match value {
+            b"R0" | b"r0" => Ok(Self::R0),
+            b"R1" | b"r1" => Ok(Self::R1),
+            b"R2" | b"r2" => Ok(Self::R2),
+            b"R3" | b"r3" => Ok(Self::R3),
+            b"R4" | b"r4" => Ok(Self::R4),
+            b"R5" | b"r5" => Ok(Self::R5),
+            b"R6" | b"r6" => Ok(Self::R6),
+            b"R7" | b"r7" => Ok(Self::R7),
+            b"R8" | b"r8" => Ok(Self::R8),
+            b"R9" | b"r9" => Ok(Self::R9),
+            b"R10" | b"r10" => Ok(Self::R10),
+            b"R11" | b"r11" => Ok(Self::R11),
+            b"R12" | b"r12" => Ok(Self::R12),
+            b"R13" | b"r13" => Ok(Self::R13),
+            b"R14" | b"r14" => Ok(Self::R14),
+            b"R15" | b"r15" => Ok(Self::R15),
+            b"PC" | b"pc" => Ok(Self::PC),
+            b"SP" | b"sp" => Ok(Self::SP),
+            _ => Err(
+                #[cfg(feature = "alloc")]
+                RegisterError::ConversionFailed {
+                    input: String::from_utf8_lossy(value).to_string(),
+                },
+                #[cfg(not(feature = "alloc"))]
+                RegisterError::ConversionFailed,
+            ),
+        }
+    }
+}
+
 /// Flag enum.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub enum Flag {
