@@ -9,4 +9,4 @@ alloc = []
 
 [dependencies]
 thiserror = {workspace = true}
-ars = {git = "https://github.com/A1cey/ars.git"}
+ars = {workspace= true}

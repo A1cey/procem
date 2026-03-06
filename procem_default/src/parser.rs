@@ -14,29 +14,32 @@ use crate::instruction::asm_instruction::{
 use crate::instruction::operand::Operand;
 use crate::instruction::{Instruction, asm_instruction::ASMNoArgInstruction};
 use crate::tokenizer::{Literal, Token};
+use ars::range::Range;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub(crate) struct Parser<'a, W> {
-    tokens: &'a [Token<'a>],
+    tokens: &'a [Token],
     instructions: Vec<Instruction<W>>,
     errors: Option<Vec<ParserError>>,
     idx: usize,
-    labels: HashMap<&'a str, usize>,
+    labels: HashMap<&'a [u8], usize>,
+    input: &'a [u8],
 }
 
 impl<'a, W: Word> Parser<'a, W> {
-    fn new(tokens: &'a [Token<'a>]) -> Self {
+    fn new(tokens: &'a [Token], input: &'a [u8]) -> Self {
         Self {
             tokens,
             errors: None,
             instructions: Vec::default(),
             idx: 0,
             labels: HashMap::default(),
+            input,
         }
     }
 
-    pub(crate) fn parse(tokens: &'a [Token<'a>]) -> Result<Vec<Instruction<W>>, Vec<ParserError>> {
-        let mut parser = Parser::new(tokens);
+    pub(crate) fn parse(tokens: &'a [Token], input: &'a [u8]) -> Result<Vec<Instruction<W>>, Vec<ParserError>> {
+        let mut parser = Parser::new(tokens, input);
         parser.run();
 
         match parser.errors {
@@ -51,7 +54,7 @@ impl<'a, W: Word> Parser<'a, W> {
         while self.idx < self.tokens.len() {
             match &self.tokens[self.idx] {
                 Token::Label(label) => {
-                    if let Some(old_instruction_idx) = self.labels.insert(label, instruction_count) {
+                    if let Some(old_instruction_idx) = self.labels.insert(&self.input[label], instruction_count) {
                         self.add_error(ParserError::DuplicateLabel {
                             idx: instruction_count,
                             old_idx: old_instruction_idx,
@@ -59,7 +62,7 @@ impl<'a, W: Word> Parser<'a, W> {
                     }
                 }
                 Token::Instruction(inst) => {
-                    self.parse_instruction(inst);
+                    self.parse_instruction(&self.input[inst]);
                     instruction_count += 1;
                 }
                 Token::End => break,
@@ -75,11 +78,21 @@ impl<'a, W: Word> Parser<'a, W> {
     }
 
     #[inline]
+    fn string_from_asm(&self, range: &Range) -> String {
+        String::from_utf8_lossy(&self.input[range]).to_string()
+    }
+
+    #[inline]
+    fn string_from_u8_slice(slice: &[u8]) -> String {
+        String::from_utf8_lossy(slice).to_string()
+    }
+
+    #[inline]
     fn add_error(&mut self, err: ParserError) {
         self.errors.get_or_insert_default().push(err);
     }
 
-    fn parse_instruction(&mut self, instruction: &str) {
+    fn parse_instruction(&mut self, instruction: &[u8]) {
         match instruction.try_into() {
             Ok(inst) => match inst {
                 ASMInstruction::NoArg(inst) => self.instructions.push(match inst {
@@ -96,7 +109,7 @@ impl<'a, W: Word> Parser<'a, W> {
             },
             Err(()) => self.add_error(ParserError::UnknownInstruction {
                 idx: self.idx,
-                inst: instruction.to_string(),
+                inst: Self::string_from_u8_slice(instruction),
             }),
         }
     }
@@ -105,7 +118,7 @@ impl<'a, W: Word> Parser<'a, W> {
         self.idx += 1;
 
         if let Some(Token::Label(label)) = self.tokens.get(self.idx) {
-            match self.labels.get(label.as_str()) {
+            match self.labels.get(&self.input[label]) {
                 Some(&idx) => match idx.try_into() {
                     Ok(idx) => {
                         self.instructions.push(Instruction::from_jump_instruction(instr, idx));
@@ -113,13 +126,13 @@ impl<'a, W: Word> Parser<'a, W> {
                     Err(_) => {
                         self.add_error(ParserError::LabelIndexToWordConversionFailed {
                             idx: self.idx,
-                            label: label.clone(),
+                            label: self.string_from_asm(label),
                         });
                     }
                 },
                 None => self.add_error(ParserError::LabelNotFound {
                     idx: self.idx,
-                    label: label.clone(),
+                    label: self.string_from_asm(label),
                 }),
             }
         } else {
@@ -132,8 +145,9 @@ impl<'a, W: Word> Parser<'a, W> {
     }
 
     fn expect_register(&mut self) -> Result<Register, ParserError> {
-        match self.get_next() {
-            Some(Token::Register(reg)) => reg.parse::<Register>().map_err(ParserError::RegisterParsing),
+        self.idx += 1; // manual, to enable borrow of self inside match
+        match self.tokens.get(self.idx) {
+            Some(Token::Register(reg)) => Register::try_from(&self.input[reg]).map_err(ParserError::RegisterParsing),
             _ => Err(ParserError::InvalidToken {
                 idx: self.idx,
                 expected: "Register",
@@ -154,9 +168,12 @@ impl<'a, W: Word> Parser<'a, W> {
     }
 
     fn expect_operand(&mut self) -> Result<Operand<W>, ParserError> {
-        match self.get_next() {
-            Some(Token::Register(reg)) => Ok(Operand::Register(reg.parse().map_err(ParserError::RegisterParsing)?)),
-            Some(Token::Literal(lit)) => Ok(Operand::Value(Self::convert_lit_to_val(lit)?)),
+        self.idx += 1; // manual, to enable borrow of self inside match
+        match self.tokens.get(self.idx) {
+            Some(Token::Register(reg)) => Ok(Operand::Register(
+                Register::try_from(&self.input[reg]).map_err(ParserError::RegisterParsing)?,
+            )),
+            Some(Token::Literal(lit)) => Ok(Operand::Value(self.convert_lit_to_val(lit)?)),
             _ => Err(ParserError::InvalidToken {
                 idx: self.idx,
                 expected: "Register or Literal",
@@ -166,8 +183,9 @@ impl<'a, W: Word> Parser<'a, W> {
     }
 
     fn expect_word(&mut self) -> Result<W, ParserError> {
-        match self.get_next() {
-            Some(Token::Literal(lit)) => Ok(Self::convert_lit_to_val(lit)?),
+        self.idx += 1; // manual, to enable borrow of self inside match
+        match self.tokens.get(self.idx) {
+            Some(Token::Literal(lit)) => Ok(self.convert_lit_to_val(lit)?),
             _ => Err(ParserError::InvalidToken {
                 idx: self.idx,
                 expected: "Literal",
@@ -177,7 +195,7 @@ impl<'a, W: Word> Parser<'a, W> {
     }
 
     #[inline]
-    fn get_next(&mut self) -> Option<&Token<'_>> {
+    fn get_next(&mut self) -> Option<&'_ Token> {
         self.idx += 1;
         self.tokens.get(self.idx)
     }
@@ -189,14 +207,26 @@ impl<'a, W: Word> Parser<'a, W> {
             .map_or_else(|| "End".to_string(), |token| format!("{token:?}"))
     }
 
-    fn convert_lit_to_val(lit: &Literal<'_>) -> Result<W, ParserError> {
+    fn convert_lit_to_val(&self, lit: &Literal) -> Result<W, ParserError> {
         match lit {
             Literal::Char(s) => Ok((*s as i32).into()),
-            Literal::Binary(s) => W::from_str_radix(s, 2).map_err(ParserError::LiteralParsing),
+            Literal::Binary(s) => {
+                let s = String::from_utf8_lossy(&self.input[s]);
+                W::from_str_radix(&s, 2).map_err(ParserError::LiteralParsing)
+            }
             Literal::Boolean(s) => Ok(i32::from(*s).into()),
-            Literal::Decimal(s) => W::from_str_radix(s, 10).map_err(ParserError::LiteralParsing),
-            Literal::Hexadecimal(s) => W::from_str_radix(s, 16).map_err(ParserError::LiteralParsing),
-            Literal::Octal(s) => W::from_str_radix(s, 8).map_err(ParserError::LiteralParsing),
+            Literal::Decimal(s) => {
+                let s = String::from_utf8_lossy(&self.input[s]);
+                W::from_str_radix(&s, 10).map_err(ParserError::LiteralParsing)
+            }
+            Literal::Hexadecimal(s) => {
+                let s = String::from_utf8_lossy(&self.input[s]);
+                W::from_str_radix(&s, 16).map_err(ParserError::LiteralParsing)
+            }
+            Literal::Octal(s) => {
+                let s = String::from_utf8_lossy(&self.input[s]);
+                W::from_str_radix(&s, 8).map_err(ParserError::LiteralParsing)
+            }
             Literal::String(_) => Err(ParserError::CannotConvertStrToVal),
         }
     }

@@ -7,3 +7,4 @@ debug = true
 
 [workspace.dependencies]
 thiserror = "2.0.12"
+ars = {git = "https://github.com/A1cey/ars.git"}

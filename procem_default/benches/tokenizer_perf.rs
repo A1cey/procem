@@ -8,9 +8,12 @@ fn main() {
     const LABEL_COUNT: usize = 100_000;
     const INST_PER_LABEL: usize = 10;
     const REGISTER_COUNT: usize = 16;
-    let input = generate_asm(LABEL_COUNT, INST_PER_LABEL, REGISTER_COUNT);
+    let input = generate_asm(LABEL_COUNT, INST_PER_LABEL, REGISTER_COUNT)
+        .bytes()
+        .collect::<Vec<_>>();
 
     for _ in 0..100 {
-        let _a = Tokenizer::tokenize(black_box(&input));
+        let mut input = input.clone();
+        let _a = Tokenizer::tokenize(black_box(&mut input));
     }
 }

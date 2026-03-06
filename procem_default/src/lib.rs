@@ -143,10 +143,12 @@ pub type AssembledProgram<W> = Program<Instruction<W>, Vec<Instruction<W>>, W>;
 /// );
 /// ```
 pub fn assemble<W: Word>(input: impl AsRef<str>) -> Result<AssembledProgram<W>, Vec<AssemblerError>> {
-    let tokens = Tokenizer::tokenize(input.as_ref())
+    let mut input: Vec<u8> = input.as_ref().bytes().collect();
+
+    let tokens = Tokenizer::tokenize(input.as_mut_slice())
         .map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())?;
 
-    let instructions = Parser::parse(tokens.as_ref())
+    let instructions = Parser::parse(tokens.as_ref(), input.as_slice())
         .map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())?;
 
     Ok(Program::new(instructions))

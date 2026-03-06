@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 procem = { path = "../procem", features = ["alloc"] }
 thiserror = { workspace = true }
+ars = {workspace= true, features= ["alloc"]}
 
 [lib]
 name = "procem_default"
