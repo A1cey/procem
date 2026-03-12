@@ -27,6 +27,12 @@ use crate::word::Word;
 /// To run a loaded program two methods are provided:
 /// - To run the entire program use [`run_program()`](Processor::run_program()).
 /// - To run only the next instruction use [`execute_next_instruction()`](Processor::execute_next_instruction()).
+///
+/// # Generic Type Parameters
+/// - `Inst`: The instruction type; must implement [`Instruction<W>`](crate::instruction::Instruction)
+/// - `Insts`: A container of instructions dereferencing to `[Inst]` (allows `Vec`, arrays, slices, etc.)
+/// - `W`: The word type; must implement [`Word`]
+/// - `Words`: A container of words dereferencing to `[W]`
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Processor<'program, const MEM_SIZE: usize, Inst, Insts, W: Word, Words> {
     pub registers: Registers<W>,
