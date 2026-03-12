@@ -34,9 +34,9 @@ pub enum JumpCondition {
 impl JumpCondition {
     /// Check the jump condition.
     #[inline]
-    pub(crate) const fn check<const STACK_SIZE: usize, W, P>(
+    pub(crate) const fn check<const MEM_SIZE: usize, W, P>(
         self,
-        processor: &Processor<STACK_SIZE, Instruction<W>, P, W>,
+        processor: &Processor<MEM_SIZE, Instruction<W>, P, W>,
     ) -> bool
     where
         W: Word,

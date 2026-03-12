@@ -100,9 +100,9 @@ pub enum Instruction<W> {
 
 impl<W: Word> InstructionTrait<W> for Instruction<W> {
     /// Execute an instruction on a processor.
-    fn execute<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+    fn execute<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
         instruction: Self,
-        processor: &mut Processor<STACK_SIZE, Self, P, W>,
+        processor: &mut Processor<MEM_SIZE, Self, P, W>,
     ) {
         match instruction {
             Self::Nop => (),
@@ -231,34 +231,34 @@ impl<W: Word> Instruction<W> {
 
     /// Copy a value from an operand to a register.
     #[inline]
-    const fn mov<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+    const fn mov<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
         to: Register,
         from: Operand<W>,
-        processor: &mut Processor<STACK_SIZE, Self, P, W>,
+        processor: &mut Processor<MEM_SIZE, Self, P, W>,
     ) {
         processor.registers.set_reg(to, from.resolve(processor));
     }
 
     /// Push a value from the operand to the stack.
     #[inline]
-    fn push<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+    fn push<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
         from: Operand<W>,
-        processor: &mut Processor<STACK_SIZE, Self, P, W>,
+        processor: &mut Processor<MEM_SIZE, Self, P, W>,
     ) {
         processor.registers.inc(Register::SP);
         let sp = processor.registers.sp();
 
-        processor.stack.write(sp, from.resolve(processor));
+        processor.mem.write(sp, from.resolve(processor));
     }
 
     /// Pop a value from the stack to the register.
     #[inline]
-    fn pop<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+    fn pop<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
         to: Register,
-        processor: &mut Processor<STACK_SIZE, Self, P, W>,
+        processor: &mut Processor<MEM_SIZE, Self, P, W>,
     ) {
         let sp = processor.registers.sp();
-        let val = processor.stack.read(sp);
+        let val = processor.mem.read(sp);
 
         processor.registers.dec(Register::SP);
         processor.registers.set_reg(to, val);
@@ -267,9 +267,9 @@ impl<W: Word> Instruction<W> {
     /// Call a subroutine at the program address specified by the operand.
     /// Pushes the current program counter onto the stack and sets the program counter to the address of the subroutine.
     #[inline]
-    fn call<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+    fn call<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
         addr: Operand<W>,
-        processor: &mut Processor<STACK_SIZE, Self, P, W>,
+        processor: &mut Processor<MEM_SIZE, Self, P, W>,
     ) {
         Self::push(Operand::Value(processor.registers.pc()), processor);
         processor.registers.set_reg(Register::PC, addr.resolve(processor));
@@ -278,17 +278,17 @@ impl<W: Word> Instruction<W> {
     /// Return from a subroutine.
     /// Pops the return address from the stack and sets the program counter to the popped value.
     #[inline]
-    fn ret<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(processor: &mut Processor<STACK_SIZE, Self, P, W>) {
+    fn ret<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(processor: &mut Processor<MEM_SIZE, Self, P, W>) {
         Self::pop(Register::PC, processor);
     }
 
     /// Set program pointer to value, effectively jumping to the instruction at this point in the program.
     /// The condition is checked before jumping and the jump is performed if the condition is met.
     #[inline]
-    const fn jmp<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+    const fn jmp<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
         to: W,
         condition: JumpCondition,
-        processor: &mut Processor<STACK_SIZE, Self, P, W>,
+        processor: &mut Processor<MEM_SIZE, Self, P, W>,
     ) {
         if condition.check(processor) {
             processor.registers.set_reg(Register::PC, to);
@@ -297,11 +297,11 @@ impl<W: Word> Instruction<W> {
 
     /// Add the value of an operand (rhs) to a register (acc).
     #[inline]
-    fn add<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+    fn add<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
         acc: Register,
         rhs: Operand<W>,
         signed: bool,
-        processor: &mut Processor<STACK_SIZE, Self, P, W>,
+        processor: &mut Processor<MEM_SIZE, Self, P, W>,
     ) {
         let a = processor.registers.get_reg(acc);
         let b = rhs.resolve(processor);
@@ -322,11 +322,11 @@ impl<W: Word> Instruction<W> {
 
     /// Subtract the value of an operand (rhs) from a register (acc).
     #[inline]
-    fn sub<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+    fn sub<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
         acc: Register,
         rhs: Operand<W>,
         signed: bool,
-        processor: &mut Processor<STACK_SIZE, Self, P, W>,
+        processor: &mut Processor<MEM_SIZE, Self, P, W>,
     ) {
         let a = processor.registers.get_reg(acc);
         let b = rhs.resolve(processor);
@@ -348,11 +348,11 @@ impl<W: Word> Instruction<W> {
     /// Multiply the value of an operand (acc) with the value of a register (rhs).
     /// The result is stored in acc.
     #[inline]
-    fn mul<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+    fn mul<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
         acc: Register,
         rhs: Operand<W>,
         signed: bool,
-        processor: &mut Processor<STACK_SIZE, Self, P, W>,
+        processor: &mut Processor<MEM_SIZE, Self, P, W>,
     ) {
         let a = processor.registers.get_reg(acc);
         let b = rhs.resolve(processor);
@@ -374,11 +374,11 @@ impl<W: Word> Instruction<W> {
     /// Divide the value of an operand (acc) by the value of a register (rhs).
     /// The result is stored in acc.
     #[inline]
-    fn div<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+    fn div<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
         acc: Register,
         rhs: Operand<W>,
         signed: bool,
-        processor: &mut Processor<STACK_SIZE, Self, P, W>,
+        processor: &mut Processor<MEM_SIZE, Self, P, W>,
     ) {
         let a = processor.registers.get_reg(acc);
         let b = rhs.resolve(processor);
@@ -399,10 +399,10 @@ impl<W: Word> Instruction<W> {
 
     /// Increment the value in a register by one.
     #[inline]
-    fn inc<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+    fn inc<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
         reg: Register,
         signed: bool,
-        processor: &mut Processor<STACK_SIZE, Self, P, W>,
+        processor: &mut Processor<MEM_SIZE, Self, P, W>,
     ) {
         if signed {
             Self::add(reg, Operand::Value(1.into()), true, processor);
@@ -413,10 +413,10 @@ impl<W: Word> Instruction<W> {
 
     /// Decrement the value in a register by one.
     #[inline]
-    fn dec<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+    fn dec<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
         reg: Register,
         signed: bool,
-        processor: &mut Processor<STACK_SIZE, Self, P, W>,
+        processor: &mut Processor<MEM_SIZE, Self, P, W>,
     ) {
         if signed {
             Self::sub(reg, Operand::Value(1.into()), true, processor);
@@ -427,9 +427,9 @@ impl<W: Word> Instruction<W> {
 
     /// Sets the signed and zero flags.
     #[inline]
-    fn set_signed_zero_flags<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+    fn set_signed_zero_flags<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
         val: W,
-        processor: &mut Processor<STACK_SIZE, Self, P, W>,
+        processor: &mut Processor<MEM_SIZE, Self, P, W>,
     ) {
         match val.cmp(&(0.into())) {
             Ordering::Less => {
@@ -449,10 +449,10 @@ impl<W: Word> Instruction<W> {
 
     /// Compares two operands and sets the flags accordingly.
     #[inline]
-    fn cmp<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+    fn cmp<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
         lhs: Operand<W>,
         rhs: Operand<W>,
-        processor: &mut Processor<STACK_SIZE, Self, P, W>,
+        processor: &mut Processor<MEM_SIZE, Self, P, W>,
     ) {
         let a = lhs.resolve(processor);
         let b = rhs.resolve(processor);
@@ -467,10 +467,10 @@ impl<W: Word> Instruction<W> {
 
     /// Perform an xor operation on the value in the register with the value of the operand. (XOR)
     #[inline]
-    fn xor<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+    fn xor<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
         reg: Register,
         rhs: Operand<W>,
-        processor: &mut Processor<STACK_SIZE, Self, P, W>,
+        processor: &mut Processor<MEM_SIZE, Self, P, W>,
     ) {
         let a = processor.registers.get_reg(reg);
         let b = rhs.resolve(processor);
@@ -480,10 +480,10 @@ impl<W: Word> Instruction<W> {
 
     /// Perform an and operation on the value in the register with the value of the operand. (AND)
     #[inline]
-    fn and<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+    fn and<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
         reg: Register,
         rhs: Operand<W>,
-        processor: &mut Processor<STACK_SIZE, Self, P, W>,
+        processor: &mut Processor<MEM_SIZE, Self, P, W>,
     ) {
         let a = processor.registers.get_reg(reg);
         let b = rhs.resolve(processor);
@@ -493,10 +493,10 @@ impl<W: Word> Instruction<W> {
 
     /// Perform an or operation on the value in the register with the value of the operand. (OR)
     #[inline]
-    fn or<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+    fn or<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
         reg: Register,
         rhs: Operand<W>,
-        processor: &mut Processor<STACK_SIZE, Self, P, W>,
+        processor: &mut Processor<MEM_SIZE, Self, P, W>,
     ) {
         let a = processor.registers.get_reg(reg);
         let b = rhs.resolve(processor);
@@ -506,9 +506,9 @@ impl<W: Word> Instruction<W> {
 
     /// Perform a not operation on the value in the register. (NOT)
     #[inline]
-    fn not<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+    fn not<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
         reg: Register,
-        processor: &mut Processor<STACK_SIZE, Self, P, W>,
+        processor: &mut Processor<MEM_SIZE, Self, P, W>,
     ) {
         let a = processor.registers.get_reg(reg);
 
@@ -517,10 +517,10 @@ impl<W: Word> Instruction<W> {
 
     /// Shift the value in the register left by the specified number of bits.
     #[inline]
-    fn shl<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+    fn shl<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
         reg: Register,
         val: W,
-        processor: &mut Processor<STACK_SIZE, Self, P, W>,
+        processor: &mut Processor<MEM_SIZE, Self, P, W>,
     ) {
         let a = processor.registers.get_reg(reg);
         processor.registers.set_reg(reg, a << val);
@@ -528,10 +528,10 @@ impl<W: Word> Instruction<W> {
 
     /// Shift the value in the register right by the specified number of bits.
     #[inline]
-    fn shr<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+    fn shr<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
         reg: Register,
         val: W,
-        processor: &mut Processor<STACK_SIZE, Self, P, W>,
+        processor: &mut Processor<MEM_SIZE, Self, P, W>,
     ) {
         let a = processor.registers.get_reg(reg);
         processor.registers.set_reg(reg, a >> val);
@@ -539,10 +539,10 @@ impl<W: Word> Instruction<W> {
 
     /// Rotate the value in the register left by the specified number of bits.
     #[inline]
-    fn rol<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+    fn rol<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
         reg: Register,
         val: u32,
-        processor: &mut Processor<STACK_SIZE, Self, P, W>,
+        processor: &mut Processor<MEM_SIZE, Self, P, W>,
     ) {
         let a = processor.registers.get_reg(reg);
         processor.registers.set_reg(reg, a.rotate_left(val));
@@ -550,10 +550,10 @@ impl<W: Word> Instruction<W> {
 
     /// Rotate the value in the register right by the specified number of bits.
     #[inline]
-    fn ror<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+    fn ror<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
         reg: Register,
         val: u32,
-        processor: &mut Processor<STACK_SIZE, Self, P, W>,
+        processor: &mut Processor<MEM_SIZE, Self, P, W>,
     ) {
         let a = processor.registers.get_reg(reg);
         processor.registers.set_reg(reg, a.rotate_right(val));
@@ -566,7 +566,7 @@ mod test {
     use super::*;
     use procem::word::*;
 
-    const STACK_SIZE: usize = 32;
+    const MEM_SIZE: usize = 32;
     type IS = Instruction<W>;
     type P = Vec<IS>;
     type W = I8;
@@ -576,7 +576,7 @@ mod test {
 
         #[test]
         fn test_move_reg() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, 10.into());
             let _ = IS::execute(
                 Instruction::Mov {
@@ -593,7 +593,7 @@ mod test {
 
         #[test]
         fn test_move_val() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             let _ = IS::execute(
                 Instruction::Mov {
                     to: Register::R0,
@@ -610,7 +610,7 @@ mod test {
 
         #[test]
         fn test_inc() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, 10.into());
             let _ = IS::execute(
                 Instruction::Inc {
@@ -624,7 +624,7 @@ mod test {
 
         #[test]
         fn test_inc_overflow() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, i8::MAX.into());
             let _ = IS::execute(
                 Instruction::Inc {
@@ -642,7 +642,7 @@ mod test {
 
         #[test]
         fn test_dec() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, 10.into());
             let _ = IS::execute(
                 Instruction::Dec {
@@ -656,7 +656,7 @@ mod test {
 
         #[test]
         fn test_dec_underflow() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, i8::MIN.into());
             let _ = IS::execute(
                 Instruction::Dec {
@@ -674,7 +674,7 @@ mod test {
 
         #[test]
         fn test_add_reg() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, 5.into());
             processor.registers.set_reg(Register::R1, 10.into());
             let _ = IS::execute(
@@ -690,7 +690,7 @@ mod test {
 
         #[test]
         fn test_add_reg_overflow() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, i8::MAX.into());
             processor.registers.set_reg(Register::R1, 1.into());
             let _ = IS::execute(
@@ -706,7 +706,7 @@ mod test {
 
         #[test]
         fn test_add_val() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, 5.into());
             let _ = IS::execute(
                 Instruction::Add {
@@ -721,7 +721,7 @@ mod test {
 
         #[test]
         fn test_add_val_overflow() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, i8::MAX.into());
             let _ = IS::execute(
                 Instruction::Add {
@@ -740,7 +740,7 @@ mod test {
 
         #[test]
         fn test_sub_reg() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, 5.into());
             processor.registers.set_reg(Register::R1, 10.into());
             let _ = IS::execute(
@@ -756,7 +756,7 @@ mod test {
 
         #[test]
         fn test_sub_reg_overflow() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, i8::MIN.into());
             processor.registers.set_reg(Register::R1, 1.into());
             let _ = IS::execute(
@@ -772,7 +772,7 @@ mod test {
 
         #[test]
         fn test_sub_val() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, 5.into());
             let _ = IS::execute(
                 Instruction::Sub {
@@ -787,7 +787,7 @@ mod test {
 
         #[test]
         fn test_sub_val_overflow() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, (-128).into());
             let _ = IS::execute(
                 Instruction::Sub {
@@ -806,7 +806,7 @@ mod test {
 
         #[test]
         fn test_mul_reg() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, 5.into());
             processor.registers.set_reg(Register::R1, 10.into());
             let _ = IS::execute(
@@ -834,7 +834,7 @@ mod test {
 
         #[test]
         fn test_mul_reg_overflow() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, 80.into());
             processor.registers.set_reg(Register::R1, 2.into());
             let _ = IS::execute(
@@ -850,7 +850,7 @@ mod test {
 
         #[test]
         fn test_mul_reg_underflow() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, (-80).into());
             processor.registers.set_reg(Register::R1, 2.into());
             let _ = IS::execute(
@@ -866,7 +866,7 @@ mod test {
 
         #[test]
         fn test_mul_val() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, 5.into());
             let _ = IS::execute(
                 Instruction::Mul {
@@ -892,7 +892,7 @@ mod test {
 
         #[test]
         fn test_mul_val_overflow() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, 80.into());
             let _ = IS::execute(
                 Instruction::Mul {
@@ -907,7 +907,7 @@ mod test {
 
         #[test]
         fn test_mul_val_underflow() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, (-80).into());
             let _ = IS::execute(
                 Instruction::Mul {
@@ -926,7 +926,7 @@ mod test {
 
         #[test]
         fn test_div_reg() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, 10.into());
             processor.registers.set_reg(Register::R1, 5.into());
             let _ = IS::execute(
@@ -954,7 +954,7 @@ mod test {
 
         #[test]
         fn test_div_reg_truncate() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, 3.into());
             processor.registers.set_reg(Register::R1, 2.into());
             let _ = IS::execute(
@@ -970,7 +970,7 @@ mod test {
 
         #[test]
         fn test_div_reg_overflow() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, i8::MIN.into());
             processor.registers.set_reg(Register::R1, (-1).into());
             let _ = IS::execute(
@@ -986,7 +986,7 @@ mod test {
 
         #[test]
         fn test_div_val() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, 10.into());
             let _ = IS::execute(
                 Instruction::Div {
@@ -1012,7 +1012,7 @@ mod test {
 
         #[test]
         fn test_div_val_truncate() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, 3.into());
             let _ = IS::execute(
                 Instruction::Div {
@@ -1038,7 +1038,7 @@ mod test {
 
         #[test]
         fn test_div_val_overflow() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             processor.registers.set_reg(Register::R0, i8::MIN.into());
             let _ = IS::execute(
                 Instruction::Div {
@@ -1057,7 +1057,7 @@ mod test {
 
         #[test]
         fn test_jmp() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             assert_eq!(processor.registers.get_reg(Register::PC), 0.into());
             let _ = IS::execute(
                 Instruction::Jump {
@@ -1071,7 +1071,7 @@ mod test {
 
         #[test]
         fn test_jmp_overflow() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             assert_eq!(processor.registers.get_reg(Register::PC), 0.into());
             let _ = IS::execute(
                 Instruction::Jump {
@@ -1093,7 +1093,7 @@ mod test {
 
         #[test]
         fn test_jmp_underflow() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
             assert_eq!(processor.registers.get_reg(Register::PC), 0.into());
             let _ = IS::execute(
                 Instruction::Jump {
@@ -1119,7 +1119,7 @@ mod test {
 
         #[test]
         fn test_cmp_eq_reg() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
 
             processor.registers.set_reg(Register::R0, 1.into());
             processor.registers.set_reg(Register::R1, 1.into());
@@ -1139,7 +1139,7 @@ mod test {
 
         #[test]
         fn test_cmp_eq_reg_val() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
 
             processor.registers.set_reg(Register::R0, 1.into());
 
@@ -1158,7 +1158,7 @@ mod test {
 
         #[test]
         fn test_cmp_eq_val() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
 
             let _ = IS::execute(
                 Instruction::Cmp {
@@ -1175,7 +1175,7 @@ mod test {
 
         #[test]
         fn test_cmp_less() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
 
             processor.registers.set_reg(Register::R0, 1.into());
             processor.registers.set_reg(Register::R1, 2.into());
@@ -1195,7 +1195,7 @@ mod test {
 
         #[test]
         fn test_cmp_greater() {
-            let mut processor = Processor::<STACK_SIZE, IS, P, W>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, W>::new();
 
             processor.registers.set_reg(Register::R0, 2.into());
             processor.registers.set_reg(Register::R1, 1.into());

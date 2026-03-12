@@ -20,7 +20,9 @@ pub const GENERAL_REGISTER_COUNT: usize = 16;
 /// The program counter (pc) can be read with the [`pc`](Registers::pc) method and the stack pointer (sp) can be read with the [`sp`](Registers::sp) method.
 /// Both of these registers can also be accessed with the [`get_reg`](Registers::get_reg) and [`set_reg`](Registers::set_reg) methods.
 ///
-/// The register sizes correspond to the stack word size.
+/// Note: [`sp`](Registers::sp) is a bare register. A stack is not directly provided by this emulator. The instruction set defines how the memory is used.
+/// 
+/// The register sizes correspond to the memory word size.
 ///
 /// The flags are carry flag ([`C`](Flag::C)), signed flag ([`S`](Flag::S)), overflow flag ([`V`](Flag::V)) and zero condition flag ([`Z`](Flag::Z)).
 /// They can be accessed with the [`get_flag`](Registers::get_flag) and [`set_flag`](Registers::set_flag) methods by providing the corresponding [`Flag`] value.

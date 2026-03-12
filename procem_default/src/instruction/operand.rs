@@ -14,9 +14,9 @@ pub enum Operand<W> {
 impl<W: Word> Operand<W> {
     /// Resolve the operand to a value.
     #[inline]
-    pub(crate) const fn resolve<const STACK_SIZE: usize, P>(
+    pub(crate) const fn resolve<const MEM_SIZE: usize, P>(
         self,
-        processor: &Processor<STACK_SIZE, Instruction<W>, P, W>,
+        processor: &Processor<MEM_SIZE, Instruction<W>, P, W>,
     ) -> W
     where
         P: Deref<Target = [Instruction<W>]>,

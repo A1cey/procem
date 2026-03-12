@@ -81,9 +81,9 @@ let program = assemble::<I32>(
 ).unwrap();
 
 // Create a processor and run the program
-const STACK_SIZE: usize = 1024;
+const MEM_SIZE: usize = 1024;
 
-let mut processor = Processor::<STACK_SIZE, _, _, _>::builder()
+let mut processor = Processor::<MEM_SIZE, _, _, _>::builder()
     .with_program(&program)
     .build();
 

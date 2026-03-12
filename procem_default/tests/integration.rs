@@ -7,7 +7,7 @@ use procem_default::{
 
 #[test]
 fn simple_5x2_multiplication() {
-    const STACK_SIZE: usize = 1024;
+    const MEM_SIZE: usize = 1024;
     type IS = Instruction<I32>;
 
     let program = assemble::<I32>(
@@ -39,9 +39,7 @@ fn simple_5x2_multiplication() {
         ])
     );
 
-    let mut processor = Processor::<STACK_SIZE, _, _, _>::builder()
-        .with_program(&program)
-        .build();
+    let mut processor = Processor::<MEM_SIZE, _, _, _>::builder().with_program(&program).build();
 
     println!("{processor}");
 

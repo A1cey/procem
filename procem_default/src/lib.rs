@@ -76,9 +76,9 @@
 //! ).unwrap();
 //!
 //! // Create a processor and run the program
-//! const STACK_SIZE: usize = 1024;
+//! const MEM_SIZE: usize = 1024;
 //!
-//! let mut processor = Processor::<STACK_SIZE, _, _, _>::builder()
+//! let mut processor = Processor::<MEM_SIZE, _, _, _>::builder()
 //!     .with_program(&program)
 //!     .build();
 //!
@@ -111,7 +111,7 @@ pub type AssembledProgram<W> = Program<Instruction<W>, Vec<Instruction<W>>, W>;
 /// use procem::{program::Program, register::Register, word::I32};
 /// use procem_default::{assemble, instruction::{Instruction, jump_condition::JumpCondition, operand::Operand} };
 ///
-/// const STACK_SIZE: usize = 1024;
+/// const MEM_SIZE: usize = 1024;
 ///
 /// let program = assemble::<I32>(
 ///     "

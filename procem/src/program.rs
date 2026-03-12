@@ -119,6 +119,6 @@ pub enum ProgramError {
     PCOutOfBounds { pc: usize, program_len: usize },
     #[error("No program loaded")]
     NoProgramLoaded,
-    #[error("Out of bounds stack access. Stack size: {stack_size}, Stack pointer: {stack_pointer}")]
-    OutOfBoundsStackAccess { stack_size: usize, stack_pointer: usize },
+    #[error("Out of bounds memory access. Memory size: {mem_size}, Accessed address: {addr}")]
+    OutOfBoundsMemoryAccess { mem_size: usize, addr: usize },
 }

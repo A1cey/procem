@@ -7,9 +7,9 @@
 //! The instruction set in use must implement the [`Instruction`](instruction::Instruction) trait.
 //! A default instruction set is available in the [`procem_default`](../procem_default/index.html) crate.
 //!
-//! The [`Registers`](register::Registers) and [`Stack`](stack::Stack) use [`Word`](word::Word) as their data type.
+//! The [`Registers`](register::Registers) and [`Memory`](memory::Memory) use [`Word`](word::Word) as their data type.
 //!
-//! The processor’s [`Registers`](register::Registers), [`Flags`](register::Flag) and [`Stack`](stack::Stack)
+//! The processor’s [`Registers`](register::Registers), [`Flags`](register::Flag) and [`Memory`](memory::Memory)
 //! are directly accessible and modifiable through the [`Processor`](processor::Processor) structure.
 //!
 //! ```
@@ -24,9 +24,9 @@
 //! # struct Inst<W: Word> (PhantomData<W>);
 //! #
 //! # impl<W: Word> Instruction<W> for Inst<W> {
-//! #     fn execute<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+//! #     fn execute<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
 //! #         instruction: Self,
-//! #         processor: &mut Processor<STACK_SIZE, Self, P, W>
+//! #         processor: &mut Processor<MEM_SIZE, Self, P, W>
 //! #     ) {}
 //! # }
 //! #
@@ -36,8 +36,8 @@
 //!
 //! let overflow = processor.registers.get_flag(Flag::V);
 //!
-//! processor.stack.write(processor.registers.get_reg(Register::SP), 10.into());
-//! let val = processor.stack.read(processor.registers.get_reg(Register::SP));
+//! processor.mem.write(processor.registers.get_reg(Register::SP), 10.into());
+//! let val = processor.mem.read(processor.registers.get_reg(Register::SP));
 //! assert_eq!(val, 10.into());
 //! ```
 
@@ -47,8 +47,8 @@
 extern crate alloc;
 
 pub mod instruction;
+pub mod memory;
 pub mod processor;
 pub mod program;
 pub mod register;
-pub mod stack;
 pub mod word;

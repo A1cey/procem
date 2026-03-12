@@ -1,14 +1,14 @@
 # procem
 
-**procem** is a toy Rust library that provides a flexible processor emulator, loosely inspired by the ARM architecture. It allows you to define and execute custom instruction sets, manage registers, flags, and stack memory, and run assembly-like programs.
+**procem** is a toy Rust library that provides a flexible processor emulator, loosely inspired by the ARM architecture. It allows you to define and execute custom instruction sets, manage registers, flags, and memory, and run assembly-like programs.
 
 ## Features
 
-- [`Processor`](src/processor.rs): Emulates a processor with general-purpose registers, program counter, stack pointer, flags, and a stack.
+- [`Processor`](src/processor.rs): Emulates a processor with general-purpose registers, program counter, stack pointer, flags, and memory.
 - [`Program`](src/program.rs): Container for a sequence of instructions to be executed by the processor.
 - [`Instruction`](src/instruction.rs): Trait for defining custom instruction sets. A default instruction set is implemented in the procem_default crate.
 - [`Registers`](src/register.rs): General-purpose registers, program counter, stack pointer, and flags.
-- [`Stack`](src/stack.rs): Fixed-size stack for processor operations.
+- [`Memory`](src/memory.rs): Fixed-size memory for processor operations.
 - [`Word`](src/word.rs): Trait for word-size types. Word is already implemented for all signed integer types.
 
 ## Customization
@@ -34,9 +34,9 @@ let program = assemble::<I32>(
 ).unwrap();
 
 // Create a processor and run the program
-const STACK_SIZE: usize = 1024;
+const MEM_SIZE: usize = 1024;
 
-let mut processor = Processor::<STACK_SIZE, _, _, _>::builder()
+let mut processor = Processor::<MEM_SIZE, _, _, _>::builder()
     .with_program(&program)
     .build();
 
