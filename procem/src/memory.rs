@@ -23,12 +23,12 @@ use crate::word::Word;
 /// # struct Inst<W: Word> (PhantomData<W>);
 /// #
 /// # impl<W: Word> Instruction<W> for Inst<W> {
-/// #     fn execute<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
+/// #     fn execute<const MEM_SIZE: usize, Insts, Words>(
 /// #         instruction: Self,
-/// #         processor: &mut Processor<MEM_SIZE, Self, P, W>
+/// #         processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>
 /// #     ) {}
 /// # }
-/// # let mut processor = Processor::<4, _,  Vec<Inst<I64>>,_>::new();
+/// # let mut processor = Processor::<4, _,  Vec<Inst<I64>>,_, Vec<I64>>::new();
 /// // Default memory values are all zero.
 /// assert_eq!(processor.mem.read(processor.registers.get_reg(Register::SP)), 0.into());
 ///

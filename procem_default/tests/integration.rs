@@ -1,4 +1,9 @@
-use procem::{processor::Processor, program::Program, register::Register, word::I32};
+use procem::{
+    processor::Processor,
+    program::{Bss, Code, Data, Header, Program},
+    register::Register,
+    word::I32,
+};
 use procem_default::{
     AssemblerError, assemble,
     instruction::{Instruction, jump_condition::JumpCondition, operand::Operand},
@@ -22,24 +27,31 @@ fn simple_5x2_multiplication() {
 
     assert_eq!(
         program,
-        Program::<IS, Vec<Instruction<I32>>, I32>::new(vec![
-            Instruction::Mov {
-                to: Register::R0,
-                from: Operand::Value(2.into())
-            },
-            Instruction::Add {
-                acc: Register::R1,
-                rhs: Operand::Register(Register::R0),
-                signed: false
-            },
-            Instruction::Jump {
-                to: 0.into(),
-                condition: JumpCondition::Unconditional
-            }
-        ])
+        Program::<IS, Vec<Instruction<I32>>, I32, Vec<I32>>::new(
+            Header::default(),
+            Data::default(),
+            Bss::default(),
+            Code::from(vec![
+                Instruction::Mov {
+                    to: Register::R0,
+                    from: Operand::Value(2.into())
+                },
+                Instruction::Add {
+                    acc: Register::R1,
+                    rhs: Operand::Register(Register::R0),
+                    signed: false
+                },
+                Instruction::Jump {
+                    to: 0.into(),
+                    condition: JumpCondition::Unconditional
+                }
+            ])
+        )
     );
 
-    let mut processor = Processor::<MEM_SIZE, _, _, _>::builder().with_program(&program).build();
+    let mut processor = Processor::<MEM_SIZE, _, _, _, _>::builder()
+        .with_program(&program)
+        .build();
 
     println!("{processor}");
 
@@ -69,39 +81,44 @@ fn parse_various_literals() {
     )
     .unwrap();
 
-    assert_eq!(program.len(), 7);
+    assert_eq!(program.code().len(), 7);
     assert_eq!(
         program,
-        Program::from(vec![
-            Instruction::Mov {
-                to: Register::R0,
-                from: Operand::Value(42.into())
-            },
-            Instruction::Mov {
-                to: Register::R1,
-                from: Operand::Value(42.into())
-            },
-            Instruction::Mov {
-                to: Register::R2,
-                from: Operand::Value(42.into())
-            },
-            Instruction::Mov {
-                to: Register::R3,
-                from: Operand::Value(42.into())
-            },
-            Instruction::Mov {
-                to: Register::R4,
-                from: Operand::Value(1.into())
-            },
-            Instruction::Mov {
-                to: Register::R5,
-                from: Operand::Value(0.into())
-            },
-            Instruction::Mov {
-                to: Register::R6,
-                from: Operand::Value(65.into())
-            }
-        ])
+        Program::new(
+            Header::default(),
+            Data::default(),
+            Bss::default(),
+            Code::from(vec![
+                Instruction::Mov {
+                    to: Register::R0,
+                    from: Operand::Value(42.into())
+                },
+                Instruction::Mov {
+                    to: Register::R1,
+                    from: Operand::Value(42.into())
+                },
+                Instruction::Mov {
+                    to: Register::R2,
+                    from: Operand::Value(42.into())
+                },
+                Instruction::Mov {
+                    to: Register::R3,
+                    from: Operand::Value(42.into())
+                },
+                Instruction::Mov {
+                    to: Register::R4,
+                    from: Operand::Value(1.into())
+                },
+                Instruction::Mov {
+                    to: Register::R5,
+                    from: Operand::Value(0.into())
+                },
+                Instruction::Mov {
+                    to: Register::R6,
+                    from: Operand::Value(65.into())
+                }
+            ])
+        )
     )
 }
 
@@ -119,7 +136,7 @@ fn parse_and_execute_arithmetic() {
     )
     .unwrap();
 
-    let mut processor = Processor::<1024, _, _, _>::builder().with_program(&program).build();
+    let mut processor = Processor::<1024, _, _, _, _>::builder().with_program(&program).build();
 
     let _ = processor.run_program();
 
@@ -141,7 +158,7 @@ fn control_flow_and_labels() {
     )
     .unwrap();
 
-    let mut processor = Processor::<1024, _, _, _>::builder().with_program(&program).build();
+    let mut processor = Processor::<1024, _, _, _, _>::builder().with_program(&program).build();
 
     let _ = processor.run_program();
     assert_eq!(processor.registers.get_reg(Register::R0), 5.into());
@@ -158,7 +175,7 @@ fn test_overflow_and_flags() {
     )
     .unwrap();
 
-    let mut processor = Processor::<1024, _, _, _>::builder().with_program(&program).build();
+    let mut processor = Processor::<1024, _, _, _, _>::builder().with_program(&program).build();
 
     let _ = processor.run_program();
     assert_eq!(processor.registers.get_reg(Register::R0), i32::MIN.into());
@@ -179,7 +196,7 @@ fn factorial_program() {
     )
     .unwrap();
 
-    let mut processor = Processor::<1024, _, _, _>::builder().with_program(&program).build();
+    let mut processor = Processor::<1024, _, _, _, _>::builder().with_program(&program).build();
 
     let _ = processor.run_program();
     assert_eq!(processor.registers.get_reg(Register::R1), 120.into());

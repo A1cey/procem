@@ -1,5 +1,3 @@
-use core::ops::Deref;
-
 use procem::{processor::Processor, register::Flag, word::Word};
 
 use crate::instruction::Instruction;
@@ -34,14 +32,10 @@ pub enum JumpCondition {
 impl JumpCondition {
     /// Check the jump condition.
     #[inline]
-    pub(crate) const fn check<const MEM_SIZE: usize, W, P>(
+    pub(crate) const fn check<const MEM_SIZE: usize, W: Word, Insts, Words>(
         self,
-        processor: &Processor<MEM_SIZE, Instruction<W>, P, W>,
-    ) -> bool
-    where
-        W: Word,
-        P: Deref<Target = [Instruction<W>]>,
-    {
+        processor: &Processor<MEM_SIZE, Instruction<W>, Insts, W, Words>,
+    ) -> bool {
         let flags = &processor.registers;
         match self {
             Self::Unconditional => true,

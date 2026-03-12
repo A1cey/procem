@@ -26,21 +26,22 @@ use crate::word::Word;
 /// - To run the entire program use [`run_program()`](Processor::run_program()).
 /// - To run only the next instruction use [`execute_next_instruction()`](Processor::execute_next_instruction()).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct Processor<'program, const MEM_SIZE: usize, I, P, W: Word> {
+pub struct Processor<'program, const MEM_SIZE: usize, Inst, Insts, W: Word, Words> {
     pub registers: Registers<W>,
     pub mem: Memory<MEM_SIZE, W>,
-    program: Option<&'program Program<I, P, W>>,
+    program: Option<&'program Program<Inst, Insts, W, Words>>,
 }
 
-impl<'program, const MEM_SIZE: usize, I, P, W> Processor<'program, MEM_SIZE, I, P, W>
+impl<'program, const MEM_SIZE: usize, Inst, Insts, W, Words> Processor<'program, MEM_SIZE, Inst, Insts, W, Words>
 where
-    I: Instruction<W>,
-    P: Deref<Target = [I]>,
+    Inst: Instruction<W>,
+    Insts: Deref<Target = [Inst]>,
     W: Word,
+    Words: Deref<Target = [W]>,
 {
     #[must_use]
     #[inline]
-    pub const fn builder() -> ProcessorBuilder<'program, MEM_SIZE, I, P, W> {
+    pub const fn builder() -> ProcessorBuilder<'program, MEM_SIZE, Inst, Insts, W, Words> {
         ProcessorBuilder::new()
     }
 
@@ -59,7 +60,7 @@ where
     ///
     /// The program cannot be changed after being loaded. You cannot mutate the program through the processor; replace it with a different [`Program`] to change behavior
     #[inline]
-    pub const fn load_program(&mut self, program: &'program Program<I, P, W>) {
+    pub const fn load_program(&mut self, program: &'program Program<Inst, Insts, W, Words>) {
         self.program = Some(program);
     }
 
@@ -90,17 +91,18 @@ where
 
         self.registers.inc(Register::PC);
 
-        I::execute(instruction, self);
+        Inst::execute(instruction, self);
 
         Ok(())
     }
 }
 
-impl<const MEM_SIZE: usize, I, P, W> Display for Processor<'_, MEM_SIZE, I, P, W>
+impl<const MEM_SIZE: usize, Inst, Insts, W, Words> Display for Processor<'_, MEM_SIZE, Inst, Insts, W, Words>
 where
-    I: Instruction<W>,
-    P: Deref<Target = [I]>,
+    Inst: Instruction<W>,
+    Insts: Deref<Target = [Inst]>,
     W: Word,
+    Words: Deref<Target = [W]>,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
         write!(f, "Registers: \n{}\nMemory: \t\t{}", self.registers, self.mem)
@@ -109,17 +111,14 @@ where
 
 /// The [`ProcessorBuilder`] is used to create a [`Processor`].
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Default)]
-pub struct ProcessorBuilder<'program, const MEM_SIZE: usize, I, P, W> {
+pub struct ProcessorBuilder<'program, const MEM_SIZE: usize, Inst, Insts, W, Words> {
     registers: Option<Registers<W>>,
     mem: Option<Memory<MEM_SIZE, W>>,
-    program: Option<&'program Program<I, P, W>>,
+    program: Option<&'program Program<Inst, Insts, W, Words>>,
 }
 
-impl<'program, const MEM_SIZE: usize, I, P, W> ProcessorBuilder<'program, MEM_SIZE, I, P, W>
-where
-    I: Instruction<W>,
-    P: Deref<Target = [I]>,
-    W: Word,
+impl<'program, const MEM_SIZE: usize, Inst, Insts, W: Word, Words>
+    ProcessorBuilder<'program, MEM_SIZE, Inst, Insts, W, Words>
 {
     /// Creates a new `ProcessorBuilder` with registers, memory and program set to `None`.
     #[inline]
@@ -150,7 +149,7 @@ where
     /// Sets the program for the `ProcessorBuilder`.
     #[must_use]
     #[inline]
-    pub const fn with_program(mut self, program: &'program Program<I, P, W>) -> Self {
+    pub const fn with_program(mut self, program: &'program Program<Inst, Insts, W, Words>) -> Self {
         self.program = Some(program);
         self
     }
@@ -158,7 +157,7 @@ where
     /// Builds the `Processor` with the given registers, memory and program.
     #[must_use]
     #[inline]
-    pub fn build(self) -> Processor<'program, MEM_SIZE, I, P, W> {
+    pub fn build(self) -> Processor<'program, MEM_SIZE, Inst, Insts, W, Words> {
         Processor {
             registers: self.registers.unwrap_or_default(),
             mem: self.mem.unwrap_or_default(),

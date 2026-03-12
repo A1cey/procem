@@ -24,13 +24,13 @@
 //! # struct Inst<W: Word> (PhantomData<W>);
 //! #
 //! # impl<W: Word> Instruction<W> for Inst<W> {
-//! #     fn execute<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
+//! #     fn execute<const MEM_SIZE: usize, Insts, Words>(
 //! #         instruction: Self,
-//! #         processor: &mut Processor<MEM_SIZE, Self, P, W>
+//! #         processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>
 //! #     ) {}
 //! # }
 //! #
-//! # let mut processor = Processor::<2048, _, Vec<Inst<I32>>, _>::new();
+//! # let mut processor = Processor::<2048, _, Vec<Inst<I32>>, _, Vec<I32>>::new();
 //! let r0 = processor.registers.get_reg(Register::R0);
 //! processor.registers.set_reg(Register::R1, r0);
 //!

@@ -1,4 +1,4 @@
-//! The [`Program`] struct.
+//! The [`Program`] definition.
 use core::marker::PhantomData;
 use core::ops::{Deref, Index};
 use thiserror::Error;
@@ -6,42 +6,52 @@ use thiserror::Error;
 use crate::instruction::Instruction;
 use crate::word::Word;
 
-/// [`Program`] is a container for a sequence of instructions that is executed by the [`Processor`](crate::processor::Processor).
-///
-/// An instruction can be fetched from the program using the [`fetch`](Program::fetch) or [`try_fetch`](Program::try_fetch) methods.
+/// [`Code`] is a container for a sequence of instructions that is executed by the [`Processor`](crate::processor::Processor).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct Program<I, T, W>(T, PhantomData<(I, W)>);
+pub struct Code<Inst, Insts, W>(Insts, PhantomData<(Inst, W)>);
 
-impl<T, I, W: Word> Deref for Program<I, T, W>
+impl<Inst, Insts, W> Code<Inst, Insts, W>
 where
-    I: Instruction<W>,
-    T: Deref<Target = [I]>,
+    Inst: Instruction<W>,
+    Insts: Deref<Target = [Inst]>,
+    W: Word,
 {
-    type Target = [I];
+    #[must_use]
+    pub fn from_instructions(instructions: Insts) -> Self {
+        instructions.into()
+    }
+}
+
+impl<Inst, Insts, W: Word> Deref for Code<Inst, Insts, W>
+where
+    Inst: Instruction<W>,
+    Insts: Deref<Target = [Inst]>,
+{
+    type Target = [Inst];
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl<I, T, W> From<T> for Program<I, T, W>
+impl<Inst, Insts, W> From<Insts> for Code<Inst, Insts, W>
 where
-    I: Instruction<W>,
-    T: Deref<Target = [I]>,
+    Inst: Instruction<W>,
+    Insts: Deref<Target = [Inst]>,
     W: Word,
 {
-    fn from(instructions: T) -> Self {
+    fn from(instructions: Insts) -> Self {
         Self(instructions, PhantomData)
     }
 }
 
-impl<I, T, W> Index<usize> for Program<I, T, W>
+impl<Inst, Insts, W> Index<usize> for Code<Inst, Insts, W>
 where
-    I: Instruction<W>,
-    T: Deref<Target = [I]>,
+    Inst: Instruction<W>,
+    Insts: Deref<Target = [Inst]>,
     W: Word,
 {
-    type Output = I;
+    type Output = Inst;
 
     /// Get a reference to the instruction at the given program counter.
     ///
@@ -58,16 +68,121 @@ where
     }
 }
 
-impl<T, I, W> Program<I, T, W>
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct Header<W> {
+    init_pc: W,
+    init_sp: W,
+}
+
+impl<W: Word> Header<W> {
+    #[must_use]
+    pub const fn new(init_pc: W, init_sp: W) -> Self {
+        Self { init_pc, init_sp }
+    }
+
+    /// Get the initial program counter.
+    #[must_use]
+    pub const fn init_pc(&self) -> W {
+        self.init_pc
+    }
+
+    /// Get the initial stack pointer.
+    #[must_use]
+    pub const fn init_sp(&self) -> W {
+        self.init_sp
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct Data<W, D> {
+    base_addr: W,
+    data: D,
+}
+
+impl<W, Words> Data<W, Words>
 where
-    I: Instruction<W>,
-    T: Deref<Target = [I]>,
+    W: Word,
+    Words: Deref<Target = [W]>,
+{
+    /// Create a new data section.
+    ///
+    /// `base_addr` is the address where the first element of `data` will be loaded.
+    #[must_use]
+    pub const fn new(base_addr: W, data: Words) -> Self {
+        Self { base_addr, data }
+    }
+
+    /// Get the base address of the data section.
+    #[must_use]
+    pub const fn base_addr(&self) -> W {
+        self.base_addr
+    }
+
+    /// Get a reference to the underlying data.
+    #[must_use]
+    pub const fn data(&self) -> &Words {
+        &self.data
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct Bss<W> {
+    base_addr: W,
+    size: W,
+}
+
+impl<W> Bss<W>
+where
     W: Word,
 {
-    /// Creates a new program from the provided instructions.
+    /// Create a new BSS section.
+    ///
+    /// `base_addr` is the start address; `size` is the number of words in this memory region.
     #[must_use]
-    pub fn new(instructions: T) -> Self {
-        instructions.into()
+    pub const fn new(base_addr: W, size: W) -> Self {
+        Self { base_addr, size }
+    }
+
+    /// Get the base address of the BSS section.
+    #[must_use]
+    pub const fn base_addr(&self) -> W {
+        self.base_addr
+    }
+
+    /// Get the size of the BSS section.
+    #[must_use]
+    pub const fn size(&self) -> W {
+        self.size
+    }
+}
+
+// TODO: Program builder
+/// [`Program`] is a struct similiar to an executable file, it contains a program TODO and the code that is executed by the [`Processor`](crate::processor::Processor).
+///
+/// An instruction can be fetched from the program using the [`fetch`](Program::fetch) or [`try_fetch`](Program::try_fetch) methods.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct Program<Inst, Insts, W, Words> {
+    header: Header<W>,
+    data: Data<W, Words>,
+    bss: Bss<W>,
+    code: Code<Inst, Insts, W>,
+}
+
+impl<Inst, Insts, W, Words> Program<Inst, Insts, W, Words>
+where
+    Inst: Instruction<W>,
+    Insts: Deref<Target = [Inst]>,
+    W: Word,
+    Words: Deref<Target = [W]>,
+{
+    #[must_use]
+    pub const fn new(header: Header<W>, data: Data<W, Words>, bss: Bss<W>, code: Code<Inst, Insts, W>) -> Self {
+        Self {
+            header,
+            data,
+            bss,
+            code,
+        }
     }
 
     /// Returns the instruction at the provided index.
@@ -75,14 +190,14 @@ where
     /// # Errors
     /// Returns `PCOutOfBounds` error if the program counter is not in bounds.
     #[inline]
-    pub fn try_fetch(&self, pc: W) -> Result<I, ProgramError> {
+    pub fn try_fetch(&self, pc: W) -> Result<Inst, ProgramError> {
         let pc: usize = pc.into();
 
-        self.get(pc).map_or_else(
+        self.code.get(pc).map_or_else(
             || {
                 Err(ProgramError::PCOutOfBounds {
                     pc,
-                    program_len: self.len(),
+                    program_len: self.code.len(),
                 })
             },
             |instruction| Ok(*instruction),
@@ -96,8 +211,8 @@ where
     /// # Panics
     /// Panics if the program counter is not in bounds.
     #[inline]
-    pub fn fetch(&self, pc: W) -> I {
-        self[pc.into()]
+    pub fn fetch(&self, pc: W) -> Inst {
+        self.code[pc.into()]
     }
 
     /// Returns the instruction at the provided index, without doing bounds checking.
@@ -107,9 +222,27 @@ where
     /// # Safety
     /// Calling this method with an out-of-bounds program counter value is undefined behavior even if the resulting value is not used.
     #[inline]
-    pub unsafe fn fetch_unchecked(&self, pc: W) -> I {
+    pub unsafe fn fetch_unchecked(&self, pc: W) -> Inst {
         // SAFETY: The caller must uphold safety and provide an in-bounds program counter value.
-        *unsafe { self.get_unchecked(pc.into()) }
+        *unsafe { self.code.get_unchecked(pc.into()) }
+    }
+
+    /// Get a reference to the code.
+    #[inline]
+    pub const fn code(&self) -> &Code<Inst, Insts, W> {
+        &self.code
+    }
+
+    /// Get a reference to the data section.
+    #[inline]
+    pub const fn data(&self) -> &Data<W, Words> {
+        &self.data
+    }
+
+    /// Get a reference to the BSS section.
+    #[inline]
+    pub const fn bss(&self) -> &Bss<W> {
+        &self.bss
     }
 }
 

@@ -1,5 +1,3 @@
-use core::ops::Deref;
-
 use procem::{processor::Processor, register::Register, word::Word};
 
 use crate::instruction::Instruction;
@@ -14,13 +12,10 @@ pub enum Operand<W> {
 impl<W: Word> Operand<W> {
     /// Resolve the operand to a value.
     #[inline]
-    pub(crate) const fn resolve<const MEM_SIZE: usize, P>(
+    pub(crate) const fn resolve<const MEM_SIZE: usize, Insts, Words>(
         self,
-        processor: &Processor<MEM_SIZE, Instruction<W>, P, W>,
-    ) -> W
-    where
-        P: Deref<Target = [Instruction<W>]>,
-    {
+        processor: &Processor<MEM_SIZE, Instruction<W>, Insts, W, Words>,
+    ) -> W {
         match self {
             Self::Register(reg) => processor.registers.get_reg(reg),
             Self::Value(val) => val,

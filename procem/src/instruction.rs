@@ -1,7 +1,6 @@
 //! The [`Instruction`] trait.
 
 use core::fmt::Debug;
-use core::ops::Deref;
 
 use crate::{processor::Processor, word::Word};
 
@@ -11,8 +10,8 @@ use crate::{processor::Processor, word::Word};
 /// Its [`execute`](Instruction::execute) method is used by the processor to execute the instruction.
 pub trait Instruction<W: Word>: Debug + Copy {
     /// This function is called when an instruction is executed by the processor.
-    fn execute<const MEM_SIZE: usize, P: Deref<Target = [Self]>>(
+    fn execute<const MEM_SIZE: usize, Insts, Words>(
         instruction: Self,
-        processor: &mut Processor<MEM_SIZE, Self, P, W>,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
     );
 }

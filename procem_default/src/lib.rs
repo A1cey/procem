@@ -78,7 +78,7 @@
 //! // Create a processor and run the program
 //! const MEM_SIZE: usize = 1024;
 //!
-//! let mut processor = Processor::<MEM_SIZE, _, _, _>::builder()
+//! let mut processor = Processor::<MEM_SIZE, _, _, _, _>::builder()
 //!     .with_program(&program)
 //!     .build();
 //!
@@ -91,7 +91,7 @@
 use crate::instruction::Instruction;
 use crate::parser::{Parser, ParserError};
 use crate::tokenizer::{Tokenizer, TokenizerError};
-use procem::program::Program;
+use procem::program::{Bss, Code, Data, Header, Program};
 use procem::word::Word;
 use thiserror::Error;
 
@@ -99,7 +99,7 @@ pub mod instruction;
 pub mod parser;
 pub mod tokenizer;
 
-pub type AssembledProgram<W> = Program<Instruction<W>, Vec<Instruction<W>>, W>;
+pub type AssembledProgram<W> = Program<Instruction<W>, Vec<Instruction<W>>, W, Vec<W>>;
 
 /// Assembles Program from assembly code.
 ///
@@ -108,7 +108,7 @@ pub type AssembledProgram<W> = Program<Instruction<W>, Vec<Instruction<W>>, W>;
 ///
 /// # Example
 /// ```
-/// use procem::{program::Program, register::Register, word::I32};
+/// use procem::{program::{Program, Code, Header, Bss, Data}, register::Register, word::I32};
 /// use procem_default::{assemble, instruction::{Instruction, jump_condition::JumpCondition, operand::Operand} };
 ///
 /// const MEM_SIZE: usize = 1024;
@@ -125,21 +125,28 @@ pub type AssembledProgram<W> = Program<Instruction<W>, Vec<Instruction<W>>, W>;
 ///
 /// assert_eq!(
 ///     program,
-///     Program::<Instruction<I32>, Vec<Instruction<I32>>, I32>::new(vec![
-///         Instruction::Mov {
-///             to: Register::R0,
-///             from: Operand::Value(2.into())
-///         },
-///         Instruction::Add {
-///             acc: Register::R1,
-///             rhs: Operand::Register(Register::R0),
-///             signed: false
-///         },
-///         Instruction::Jump {
-///             to: 0.into(),
-///             condition: JumpCondition::Unconditional
-///         }
-///     ])
+///     Program::<Instruction<I32>, Vec<Instruction<I32>>, I32, Vec<I32>>::new(
+///         Header::default(),
+///         Data::default(),
+///         Bss::default(),
+///         Code::from(
+///             vec![
+///                  Instruction::Mov {
+///                      to: Register::R0,
+///                      from: Operand::Value(2.into())
+///                  },
+///                  Instruction::Add {
+///                      acc: Register::R1,
+///                      rhs: Operand::Register(Register::R0),
+///                      signed: false
+///                  },
+///                  Instruction::Jump {
+///                      to: 0.into(),
+///                      condition: JumpCondition::Unconditional
+///                  }
+///             ]
+///         )
+///     )
 /// );
 /// ```
 pub fn assemble<W: Word>(input: impl AsRef<str>) -> Result<AssembledProgram<W>, Vec<AssemblerError>> {
@@ -151,7 +158,12 @@ pub fn assemble<W: Word>(input: impl AsRef<str>) -> Result<AssembledProgram<W>, 
     let instructions = Parser::parse(tokens.as_ref(), input.as_slice())
         .map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())?;
 
-    Ok(Program::new(instructions))
+    Ok(Program::new(
+        Header::default(),
+        Data::default(),
+        Bss::default(),
+        Code::from(instructions),
+    ))
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
