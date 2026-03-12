@@ -4,7 +4,7 @@ use ars::fmt::slice::FmtSlice;
 use core::fmt::{Debug, Display, Formatter};
 use core::ops::{Deref, DerefMut, Index, IndexMut};
 
-use crate::program::ProgramError;
+use crate::processor::ProcessorError;
 use crate::word::Word;
 
 /// The [`Memory`] is a wrapper around a fixed-size array of values implementing the [`Word`] trait.
@@ -80,7 +80,7 @@ impl<const MEM_SIZE: usize, W: Word> Index<usize> for Memory<MEM_SIZE, W> {
         self.get(addr).unwrap_or_else(|| {
             panic!(
                 "{}",
-                ProgramError::OutOfBoundsMemoryAccess {
+                ProcessorError::OutOfBoundsMemoryAccess {
                     mem_size: MEM_SIZE,
                     addr,
                 }
@@ -98,7 +98,7 @@ impl<const MEM_SIZE: usize, W: Word> IndexMut<usize> for Memory<MEM_SIZE, W> {
         self.get_mut(addr).unwrap_or_else(|| {
             panic!(
                 "{}",
-                ProgramError::OutOfBoundsMemoryAccess {
+                ProcessorError::OutOfBoundsMemoryAccess {
                     mem_size: MEM_SIZE,
                     addr,
                 }
@@ -127,11 +127,11 @@ impl<const MEM_SIZE: usize, W: Word> Memory<MEM_SIZE, W> {
     /// Read a value from memory at the provided address.
     ///
     /// # Errors
-    /// Returns an [`OutOfBoundsMemoryAccess`](ProgramError::OutOfBoundsMemoryAccess) error if the address is out of bounds.
-    pub fn try_read(&self, addr: W) -> Result<W, ProgramError> {
+    /// Returns an [`OutOfBoundsMemoryAccess`](ProcessorError::OutOfBoundsMemoryAccess) error if the address is out of bounds.
+    pub fn try_read(&self, addr: W) -> Result<W, ProcessorError> {
         let addr: usize = addr.into();
 
-        self.get(addr).copied().ok_or(ProgramError::OutOfBoundsMemoryAccess {
+        self.get(addr).copied().ok_or(ProcessorError::OutOfBoundsMemoryAccess {
             mem_size: MEM_SIZE,
             addr,
         })
@@ -161,11 +161,11 @@ impl<const MEM_SIZE: usize, W: Word> Memory<MEM_SIZE, W> {
     /// Write a value to memory at the given address.
     ///
     /// # Errors
-    /// Returns an [`OutOfBoundsMemoryAccess`](ProgramError::OutOfBoundsMemoryAccess) error if the address is out of bounds.
-    pub fn try_write(&mut self, addr: W, value: W) -> Result<(), ProgramError> {
+    /// Returns an [`OutOfBoundsMemoryAccess`](ProcessorError::OutOfBoundsMemoryAccess) error if the address is out of bounds.
+    pub fn try_write(&mut self, addr: W, value: W) -> Result<(), ProcessorError> {
         let addr: usize = addr.into();
 
-        *self.get_mut(addr).ok_or(ProgramError::OutOfBoundsMemoryAccess {
+        *self.get_mut(addr).ok_or(ProcessorError::OutOfBoundsMemoryAccess {
             mem_size: MEM_SIZE,
             addr,
         })? = value;

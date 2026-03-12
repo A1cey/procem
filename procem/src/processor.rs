@@ -2,9 +2,11 @@
 use core::fmt::{Display, Formatter};
 use core::ops::Deref;
 
+use thiserror::Error;
+
 use crate::instruction::Instruction;
 use crate::memory::Memory;
-use crate::program::{Program, ProgramError};
+use crate::program::Program;
 use crate::register::{Register, Registers};
 use crate::word::Word;
 
@@ -67,11 +69,11 @@ where
     /// Runs the entire program.
     ///
     /// # Errors
-    /// The execution of the program stops and a `ProgramError` is returned if an error occured during the fetching of an instruction.
+    /// The execution of the program stops and a `ProcessorError` is returned if an error occured during the fetching of an instruction.
     ///
     /// Note: The execution of an instruction will never return an error. If the instruction is valid it will not error.
     /// Invalid instructions are a major bug in the implementation of the instruction set that is used for the program.
-    pub fn run_program(&mut self) -> Result<(), ProgramError> {
+    pub fn run_program(&mut self) -> Result<(), ProcessorError> {
         loop {
             self.execute_next_instruction()?;
         }
@@ -80,12 +82,12 @@ where
     /// Fetches the current instruction (where pc points to), increments the pc and then executes the instruction.
     ///
     /// # Errors
-    /// Returns a `ProgramError` if an error occured during fetching.
+    /// Returns a `ProcessorError` if an error occured during fetching.
     ///
     /// Note: The execution of an instruction will never return an error. If the instruction is valid it will not error.
     /// Invalid instructions are a major bug in the implementation of the instruction set that is used for the program.
-    pub fn execute_next_instruction(&mut self) -> Result<(), ProgramError> {
-        let program = self.program.as_ref().ok_or(ProgramError::NoProgramLoaded)?;
+    pub fn execute_next_instruction(&mut self) -> Result<(), ProcessorError> {
+        let program = self.program.as_ref().ok_or(ProcessorError::NoProgramLoaded)?;
 
         let instruction = program.try_fetch(self.registers.pc())?;
 
@@ -164,4 +166,14 @@ impl<'program, const MEM_SIZE: usize, Inst, Insts, W: Word, Words>
             program: self.program,
         }
     }
+}
+
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
+pub enum ProcessorError {
+    #[error("Program counter out of bounds. Program length: {program_len}, Program counter: {pc}")]
+    PCOutOfBounds { pc: usize, program_len: usize },
+    #[error("No program loaded")]
+    NoProgramLoaded,
+    #[error("Out of bounds memory access. Memory size: {mem_size}, Accessed address: {addr}")]
+    OutOfBoundsMemoryAccess { mem_size: usize, addr: usize },
 }

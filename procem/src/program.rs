@@ -1,10 +1,9 @@
 //! The [`Program`] definition.
+use crate::instruction::Instruction;
+use crate::processor::ProcessorError;
+use crate::word::Word;
 use core::marker::PhantomData;
 use core::ops::{Deref, Index};
-use thiserror::Error;
-
-use crate::instruction::Instruction;
-use crate::word::Word;
 
 /// `Code` is a container for a sequence of instructions that is executed by the [`Processor`](crate::processor::Processor).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -257,12 +256,12 @@ where
     /// # Errors
     /// Returns `PCOutOfBounds` error if the program counter is not in bounds.
     #[inline]
-    pub fn try_fetch(&self, pc: W) -> Result<Inst, ProgramError> {
+    pub fn try_fetch(&self, pc: W) -> Result<Inst, ProcessorError> {
         let pc: usize = pc.into();
 
         self.code.get(pc).map_or_else(
             || {
-                Err(ProgramError::PCOutOfBounds {
+                Err(ProcessorError::PCOutOfBounds {
                     pc,
                     program_len: self.code.len(),
                 })
@@ -337,14 +336,4 @@ where
     pub const fn bss(&self) -> &Bss<W> {
         &self.bss
     }
-}
-
-#[derive(Error, Debug, Clone, PartialEq, Eq)]
-pub enum ProgramError {
-    #[error("Program counter out of bounds. Program length: {program_len}, Program counter: {pc}")]
-    PCOutOfBounds { pc: usize, program_len: usize },
-    #[error("No program loaded")]
-    NoProgramLoaded,
-    #[error("Out of bounds memory access. Memory size: {mem_size}, Accessed address: {addr}")]
-    OutOfBoundsMemoryAccess { mem_size: usize, addr: usize },
 }
