@@ -2,7 +2,7 @@ use thiserror::Error;
 
 use ars::{ascii::eq_ignore_ascii_case, range::Range};
 
-#[doc(hidden("Only public for benchmarks."))]
+#[doc(hidden)] // Only public for benchmarks.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Token {
     Label(Range),
@@ -14,7 +14,7 @@ pub enum Token {
     Section(Range),
 }
 
-#[doc(hidden("Only public for benchmarks."))]
+#[doc(hidden)] // Only public for benchmarks.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Literal {
     Decimal(Range),
@@ -26,7 +26,7 @@ pub enum Literal {
     Char(char),
 }
 
-#[doc(hidden("Only public for benchmarks."))]
+#[doc(hidden)] // Only public for benchmarks.
 pub struct Tokenizer<'input> {
     tokens: Vec<Token>,
     curr_idx: usize,
@@ -37,9 +37,9 @@ pub struct Tokenizer<'input> {
 }
 
 impl Tokenizer<'_> {
-    const fn from(input: &[u8]) -> Tokenizer<'_> {
+    fn from(input: &[u8]) -> Tokenizer<'_> {
         Tokenizer {
-            tokens: Vec::new(),
+            tokens: Vec::with_capacity(input.len()),
             curr_idx: 0,
             token_start_idx: 0,
             input_len: input.len(),
@@ -48,7 +48,7 @@ impl Tokenizer<'_> {
         }
     }
 
-    #[doc(hidden("Only public for benchmarks."))]
+    #[doc(hidden)] // Only public for benchmarks.
     pub fn tokenize(input: &[u8]) -> Result<Vec<Token>, Vec<TokenizerError>> {
         let mut tokenizer = Self::from(input);
 
