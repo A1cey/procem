@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use ars::range::Range;
+use ars::{ascii::eq_ignore_ascii_case, range::Range};
 
 #[doc(hidden("Only public for benchmarks."))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -156,19 +156,10 @@ impl Tokenizer<'_> {
         let token = if is_label {
             self.curr_idx += 1; // skip over the ':'
             Token::Label(Range(start, end))
+        } else if eq_ignore_ascii_case(&self.input[start..end], b"end") {
+            Token::End
         } else {
-            let is_end_literal = |token: &[u8]| {
-                token.len() == 3
-                    && (token[0] == b'e' || token[0] == b'E')
-                    && (token[1] == b'n' || token[1] == b'N')
-                    && (token[2] == b'd' || token[2] == b'D')
-            };
-
-            if is_end_literal(&self.input[start..end]) {
-                Token::End
-            } else {
-                Token::LabelOrInstruction(Range(start, end))
-            }
+            Token::LabelOrInstruction(Range(start, end))
         };
 
         self.tokens.push(token);
@@ -277,15 +268,7 @@ impl Tokenizer<'_> {
         // +1 to ignore prefix #
         let lit = &self.input[self.token_start_idx + 1..self.curr_idx];
 
-        let is_true_lit = |lit: &[u8]| {
-            lit.len() == 4
-                && (lit[0] == b't' || lit[0] == b'T')
-                && (lit[1] == b'r' || lit[1] == b'R')
-                && (lit[2] == b'u' || lit[2] == b'U')
-                && (lit[3] == b'e' || lit[3] == b'E')
-        };
-
-        if is_true_lit(lit) {
+        if eq_ignore_ascii_case(lit, b"true") {
             self.tokens.push(Token::Literal(Literal::Boolean(true)));
         } else {
             self.add_error(TokenizerError::BooleanTrueLiteral {
@@ -300,16 +283,7 @@ impl Tokenizer<'_> {
         // +1 to ignore prefix #
         let lit = &self.input[self.token_start_idx + 1..self.curr_idx];
 
-        let is_false_lit = |lit: &[u8]| {
-            lit.len() == 5
-                && (lit[0] == b'f' || lit[0] == b'F')
-                && (lit[1] == b'a' || lit[1] == b'A')
-                && (lit[2] == b'l' || lit[2] == b'L')
-                && (lit[3] == b's' || lit[3] == b'S')
-                && (lit[4] == b'e' || lit[4] == b'E')
-        };
-
-        if is_false_lit(lit) {
+        if eq_ignore_ascii_case(lit, b"false") {
             self.tokens.push(Token::Literal(Literal::Boolean(false)));
         } else {
             self.add_error(TokenizerError::BooleanFalseLiteral {

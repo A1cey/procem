@@ -14,7 +14,7 @@ use crate::instruction::asm_instruction::{
 use crate::instruction::operand::Operand;
 use crate::instruction::{Instruction, asm_instruction::ASMNoArgInstruction};
 use crate::tokenizer::{Literal, Token};
-use ars::range::Range;
+use ars::{ascii::eq_ignore_ascii_case, range::Range};
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 pub(crate) enum Section {
@@ -126,7 +126,7 @@ impl<'input, W: Word> Parser<'input, W> {
                 ASMInstruction::Rotate(inst) => self.expect_rotate_instruction(inst),
                 ASMInstruction::Shift(inst) => self.expect_shift_instruction(inst),
             },
-            Err(_) => self.add_error(ParserError::UnknownInstruction {
+            Err(()) => self.add_error(ParserError::UnknownInstruction {
                 idx: self.idx,
                 inst: Self::string_from_u8_slice(instruction),
             }),
@@ -134,39 +134,17 @@ impl<'input, W: Word> Parser<'input, W> {
     }
 
     fn parse_section(&mut self, section: &[u8]) {
-        let is_code = |section: &[u8]| {
-            section.len() == 4
-                && (section[0] == b'c' || section[0] == b'C')
-                && (section[1] == b'o' || section[1] == b'O')
-                && (section[2] == b'd' || section[2] == b'D')
-                && (section[3] == b'e' || section[3] == b'E')
-        };
-        let is_data = |section: &[u8]| {
-            section.len() == 4
-                && (section[0] == b'd' || section[0] == b'D')
-                && (section[1] == b'a' || section[1] == b'A')
-                && (section[2] == b't' || section[2] == b'T')
-                && (section[3] == b'a' || section[3] == b'A')
-        };
-        let is_bss = |section: &[u8]| {
-            section.len() == 3
-                && (section[0] == b'b' || section[0] == b'B')
-                && (section[1] == b's' || section[1] == b'S')
-                && (section[2] == b's' || section[2] == b'S')
-        };
-
-        if is_code(section) {
-            self.current_section = Section::Code;
-        } else if is_data(section) {
-            self.current_section = Section::Data;
-        } else if is_bss(section) {
-            self.current_section = Section::Bss;
-        } else {
-            // TODO: Should section be reset to NotDefined here?
-            self.add_error(ParserError::InvalidSectionName {
-                idx: self.idx,
-                section: Self::string_from_u8_slice(section),
-            });
+        match section {
+            section if eq_ignore_ascii_case(section, b"code") => self.current_section = Section::Code,
+            section if eq_ignore_ascii_case(section, b"data") => self.current_section = Section::Data,
+            section if eq_ignore_ascii_case(section, b"bss") => self.current_section = Section::Bss,
+            _ => {
+                // TODO: Should section be reset to NotDefined here?
+                self.add_error(ParserError::InvalidSectionName {
+                    idx: self.idx,
+                    section: Self::string_from_u8_slice(section),
+                });
+            }
         }
     }
 

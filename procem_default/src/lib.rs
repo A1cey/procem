@@ -66,12 +66,13 @@
 //! // Assemble a program from asm
 //! let program = assemble::<I32>(
 //!     "
-//!     mov R0, #10
-//!     mov R1, #5
-//!     add R0, R1
-//!     sub R0, #3
-//!     mul R0, #2
-//!     div R0, #4
+//!     .code
+//!         mov R0, #10
+//!         mov R1, #5
+//!         add R0, R1
+//!         sub R0, #3
+//!         mul R0, #2
+//!         div R0, #4
 //!     "
 //! ).unwrap();
 //!
@@ -115,10 +116,11 @@ pub type AssembledProgram<W> = Program<Instruction<W>, Vec<Instruction<W>>, W, V
 ///
 /// let program = assemble::<I32>(
 ///     "
-///     .input
-///     mov R0, #2
-///     add R1, R0
-///     jmp .input
+///     .code
+///     loop:
+///         mov R0, #2
+///         add R1, R0
+///         jmp loop
 ///     ",
 /// )
 /// .unwrap();
