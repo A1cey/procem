@@ -84,6 +84,13 @@ impl TryFrom<&[u8]> for ASMInstruction {
     type Error = ();
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+           
+        // TODO: move this into ars
+        // replace the comparisons in tokenizer with this
+        fn eq_ignore_ascii_case(a: &[u8], b: &[u8]) -> bool {
+            a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.eq_ignore_ascii_case(y))
+        }
+        
         let inst = match value {
             b"ADD" => Self::RegOperand(ASMRegOperandInstruction::Add),
             b"ADDS" => Self::RegOperand(ASMRegOperandInstruction::AddS),
@@ -129,3 +136,4 @@ impl TryFrom<&[u8]> for ASMInstruction {
         Ok(inst)
     }
 }
+

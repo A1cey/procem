@@ -217,8 +217,13 @@ fn invalid_assembly_should_fail() {
         ",
     );
 
+    match result {
+        Err(ref v) => v.iter().for_each(|e| println!("{e}")),
+        Ok(ref v) => v.code().iter().for_each(|i| println!("{i:?}")),
+    };
+
     assert_eq!(
         result,
-        Err(vec![AssemblerError::Parser(ParserError::CannotConvertStrToVal)])
+        Err(vec![AssemblerError::Parser{err: ParserError::CannotConvertStrToVal}])
     );
 }

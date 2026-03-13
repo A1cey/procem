@@ -27,17 +27,17 @@ pub enum Literal {
 }
 
 #[doc(hidden("Only public for benchmarks."))]
-pub struct Tokenizer<'asm> {
+pub struct Tokenizer<'input> {
     tokens: Vec<Token>,
     curr_idx: usize,
     token_start_idx: usize,
-    input: &'asm mut [u8],
+    input: &'input [u8],
     input_len: usize,
     errors: Option<Vec<TokenizerError>>,
 }
 
 impl Tokenizer<'_> {
-    const fn from(input: &mut [u8]) -> Tokenizer<'_> {
+    const fn from(input: &[u8]) -> Tokenizer<'_> {
         Tokenizer {
             tokens: Vec::new(),
             curr_idx: 0,
@@ -49,7 +49,7 @@ impl Tokenizer<'_> {
     }
 
     #[doc(hidden("Only public for benchmarks."))]
-    pub fn tokenize(input: &mut [u8]) -> Result<Vec<Token>, Vec<TokenizerError>> {
+    pub fn tokenize(input: &[u8]) -> Result<Vec<Token>, Vec<TokenizerError>> {
         let mut tokenizer = Self::from(input);
 
         tokenizer.run();
@@ -154,6 +154,7 @@ impl Tokenizer<'_> {
         let end = self.curr_idx;
 
         let token = if is_label {
+            self.curr_idx += 1; // skip over the ':'
             Token::Label(Range(start, end))
         } else {
             let is_end_literal = |token: &[u8]| {
@@ -274,7 +275,7 @@ impl Tokenizer<'_> {
         self.curr_idx += 4; // len of "true"
 
         // +1 to ignore prefix #
-        let lit = &mut self.input[self.token_start_idx + 1..self.curr_idx];
+        let lit = &self.input[self.token_start_idx + 1..self.curr_idx];
 
         let is_true_lit = |lit: &[u8]| {
             lit.len() == 4
@@ -282,7 +283,7 @@ impl Tokenizer<'_> {
                 && (lit[1] == b'r' || lit[1] == b'R')
                 && (lit[2] == b'u' || lit[2] == b'U')
                 && (lit[3] == b'e' || lit[3] == b'E')
-        };        
+        };
 
         if is_true_lit(lit) {
             self.tokens.push(Token::Literal(Literal::Boolean(true)));
@@ -297,7 +298,7 @@ impl Tokenizer<'_> {
         self.curr_idx += 5; // len of "false"
 
         // +1 to ignore prefix #
-        let lit = &mut self.input[self.token_start_idx + 1..self.curr_idx];
+        let lit = &self.input[self.token_start_idx + 1..self.curr_idx];
 
         let is_false_lit = |lit: &[u8]| {
             lit.len() == 5

@@ -16,18 +16,30 @@ use crate::instruction::{Instruction, asm_instruction::ASMNoArgInstruction};
 use crate::tokenizer::{Literal, Token};
 use ars::range::Range;
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub(crate) struct Parser<'a, W> {
-    tokens: &'a [Token],
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
+pub(crate) enum Section {
+    Bss,
+    Code,
+    Data,
+    NotDefined,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Parser<'input, W> {
+    tokens: &'input [Token],
     instructions: Vec<Instruction<W>>,
     errors: Option<Vec<ParserError>>,
     idx: usize,
-    labels: HashMap<&'a [u8], usize>,
-    input: &'a [u8],
+    labels: HashMap<&'input [u8], usize>,
+    input: &'input [u8],
+    current_section: Section,
+    end_parsing: bool,
 }
 
-impl<'a, W: Word> Parser<'a, W> {
-    fn new(tokens: &'a [Token], input: &'a [u8]) -> Self {
+// TODO: implement logic, that instructions can only be parsed when in .code section and similar for other sections
+
+impl<'input, W: Word> Parser<'input, W> {
+    fn new(tokens: &'input [Token], input: &'input [u8]) -> Self {
         Self {
             tokens,
             errors: None,
@@ -35,10 +47,12 @@ impl<'a, W: Word> Parser<'a, W> {
             idx: 0,
             labels: HashMap::default(),
             input,
+            current_section: Section::NotDefined,
+            end_parsing: false,
         }
     }
 
-    pub(crate) fn parse(tokens: &'a [Token], input: &'a [u8]) -> Result<Vec<Instruction<W>>, Vec<ParserError>> {
+    pub(crate) fn parse(tokens: &'input [Token], input: &'input [u8]) -> Result<Vec<Instruction<W>>, Vec<ParserError>> {
         let mut parser = Parser::new(tokens, input);
         parser.run();
 
@@ -51,29 +65,34 @@ impl<'a, W: Word> Parser<'a, W> {
     fn run(&mut self) {
         let mut instruction_count = 0;
 
-        while self.idx < self.tokens.len() {
-            match &self.tokens[self.idx] {
-                Token::Label(label) => {
-                    if let Some(old_instruction_idx) = self.labels.insert(&self.input[label], instruction_count) {
-                        self.add_error(ParserError::DuplicateLabel {
-                            idx: instruction_count,
-                            old_idx: old_instruction_idx,
-                        });
-                    }
-                }
-                Token::LabelOrInstruction(inst) => {
-                    self.parse_instruction(&self.input[inst]);
-                    instruction_count += 1;
-                }
-                Token::End => break,
-                token => self.add_error(ParserError::InvalidToken {
-                    idx: self.idx,
-                    expected: "Label or Instruction",
-                    got: format!("{token:?}"),
-                }),
-            }
-
+        while self.idx < self.tokens.len() && !self.end_parsing {
+            self.parse_next_token(&mut instruction_count);
             self.idx += 1;
+        }
+    }
+
+    // TODO: can instruction_count be replaced by self.instructions.len()?
+    fn parse_next_token(&mut self, instruction_count: &mut usize) {
+        match &self.tokens[self.idx] {
+            Token::Section(section) => self.parse_section(&self.input[section]),
+            Token::Label(label) => {
+                if let Some(old_instruction_idx) = self.labels.insert(&self.input[label], *instruction_count) {
+                    self.add_error(ParserError::DuplicateLabel {
+                        idx: *instruction_count,
+                        old_idx: old_instruction_idx,
+                    });
+                }
+            }
+            Token::LabelOrInstruction(inst) => {
+                self.parse_instruction(&self.input[inst]); // Here only instructions are possible
+                *instruction_count += 1;
+            }
+            Token::End => self.end_parsing = true,
+            token => self.add_error(ParserError::InvalidToken {
+                idx: self.idx,
+                expected: "Label or Instruction",
+                got: format!("{token:?}"),
+            }),
         }
     }
 
@@ -107,17 +126,54 @@ impl<'a, W: Word> Parser<'a, W> {
                 ASMInstruction::Rotate(inst) => self.expect_rotate_instruction(inst),
                 ASMInstruction::Shift(inst) => self.expect_shift_instruction(inst),
             },
-            Err(()) => self.add_error(ParserError::UnknownInstruction {
+            Err(_) => self.add_error(ParserError::UnknownInstruction {
                 idx: self.idx,
                 inst: Self::string_from_u8_slice(instruction),
             }),
         }
     }
 
+    fn parse_section(&mut self, section: &[u8]) {
+        let is_code = |section: &[u8]| {
+            section.len() == 4
+                && (section[0] == b'c' || section[0] == b'C')
+                && (section[1] == b'o' || section[1] == b'O')
+                && (section[2] == b'd' || section[2] == b'D')
+                && (section[3] == b'e' || section[3] == b'E')
+        };
+        let is_data = |section: &[u8]| {
+            section.len() == 4
+                && (section[0] == b'd' || section[0] == b'D')
+                && (section[1] == b'a' || section[1] == b'A')
+                && (section[2] == b't' || section[2] == b'T')
+                && (section[3] == b'a' || section[3] == b'A')
+        };
+        let is_bss = |section: &[u8]| {
+            section.len() == 3
+                && (section[0] == b'b' || section[0] == b'B')
+                && (section[1] == b's' || section[1] == b'S')
+                && (section[2] == b's' || section[2] == b'S')
+        };
+
+        if is_code(section) {
+            self.current_section = Section::Code;
+        } else if is_data(section) {
+            self.current_section = Section::Data;
+        } else if is_bss(section) {
+            self.current_section = Section::Bss;
+        } else {
+            // TODO: Should section be reset to NotDefined here?
+            self.add_error(ParserError::InvalidSectionName {
+                idx: self.idx,
+                section: Self::string_from_u8_slice(section),
+            });
+        }
+    }
+
     fn expect_destination(&mut self, instr: ASMJumpInstruction) {
         self.idx += 1;
 
-        if let Some(Token::Label(label)) = self.tokens.get(self.idx) {
+        if let Some(Token::LabelOrInstruction(label)) = self.tokens.get(self.idx) {
             match self.labels.get(&self.input[label]) {
                 Some(&idx) => match idx.try_into() {
                     Ok(idx) => {
@@ -360,4 +416,63 @@ pub enum ParserError {
     LabelNotFound { idx: usize, label: String },
     #[error("Index {idx} of label \".{label}\" cannot be converted to word.")]
     LabelIndexToWordConversionFailed { idx: usize, label: String },
+    #[error("Invalid section name: {section} at {idx}.")]
+    InvalidSectionName { idx: usize, section: String },
+}
+
+#[cfg(test)]
+mod test {
+    use procem::word::I32;
+
+    use crate::{
+        parser::{Parser, ParserError, Section},
+        tokenizer::Tokenizer,
+    };
+
+    #[test]
+    fn parse_section() {
+        let input = "
+            .code
+            .bss
+            .data
+            .Bss
+            .CODE
+            .Invalid
+            ";
+        let tokens = Tokenizer::tokenize(input.as_bytes()).unwrap();
+        let mut p = Parser::<I32>::new(&tokens, input.as_bytes());
+        let mut instruction_count = 0;
+
+        assert_eq!(p.current_section, Section::NotDefined);
+
+        p.parse_next_token(&mut instruction_count);
+        assert_eq!(p.current_section, Section::Code);
+        p.idx += 1;
+
+        p.parse_next_token(&mut instruction_count);
+        assert_eq!(p.current_section, Section::Bss);
+        p.idx += 1;
+
+        p.parse_next_token(&mut instruction_count);
+        assert_eq!(p.current_section, Section::Data);
+        p.idx += 1;
+
+        p.parse_next_token(&mut instruction_count);
+        assert_eq!(p.current_section, Section::Bss);
+        p.idx += 1;
+
+        p.parse_next_token(&mut instruction_count);
+        assert_eq!(p.current_section, Section::Code);
+        p.idx += 1;
+
+        p.parse_next_token(&mut instruction_count);
+        assert_eq!(p.current_section, Section::Code);
+        assert_eq!(
+            p.errors.unwrap()[0],
+            ParserError::InvalidSectionName {
+                idx: 5,
+                section: "Invalid".to_string()
+            }
+        );
+    }
 }

@@ -168,8 +168,14 @@ pub fn assemble<W: Word>(input: impl AsRef<str>) -> Result<AssembledProgram<W>, 
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum AssemblerError {
-    #[error("Error during parsing: ")]
-    Parser(#[from] ParserError),
-    #[error("Error during tokenization: ")]
-    Tokenizer(#[from] TokenizerError),
+    #[error("Error during parsing: {err}")]
+    Parser {
+        #[from]
+        err: ParserError,
+    },
+    #[error("Error during tokenization: {err}")]
+    Tokenizer {
+        #[from]
+        err: TokenizerError,
+    },
 }
