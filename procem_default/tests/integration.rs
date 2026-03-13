@@ -17,10 +17,11 @@ fn simple_5x2_multiplication() {
 
     let program = assemble::<I32>(
         "
-        .input
-        mov R0, #2
-        add R1, R0
-        jmp .input
+        .code
+        input:
+            mov R0, #2
+            add R1, R0
+            jmp input
         ",
     )
     .unwrap();
@@ -70,13 +71,14 @@ fn simple_5x2_multiplication() {
 fn parse_various_literals() {
     let program = assemble::<I32>(
         "
-        mov R0, #42
-        mov R1, #0b101010
-        mov R2, #0x2A
-        mov R3, #0o52
-        mov R4, #true
-        mov R5, #false
-        mov R6, #'A'
+        .code
+            mov R0, #42
+            mov R1, #0b101010
+            mov R2, #0x2A
+            mov R3, #0o52
+            mov R4, #true
+            mov R5, #false
+            mov R6, #'A'
         ",
     )
     .unwrap();
@@ -126,12 +128,13 @@ fn parse_various_literals() {
 fn parse_and_execute_arithmetic() {
     let program = assemble::<I32>(
         "
-        mov R0, #10
-        mov R1, #5
-        add R0, R1
-        sub R0, #3
-        mul R0, #2
-        div R0, #4
+        .code
+            mov R0, #10
+            mov R1, #5
+            add R0, R1
+            sub R0, #3
+            mul R0, #2
+            div R0, #4
         ",
     )
     .unwrap();
@@ -148,12 +151,13 @@ fn control_flow_and_labels() {
     // Loop should run 5 times, incrementing R0 from 0 to 5
     let program = assemble::<I32>(
         "
-        mov R0, #0
-        mov R1, #5
-        .loop
-        add R0, #1
-        subs R1, #1
-        jnz .loop
+        .code
+            mov R0, #0
+            mov R1, #5
+        loop:
+            add R0, #1
+            subs R1, #1
+            jnz loop
         ",
     )
     .unwrap();
@@ -168,9 +172,10 @@ fn control_flow_and_labels() {
 fn test_overflow_and_flags() {
     let program = assemble::<I32>(
         "
-        mov R0, #2147483647
-        add R0, #1
-        cmp R0, #-2147483648
+        .code
+            mov R0, #2147483647
+            add R0, #1
+            cmp R0, #-2147483648
         ",
     )
     .unwrap();
@@ -186,12 +191,13 @@ fn test_overflow_and_flags() {
 fn factorial_program() {
     let program = assemble::<I32>(
         "
-        mov R0, #5
-        mov R1, #1
-        .loop
-        mul R1, R0
-        subs R0, #1
-        jnz .loop
+        .code
+            mov R0, #5
+            mov R1, #1
+        loop:
+            mul R1, R0
+            subs R0, #1
+            jnz loop
         ",
     )
     .unwrap();
@@ -204,7 +210,12 @@ fn factorial_program() {
 
 #[test]
 fn invalid_assembly_should_fail() {
-    let result = assemble::<I32>("mov R0, #\"notanumber\"");
+    let result = assemble::<I32>(
+        "
+        .code
+            mov R0, #\"notanumber\"
+        ",
+    );
 
     assert_eq!(
         result,

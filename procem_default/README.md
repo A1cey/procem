@@ -10,7 +10,7 @@ All assembly is interpreted as ASCII.
 All instructions can be written in mixed case.
 All operations that can be suffixed with an 'S', set the flag registers depending on the operation.
 
-- *Labels* (**\<LABEL>**) are used to mark specific locations in the program. They are denoted using a dot ('.') followed by a string (e.g., '.label').
+- *Labels* (**\<LABEL>**) are used to mark specific locations in the program. They are denoted by a string of alphanumeric or underscore ('_') or dash ('-') characters followed by a colon (':') (e.g., 'label:'). Labels are case-sensitive.
 - *Registers* (**\<REG>**) must be a valid register name (e.g., 'R0', 'r1', 'R2', 'PC', 'sp').
 - *Literals* (**\<LIT>**) are decimal, binary, hexadecimal, octal, boolean or char constants.
   They are denoted using a '#' followed by a valid literal value.
@@ -21,6 +21,12 @@ All operations that can be suffixed with an 'S', set the flag registers dependin
   - Boolean values are either 'true' or 'false'.
   - Character values are enclosed in single quotes, e.g., 'a', 'B', '5'.
 - *Operands* (**\<OP>**) can be a register name or a literal.
+- There can be three *Sections* in a program: 
+  - *.code*: This section is mandatory and contains executable instructions.
+  - *.data*: This section is optional and contains data declarations.
+  - *.bss*: This section is optional and contains uninitialized data declarations.
+  Sections can be in any order and occur multiple times. 
+  A valid program must have at least one *.code* section.
 
 'END' marks the end of the program. It is only used as a guide for the assembler and not part of the assembled program.
 
@@ -92,3 +98,8 @@ let _ = processor.run_program();
 // Inspect register values
 assert_eq!(processor.registers.get_reg(Register::R0), 6.into());
 ```
+
+## TODO
+
+- stack direction + stack start + initial sp value definition
+- initial pc value definition (_start label requirement)

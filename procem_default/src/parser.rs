@@ -61,7 +61,7 @@ impl<'a, W: Word> Parser<'a, W> {
                         });
                     }
                 }
-                Token::Instruction(inst) => {
+                Token::LabelOrInstruction(inst) => {
                     self.parse_instruction(&self.input[inst]);
                     instruction_count += 1;
                 }
