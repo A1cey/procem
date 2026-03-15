@@ -14,7 +14,7 @@ use crate::instruction::asm_instruction::{
 use crate::instruction::operand::Operand;
 use crate::instruction::{Instruction, asm_instruction::ASMNoArgInstruction};
 use crate::tokenizer::{Literal, Token};
-use ars::{ascii::eq_ignore_ascii_case, range::Range};
+use ars::range::Range;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 pub(crate) enum Section {
@@ -135,9 +135,9 @@ impl<'input, W: Word> Parser<'input, W> {
 
     fn parse_section(&mut self, section: &[u8]) {
         match section {
-            section if eq_ignore_ascii_case(section, b"code") => self.current_section = Section::Code,
-            section if eq_ignore_ascii_case(section, b"data") => self.current_section = Section::Data,
-            section if eq_ignore_ascii_case(section, b"bss") => self.current_section = Section::Bss,
+            section if section.eq_ignore_ascii_case(b"code") => self.current_section = Section::Code,
+            section if section.eq_ignore_ascii_case(b"data") => self.current_section = Section::Data,
+            section if section.eq_ignore_ascii_case(b"bss") => self.current_section = Section::Bss,
             _ => {
                 // TODO: Should section be reset to NotDefined here?
                 self.add_error(ParserError::InvalidSectionName {

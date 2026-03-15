@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use ars::{ascii::eq_ignore_ascii_case, range::Range};
+use ars::range::Range;
 
 #[doc(hidden)] // Only public for benchmarks.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -156,7 +156,7 @@ impl Tokenizer<'_> {
         let token = if is_label {
             self.curr_idx += 1; // skip over the ':'
             Token::Label(Range(start, end))
-        } else if eq_ignore_ascii_case(&self.input[start..end], b"end") {
+        } else if self.input[start..end].eq_ignore_ascii_case(b"end") {
             Token::End
         } else {
             Token::LabelOrInstruction(Range(start, end))
@@ -268,7 +268,7 @@ impl Tokenizer<'_> {
         // +1 to ignore prefix #
         let lit = &self.input[self.token_start_idx + 1..self.curr_idx];
 
-        if eq_ignore_ascii_case(lit, b"true") {
+        if lit.eq_ignore_ascii_case(b"true") {
             self.tokens.push(Token::Literal(Literal::Boolean(true)));
         } else {
             self.add_error(TokenizerError::BooleanTrueLiteral {
@@ -283,7 +283,7 @@ impl Tokenizer<'_> {
         // +1 to ignore prefix #
         let lit = &self.input[self.token_start_idx + 1..self.curr_idx];
 
-        if eq_ignore_ascii_case(lit, b"false") {
+        if lit.eq_ignore_ascii_case(b"false") {
             self.tokens.push(Token::Literal(Literal::Boolean(false)));
         } else {
             self.add_error(TokenizerError::BooleanFalseLiteral {
