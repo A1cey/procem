@@ -1,3 +1,4 @@
+use ars::fmt::slice::FmtSlice;
 use procem::{
     processor::Processor,
     program::{Bss, Code, Data, Header, Program},
@@ -19,12 +20,15 @@ fn simple_5x2_multiplication() {
         "
         .code
         input:
-            mov R0, #2
+            mov R0, 2
             add R1, R0
             jmp input
         ",
-    )
-    .unwrap();
+    );
+    let program = match program {
+        Ok(program) => program,
+        Err(err) => panic!("{}", FmtSlice(&err)),
+    };
 
     assert_eq!(
         program,
@@ -72,16 +76,19 @@ fn parse_various_literals() {
     let program = assemble::<I32>(
         "
         .code
-            mov R0, #42
-            mov R1, #0b101010
-            mov R2, #0x2A
-            mov R3, #0o52
-            mov R4, #true
-            mov R5, #false
-            mov R6, #'A'
+            mov R0, 42
+            mov R1, 0b101010
+            mov R2, 0x2A
+            mov R3, 0o52
+            mov R4, true
+            mov R5, false
+            mov R6, 'A'
         ",
-    )
-    .unwrap();
+    );
+    let program = match program {
+        Ok(program) => program,
+        Err(err) => panic!("{}", FmtSlice(&err)),
+    };
 
     assert_eq!(program.code().len(), 7);
     assert_eq!(
@@ -129,15 +136,18 @@ fn parse_and_execute_arithmetic() {
     let program = assemble::<I32>(
         "
         .code
-            mov R0, #10
-            mov R1, #5
+            mov R0, 10
+            mov R1, 5
             add R0, R1
-            sub R0, #3
-            mul R0, #2
-            div R0, #4
+            sub R0, 3
+            mul R0, 2
+            div R0, 4
         ",
-    )
-    .unwrap();
+    );
+    let program = match program {
+        Ok(program) => program,
+        Err(err) => panic!("{}", FmtSlice(&err)),
+    };
 
     let mut processor = Processor::<1024, _, _, _, _>::builder().with_program(&program).build();
 
@@ -150,17 +160,20 @@ fn parse_and_execute_arithmetic() {
 fn control_flow_and_labels() {
     // Loop should run 5 times, incrementing R0 from 0 to 5
     let program = assemble::<I32>(
-        "
-        .code
-            mov R0, #0
-            mov R1, #5
-        loop:
-            add R0, #1
-            subs R1, #1
-            jnz loop
-        ",
-    )
-    .unwrap();
+"
+.code
+    mov R0, 0
+    mov R1, 5
+loop:
+    add R0, 1
+    subs R1, 1
+    jnz loop
+",
+    );
+    let program = match program {
+        Ok(program) => program,
+        Err(err) => panic!("{}", FmtSlice(&err)),
+    };
 
     let mut processor = Processor::<1024, _, _, _, _>::builder().with_program(&program).build();
 
@@ -173,12 +186,15 @@ fn test_overflow_and_flags() {
     let program = assemble::<I32>(
         "
         .code
-            mov R0, #2147483647
-            add R0, #1
-            cmp R0, #-2147483648
+            mov R0, 2147483647
+            add R0, 1
+            cmp R0, -2147483648
         ",
-    )
-    .unwrap();
+    );
+    let program = match program {
+        Ok(program) => program,
+        Err(err) => panic!("{}", FmtSlice(&err)),
+    };
 
     let mut processor = Processor::<1024, _, _, _, _>::builder().with_program(&program).build();
 
@@ -192,15 +208,18 @@ fn factorial_program() {
     let program = assemble::<I32>(
         "
         .code
-            mov R0, #5
-            mov R1, #1
+            mov R0, 5
+            mov R1, 1
         loop:
             mul R1, R0
-            subs R0, #1
+            subs R0, 1
             jnz loop
         ",
-    )
-    .unwrap();
+    );
+    let program = match program {
+        Ok(program) => program,
+        Err(err) => panic!("{}", FmtSlice(&err)),
+    };
 
     let mut processor = Processor::<1024, _, _, _, _>::builder().with_program(&program).build();
 
@@ -213,7 +232,7 @@ fn invalid_assembly_should_fail() {
     let result = assemble::<I32>(
         "
         .code
-            mov R0, #\"notanumber\"
+            mov R0, \"notanumber\"
         ",
     );
 
@@ -224,6 +243,8 @@ fn invalid_assembly_should_fail() {
 
     assert_eq!(
         result,
-        Err(vec![AssemblerError::Parser{err: ParserError::CannotConvertStrToVal}])
+        Err(vec![AssemblerError::Parser {
+            err: ParserError::CannotConvertStrToVal
+        }])
     );
 }

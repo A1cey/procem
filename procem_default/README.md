@@ -13,7 +13,6 @@ All operations that can be suffixed with an 'S', set the flag registers dependin
 - *Labels* (**\<LABEL>**) are used to mark specific locations in the program. They are denoted by a string of alphanumeric or underscore ('_') or dash ('-') characters followed by a colon (':') (e.g., 'label:'). Labels are case-sensitive.
 - *Registers* (**\<REG>**) must be a valid register name (e.g., 'R0', 'r1', 'R2', 'PC', 'sp').
 - *Literals* (**\<LIT>**) are decimal, binary, hexadecimal, octal, boolean or char constants.
-  They are denoted using a '#' followed by a valid literal value.
   - Decimal values start with '0d' (optional), followed by a sequence of '0's through '9's.
   - Binary values start with '0b', followed by a sequence of '0's and '1's.
   - Hexadecimal values start with '0x', followed by a sequence of digits from '0' through '9' and letters from 'a' through 'f'.
@@ -21,14 +20,39 @@ All operations that can be suffixed with an 'S', set the flag registers dependin
   - Boolean values are either 'true' or 'false'.
   - Character values are enclosed in single quotes, e.g., 'a', 'B', '5'.
 - *Operands* (**\<OP>**) can be a register name or a literal.
-- There can be three *Sections* in a program: 
-  - *.code*: This section is mandatory and contains executable instructions.
-  - *.data*: This section is optional and contains data declarations.
-  - *.bss*: This section is optional and contains uninitialized data declarations.
-  Sections can be in any order and occur multiple times. 
-  A valid program must have at least one *.code* section.
+- Compiler *directives* are special instructions that the assembler uses to control the assembly process. They start with a '.' followed by a string of alphanumeric or underscore ('_') or dash ('-') characters.
+  - There can be three *Sections* in a program: 
+    - *.code*: This section is mandatory and contains executable instructions.
+    - *.data*: This section is optional and contains data declarations.
+    - *.bss*: This section is optional and contains uninitialized data declarations.
+    Sections can be in any order and occur multiple times. 
+    A valid program must have at least one *.code* section.
 
 'END' marks the end of the program. It is only used as a guide for the assembler and not part of the assembled program.
+
+### Directives
+
+- *.data*: This section is optional and contains data declarations.
+- *.bss*: This section is optional and contains uninitialized data declarations.
+- *.code*: This section is mandatory and contains executable instructions.
+- *.word*: Usable only in *.data* sections. Declares a word-sized data item.
+- *.ascii*: Usable only in *.data* sections. Declares an ASCII string.
+- *.space*: Usable only in *.bss* sections. Declares a block of memory.
+
+### Data Section
+
+Use *.word* or *.ascii* followed by a *Literal* to declare data in the *.data* section. To declare an array of data multiple literals divided by spaces can be used.
+
+Example: 
+```
+.data
+  .word 10, 20, 30, 40, 50
+  .ascii "Hello, World!"
+```
+
+### Bss Section
+
+Use *.space* followed by a numeric *Literal* (Decimal, Octal, Hexadecimal, Binary) to declare uninitialized data in the *.bss* section. The *Literal* specifies the number of words to allocate.
 
 ### Operations
 

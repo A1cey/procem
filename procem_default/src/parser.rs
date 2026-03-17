@@ -181,7 +181,9 @@ impl<'input, W: Word> Parser<'input, W> {
     fn expect_register(&mut self) -> Result<Register, ParserError> {
         self.idx += 1; // manual, to enable borrow of self inside match
         match self.tokens.get(self.idx) {
-            Some(Token::Register(reg)) => Register::try_from(&self.input[reg]).map_err(ParserError::RegisterParsing),
+            Some(Token::Register(reg)) => {
+                Register::try_from(&self.input[reg]).map_err(|err| ParserError::RegisterParsing { err })
+            }
             _ => Err(ParserError::InvalidToken {
                 idx: self.idx,
                 expected: "Register",
@@ -205,7 +207,7 @@ impl<'input, W: Word> Parser<'input, W> {
         self.idx += 1; // manual, to enable borrow of self inside match
         match self.tokens.get(self.idx) {
             Some(Token::Register(reg)) => Ok(Operand::Register(
-                Register::try_from(&self.input[reg]).map_err(ParserError::RegisterParsing)?,
+                Register::try_from(&self.input[reg]).map_err(|err| ParserError::RegisterParsing { err })?,
             )),
             Some(Token::Literal(lit)) => Ok(Operand::Value(self.convert_lit_to_val(lit)?)),
             _ => Err(ParserError::InvalidToken {
@@ -241,27 +243,39 @@ impl<'input, W: Word> Parser<'input, W> {
             .map_or_else(|| "End".to_string(), |token| format!("{token:?}"))
     }
 
-    fn convert_lit_to_val(&self, lit: &Literal) -> Result<W, ParserError> {
+    fn convert_lit_to_val(&self, lit: &Literal) -> Result<W, ParserError> {        
         match lit {
-            Literal::Char(s) => Ok((*s as i32).into()),
-            Literal::Binary(s) => {
-                let s = String::from_utf8_lossy(&self.input[s]);
-                W::from_str_radix(&s, 2).map_err(ParserError::LiteralParsing)
+            Literal::Char(c) => Ok((*c as i32).into()),
+            Literal::Binary(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                W::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
             }
-            Literal::Boolean(s) => Ok(i32::from(*s).into()),
-            Literal::Decimal(s) => {
-                let s = String::from_utf8_lossy(&self.input[s]);
-                W::from_str_radix(&s, 10).map_err(ParserError::LiteralParsing)
+            Literal::Boolean(b) => Ok(i32::from(*b).into()),
+            Literal::Decimal(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                W::from_str_radix(&lit, 10).map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
             }
-            Literal::Hexadecimal(s) => {
-                let s = String::from_utf8_lossy(&self.input[s]);
-                W::from_str_radix(&s, 16).map_err(ParserError::LiteralParsing)
+            Literal::Hexadecimal(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                W::from_str_radix(&lit, 16).map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
             }
-            Literal::Octal(s) => {
-                let s = String::from_utf8_lossy(&self.input[s]);
-                W::from_str_radix(&s, 8).map_err(ParserError::LiteralParsing)
+            Literal::Octal(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                W::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
             }
-            Literal::String(_) => Err(ParserError::CannotConvertStrToVal),
+            Literal::String(_) => Err(ParserError::CannotConvertStrToVal), // TODO: String is only allowed in .data section
         }
     }
 
@@ -382,10 +396,13 @@ pub enum ParserError {
     DuplicateLabel { idx: usize, old_idx: usize },
     #[error("Unkown instruction at idx {idx}: {inst}")]
     UnknownInstruction { idx: usize, inst: String },
-    #[error("Error while parsing register.")]
-    RegisterParsing(#[from] RegisterError),
-    #[error("Error while parsing literal.")]
-    LiteralParsing(#[from] ParseIntError),
+    #[error("Error while parsing register: {err}")]
+    RegisterParsing {
+        #[from]
+        err: RegisterError,
+    },
+    #[error("Error while parsing literal ({lit}): {err}")]
+    LiteralParsing { lit: String, err: ParseIntError },
     #[error("Strings cannot be converted to numeric values directly. You could use a hex representation instead.")]
     CannotConvertStrToVal,
     #[error("Cannot convert literal {literal} to u32. This is likely due to the literal being too large.\n{err}")]
