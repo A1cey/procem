@@ -25,6 +25,13 @@ pub struct Data;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Undefined;
 
+enum Section {
+    Code,
+    Data,
+    Bss,
+    Invalid(String),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Parser<'input, W> {
     Undefined(InnerParser<'input, W, Undefined>),
@@ -48,7 +55,7 @@ impl<'input, W: Word> Parser<'input, W> {
     }
 
     /// Parse tokens into a list of instructions.
-    /// 
+    ///
     /// # Errors
     /// Returns a list of errors that occurred during parsing.
     pub fn parse(tokens: &'input [Token], input: &'input [u8]) -> Result<Vec<Instruction<W>>, Vec<ParserError>> {
@@ -101,16 +108,6 @@ impl<'input, W: Word> Parser<'input, W> {
     }
 
     #[inline]
-    const fn input(&self) -> &[u8] {
-        match self {
-            Self::Undefined(p) => p.input,
-            Self::Code(p) => p.input,
-            Self::Data(p) => p.input,
-            Self::Bss(p) => p.input,
-        }
-    }
-
-    #[inline]
     const fn is_done(&self) -> bool {
         match self {
             Self::Undefined(p) => p.end_parsing || p.idx >= p.tokens.len(),
@@ -132,7 +129,7 @@ impl<'input, W: Word> Parser<'input, W> {
 
     fn change_section(self, range: Range) -> Self {
         macro_rules! change_and_advance {
-            ($parser:expr, $method:ident, $variant:ident) => {{
+            ($parser:expr, $variant:ident, $method:ident) => {{
                 let mut next = $parser.$method();
                 next.idx += 1;
 
@@ -141,41 +138,40 @@ impl<'input, W: Word> Parser<'input, W> {
         }
 
         macro_rules! error_and_advance {
-            ($parser:expr, $variant:ident, $directive: expr) => {{
-                let got = string_from_u8_slice($directive);
-
+            ($parser:expr, $variant:ident, $got: expr) => {{
                 $parser.add_error(ParserError::InvalidToken {
                     idx: $parser.idx,
                     expected: "Section Directive (code, data, bss)",
-                    got,
+                    got: $got,
                 });
                 $parser.idx += 1;
                 Self::$variant($parser)
             }};
         }
 
-        let directive = self.input()[range].to_vec(); // NOTE: This allocates a vec every step!
+        macro_rules! change_section {
+            ($variant:ident, $method:ident) => {
+                match self {
+                    Self::Undefined(p) => change_and_advance!(p, $variant, $method),
+                    Self::Code(p) => change_and_advance!(p, $variant, $method),
+                    Self::Data(p) => change_and_advance!(p, $variant, $method),
+                    Self::Bss(p) => change_and_advance!(p, $variant, $method),
+                }
+            };
+        }
 
-        match &directive {
-            directive if directive.eq_ignore_ascii_case(b"code") => match self {
-                Self::Undefined(p) => change_and_advance!(p, into_code, Code),
-                Self::Code(p) => change_and_advance!(p, into_code, Code),
-                Self::Data(p) => change_and_advance!(p, into_code, Code),
-                Self::Bss(p) => change_and_advance!(p, into_code, Code),
-            },
-            directive if directive.eq_ignore_ascii_case(b"data") => match self {
-                Self::Undefined(p) => change_and_advance!(p, into_data, Data),
-                Self::Code(p) => change_and_advance!(p, into_data, Data),
-                Self::Data(p) => change_and_advance!(p, into_data, Data),
-                Self::Bss(p) => change_and_advance!(p, into_data, Data),
-            },
-            directive if directive.eq_ignore_ascii_case(b"bss") => match self {
-                Self::Undefined(p) => change_and_advance!(p, into_bss, Bss),
-                Self::Code(p) => change_and_advance!(p, into_bss, Bss),
-                Self::Data(p) => change_and_advance!(p, into_bss, Bss),
-                Self::Bss(p) => change_and_advance!(p, into_bss, Bss),
-            },
-            directive => match self {
+        let section = match &self {
+            Self::Undefined(p) => Self::parse_section_directive(p, range),
+            Self::Code(p) => Self::parse_section_directive(p, range),
+            Self::Data(p) => Self::parse_section_directive(p, range),
+            Self::Bss(p) => Self::parse_section_directive(p, range),
+        };
+
+        match section {
+            Section::Code => change_section!(Code, into_code),
+            Section::Data => change_section!(Data, into_data),
+            Section::Bss => change_section!(Bss, into_bss),
+            Section::Invalid(directive) => match self {
                 Self::Undefined(mut p) => error_and_advance!(p, Undefined, directive), // No directives other then sections allowed when section is still undefined
                 Self::Code(mut p) => error_and_advance!(p, Code, directive), // No directives allowed inside code sections
                 Self::Data(mut p) => {
@@ -191,6 +187,15 @@ impl<'input, W: Word> Parser<'input, W> {
                     Self::Bss(p)
                 }
             },
+        }
+    }
+
+    fn parse_section_directive<S>(parser: &InnerParser<'_, W, S>, range: Range) -> Section {
+        match &parser.input[range] {
+            directive if directive.eq_ignore_ascii_case(b"code") => Section::Code,
+            directive if directive.eq_ignore_ascii_case(b"data") => Section::Data,
+            directive if directive.eq_ignore_ascii_case(b"bss") => Section::Bss,
+            directive => Section::Invalid(string_from_u8_slice(directive)),
         }
     }
 }

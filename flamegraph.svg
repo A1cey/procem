@@ -1,0 +1,491 @@
+<?xml version="1.0" standalone="no"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg version="1.1" width="1200" height="758" onload="init(evt)" viewBox="0 0 1200 758" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:fg="http://github.com/jonhoo/inferno"><!--Flame graph stack visualization. See https://github.com/brendangregg/FlameGraph for latest version, and http://www.brendangregg.com/flamegraphs.html for examples.--><!--NOTES: --><defs><linearGradient id="background" y1="0" y2="1" x1="0" x2="0"><stop stop-color="#eeeeee" offset="5%"/><stop stop-color="#eeeeb0" offset="95%"/></linearGradient></defs><style type="text/css">
+text { font-family:monospace; font-size:12px }
+#title { text-anchor:middle; font-size:17px; }
+#matched { text-anchor:end; }
+#search { text-anchor:end; opacity:0.1; cursor:pointer; }
+#search:hover, #search.show { opacity:1; }
+#subtitle { text-anchor:middle; font-color:rgb(160,160,160); }
+#unzoom { cursor:pointer; }
+#frames > *:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+.hide { display:none; }
+.parent { opacity:0.5; }
+</style><script type="text/ecmascript"><![CDATA[
+        var nametype = 'Function:';
+        var fontsize = 12;
+        var fontwidth = 0.59;
+        var xpad = 10;
+        var inverted = false;
+        var searchcolor = 'rgb(230,0,230)';
+        var fluiddrawing = true;
+        var truncate_text_right = false;
+    ]]><![CDATA["use strict";
+var details, searchbtn, unzoombtn, matchedtxt, svg, searching, frames, known_font_width;
+function init(evt) {
+    details = document.getElementById("details").firstChild;
+    searchbtn = document.getElementById("search");
+    unzoombtn = document.getElementById("unzoom");
+    matchedtxt = document.getElementById("matched");
+    svg = document.getElementsByTagName("svg")[0];
+    frames = document.getElementById("frames");
+    known_font_width = get_monospace_width(frames);
+    total_samples = parseInt(frames.attributes.total_samples.value);
+    searching = 0;
+
+    // Use GET parameters to restore a flamegraph's state.
+    var restore_state = function() {
+        var params = get_params();
+        if (params.x && params.y)
+            zoom(find_group(document.querySelector('[*|x="' + params.x + '"][y="' + params.y + '"]')));
+        if (params.s)
+            search(params.s);
+    };
+
+    if (fluiddrawing) {
+        // Make width dynamic so the SVG fits its parent's width.
+        svg.removeAttribute("width");
+        // Edge requires us to have a viewBox that gets updated with size changes.
+        var isEdge = /Edge\/\d./i.test(navigator.userAgent);
+        if (!isEdge) {
+            svg.removeAttribute("viewBox");
+        }
+        var update_for_width_change = function() {
+            if (isEdge) {
+                svg.attributes.viewBox.value = "0 0 " + svg.width.baseVal.value + " " + svg.height.baseVal.value;
+            }
+
+            // Keep consistent padding on left and right of frames container.
+            frames.attributes.width.value = svg.width.baseVal.value - xpad * 2;
+
+            // Text truncation needs to be adjusted for the current width.
+            update_text_for_elements(frames.children);
+
+            // Keep search elements at a fixed distance from right edge.
+            var svgWidth = svg.width.baseVal.value;
+            searchbtn.attributes.x.value = svgWidth - xpad;
+            matchedtxt.attributes.x.value = svgWidth - xpad;
+        };
+        window.addEventListener('resize', function() {
+            update_for_width_change();
+        });
+        // This needs to be done asynchronously for Safari to work.
+        setTimeout(function() {
+            unzoom();
+            update_for_width_change();
+            restore_state();
+        }, 0);
+    } else {
+        restore_state();
+    }
+}
+// event listeners
+window.addEventListener("click", function(e) {
+    var target = find_group(e.target);
+    if (target) {
+        if (target.nodeName == "a") {
+            if (e.ctrlKey === false) return;
+            e.preventDefault();
+        }
+        if (target.classList.contains("parent")) unzoom();
+        zoom(target);
+
+        // set parameters for zoom state
+        var el = target.querySelector("rect");
+        if (el && el.attributes && el.attributes.y && el.attributes["fg:x"]) {
+            var params = get_params()
+            params.x = el.attributes["fg:x"].value;
+            params.y = el.attributes.y.value;
+            history.replaceState(null, null, parse_params(params));
+        }
+    }
+    else if (e.target.id == "unzoom") {
+        unzoom();
+
+        // remove zoom state
+        var params = get_params();
+        if (params.x) delete params.x;
+        if (params.y) delete params.y;
+        history.replaceState(null, null, parse_params(params));
+    }
+    else if (e.target.id == "search") search_prompt();
+}, false)
+// mouse-over for info
+// show
+window.addEventListener("mouseover", function(e) {
+    var target = find_group(e.target);
+    if (target) details.nodeValue = nametype + " " + g_to_text(target);
+}, false)
+// clear
+window.addEventListener("mouseout", function(e) {
+    var target = find_group(e.target);
+    if (target) details.nodeValue = ' ';
+}, false)
+// ctrl-F for search
+window.addEventListener("keydown",function (e) {
+    if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+        e.preventDefault();
+        search_prompt();
+    }
+}, false)
+// functions
+function get_params() {
+    var params = {};
+    var paramsarr = window.location.search.substr(1).split('&');
+    for (var i = 0; i < paramsarr.length; ++i) {
+        var tmp = paramsarr[i].split("=");
+        if (!tmp[0] || !tmp[1]) continue;
+        params[tmp[0]]  = decodeURIComponent(tmp[1]);
+    }
+    return params;
+}
+function parse_params(params) {
+    var uri = "?";
+    for (var key in params) {
+        uri += key + '=' + encodeURIComponent(params[key]) + '&';
+    }
+    if (uri.slice(-1) == "&")
+        uri = uri.substring(0, uri.length - 1);
+    if (uri == '?')
+        uri = window.location.href.split('?')[0];
+    return uri;
+}
+function find_child(node, selector) {
+    var children = node.querySelectorAll(selector);
+    if (children.length) return children[0];
+    return;
+}
+function find_group(node) {
+    var parent = node.parentElement;
+    if (!parent) return;
+    if (parent.id == "frames") return node;
+    return find_group(parent);
+}
+function orig_save(e, attr, val) {
+    if (e.attributes["fg:orig_" + attr] != undefined) return;
+    if (e.attributes[attr] == undefined) return;
+    if (val == undefined) val = e.attributes[attr].value;
+    e.setAttribute("fg:orig_" + attr, val);
+}
+function orig_load(e, attr) {
+    if (e.attributes["fg:orig_"+attr] == undefined) return;
+    e.attributes[attr].value = e.attributes["fg:orig_" + attr].value;
+    e.removeAttribute("fg:orig_" + attr);
+}
+function g_to_text(e) {
+    var text = find_child(e, "title").firstChild.nodeValue;
+    return (text)
+}
+function g_to_func(e) {
+    var func = g_to_text(e);
+    // if there's any manipulation we want to do to the function
+    // name before it's searched, do it here before returning.
+    return (func);
+}
+function get_monospace_width(frames) {
+    // Given the id="frames" element, return the width of text characters if
+    // this is a monospace font, otherwise return 0.
+    text = find_child(frames.children[0], "text");
+    originalContent = text.textContent;
+    text.textContent = "!";
+    bangWidth = text.getComputedTextLength();
+    text.textContent = "W";
+    wWidth = text.getComputedTextLength();
+    text.textContent = originalContent;
+    if (bangWidth === wWidth) {
+        return bangWidth;
+    } else {
+        return 0;
+    }
+}
+function update_text_for_elements(elements) {
+    // In order to render quickly in the browser, you want to do one pass of
+    // reading attributes, and one pass of mutating attributes. See
+    // https://web.dev/avoid-large-complex-layouts-and-layout-thrashing/ for details.
+
+    // Fall back to inefficient calculation, if we're variable-width font.
+    // TODO This should be optimized somehow too.
+    if (known_font_width === 0) {
+        for (var i = 0; i < elements.length; i++) {
+            update_text(elements[i]);
+        }
+        return;
+    }
+
+    var textElemNewAttributes = [];
+    for (var i = 0; i < elements.length; i++) {
+        var e = elements[i];
+        var r = find_child(e, "rect");
+        var t = find_child(e, "text");
+        var w = parseFloat(r.attributes.width.value) * frames.attributes.width.value / 100 - 3;
+        var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+        var newX = format_percent((parseFloat(r.attributes.x.value) + (100 * 3 / frames.attributes.width.value)));
+
+        // Smaller than this size won't fit anything
+        if (w < 2 * known_font_width) {
+            textElemNewAttributes.push([newX, ""]);
+            continue;
+        }
+
+        // Fit in full text width
+        if (txt.length * known_font_width < w) {
+            textElemNewAttributes.push([newX, txt]);
+            continue;
+        }
+
+        var substringLength = Math.floor(w / known_font_width) - 2;
+        if (truncate_text_right) {
+            // Truncate the right side of the text.
+            textElemNewAttributes.push([newX, txt.substring(0, substringLength) + ".."]);
+            continue;
+        } else {
+            // Truncate the left side of the text.
+            textElemNewAttributes.push([newX, ".." + txt.substring(txt.length - substringLength, txt.length)]);
+            continue;
+        }
+    }
+
+    console.assert(textElemNewAttributes.length === elements.length, "Resize failed, please file a bug at https://github.com/jonhoo/inferno/");
+
+    // Now that we know new textContent, set it all in one go so we don't refresh a bazillion times.
+    for (var i = 0; i < elements.length; i++) {
+        var e = elements[i];
+        var values = textElemNewAttributes[i];
+        var t = find_child(e, "text");
+        t.attributes.x.value = values[0];
+        t.textContent = values[1];
+    }
+}
+
+function update_text(e) {
+    var r = find_child(e, "rect");
+    var t = find_child(e, "text");
+    var w = parseFloat(r.attributes.width.value) * frames.attributes.width.value / 100 - 3;
+    var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+    t.attributes.x.value = format_percent((parseFloat(r.attributes.x.value) + (100 * 3 / frames.attributes.width.value)));
+
+    // Smaller than this size won't fit anything
+    if (w < 2 * fontsize * fontwidth) {
+        t.textContent = "";
+        return;
+    }
+    t.textContent = txt;
+    // Fit in full text width
+    if (t.getComputedTextLength() < w)
+        return;
+    if (truncate_text_right) {
+        // Truncate the right side of the text.
+        for (var x = txt.length - 2; x > 0; x--) {
+            if (t.getSubStringLength(0, x + 2) <= w) {
+                t.textContent = txt.substring(0, x) + "..";
+                return;
+            }
+        }
+    } else {
+        // Truncate the left side of the text.
+        for (var x = 2; x < txt.length; x++) {
+            if (t.getSubStringLength(x - 2, txt.length) <= w) {
+                t.textContent = ".." + txt.substring(x, txt.length);
+                return;
+            }
+        }
+    }
+    t.textContent = "";
+}
+// zoom
+function zoom_reset(e) {
+    if (e.tagName == "rect") {
+        e.attributes.x.value = format_percent(100 * parseInt(e.attributes["fg:x"].value) / total_samples);
+        e.attributes.width.value = format_percent(100 * parseInt(e.attributes["fg:w"].value) / total_samples);
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_reset(c[i]);
+    }
+}
+function zoom_child(e, x, zoomed_width_samples) {
+    if (e.tagName == "text") {
+        var parent_x = parseFloat(find_child(e.parentNode, "rect[x]").attributes.x.value);
+        e.attributes.x.value = format_percent(parent_x + (100 * 3 / frames.attributes.width.value));
+    } else if (e.tagName == "rect") {
+        e.attributes.x.value = format_percent(100 * (parseInt(e.attributes["fg:x"].value) - x) / zoomed_width_samples);
+        e.attributes.width.value = format_percent(100 * parseInt(e.attributes["fg:w"].value) / zoomed_width_samples);
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_child(c[i], x, zoomed_width_samples);
+    }
+}
+function zoom_parent(e) {
+    if (e.attributes) {
+        if (e.attributes.x != undefined) {
+            e.attributes.x.value = "0.0%";
+        }
+        if (e.attributes.width != undefined) {
+            e.attributes.width.value = "100.0%";
+        }
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_parent(c[i]);
+    }
+}
+function zoom(node) {
+    var attr = find_child(node, "rect").attributes;
+    var width = parseInt(attr["fg:w"].value);
+    var xmin = parseInt(attr["fg:x"].value);
+    var xmax = xmin + width;
+    var ymin = parseFloat(attr.y.value);
+    unzoombtn.classList.remove("hide");
+    var el = frames.children;
+    var to_update_text = [];
+    for (var i = 0; i < el.length; i++) {
+        var e = el[i];
+        var a = find_child(e, "rect").attributes;
+        var ex = parseInt(a["fg:x"].value);
+        var ew = parseInt(a["fg:w"].value);
+        // Is it an ancestor
+        if (!inverted) {
+            var upstack = parseFloat(a.y.value) > ymin;
+        } else {
+            var upstack = parseFloat(a.y.value) < ymin;
+        }
+        if (upstack) {
+            // Direct ancestor
+            if (ex <= xmin && (ex+ew) >= xmax) {
+                e.classList.add("parent");
+                zoom_parent(e);
+                to_update_text.push(e);
+            }
+            // not in current path
+            else
+                e.classList.add("hide");
+        }
+        // Children maybe
+        else {
+            // no common path
+            if (ex < xmin || ex >= xmax) {
+                e.classList.add("hide");
+            }
+            else {
+                zoom_child(e, xmin, width);
+                to_update_text.push(e);
+            }
+        }
+    }
+    update_text_for_elements(to_update_text);
+}
+function unzoom() {
+    unzoombtn.classList.add("hide");
+    var el = frames.children;
+    for(var i = 0; i < el.length; i++) {
+        el[i].classList.remove("parent");
+        el[i].classList.remove("hide");
+        zoom_reset(el[i]);
+    }
+    update_text_for_elements(el);
+}
+// search
+function reset_search() {
+    var el = document.querySelectorAll("#frames rect");
+    for (var i = 0; i < el.length; i++) {
+        orig_load(el[i], "fill")
+    }
+    var params = get_params();
+    delete params.s;
+    history.replaceState(null, null, parse_params(params));
+}
+function search_prompt() {
+    if (!searching) {
+        var term = prompt("Enter a search term (regexp " +
+            "allowed, eg: ^ext4_)", "");
+        if (term != null) {
+            search(term)
+        }
+    } else {
+        reset_search();
+        searching = 0;
+        searchbtn.classList.remove("show");
+        searchbtn.firstChild.nodeValue = "Search"
+        matchedtxt.classList.add("hide");
+        matchedtxt.firstChild.nodeValue = ""
+    }
+}
+function search(term) {
+    var re = new RegExp(term);
+    var el = frames.children;
+    var matches = new Object();
+    var maxwidth = 0;
+    for (var i = 0; i < el.length; i++) {
+        var e = el[i];
+        // Skip over frames which are either not visible, or below the zoomed-to frame
+        if (e.classList.contains("hide") || e.classList.contains("parent")) {
+            continue;
+        }
+        var func = g_to_func(e);
+        var rect = find_child(e, "rect");
+        if (func == null || rect == null)
+            continue;
+        // Save max width. Only works as we have a root frame
+        var w = parseInt(rect.attributes["fg:w"].value);
+        if (w > maxwidth)
+            maxwidth = w;
+        if (func.match(re)) {
+            // highlight
+            var x = parseInt(rect.attributes["fg:x"].value);
+            orig_save(rect, "fill");
+            rect.attributes.fill.value = searchcolor;
+            // remember matches
+            if (matches[x] == undefined) {
+                matches[x] = w;
+            } else {
+                if (w > matches[x]) {
+                    // overwrite with parent
+                    matches[x] = w;
+                }
+            }
+            searching = 1;
+        }
+    }
+    if (!searching)
+        return;
+    var params = get_params();
+    params.s = term;
+    history.replaceState(null, null, parse_params(params));
+
+    searchbtn.classList.add("show");
+    searchbtn.firstChild.nodeValue = "Reset Search";
+    // calculate percent matched, excluding vertical overlap
+    var count = 0;
+    var lastx = -1;
+    var lastw = 0;
+    var keys = Array();
+    for (k in matches) {
+        if (matches.hasOwnProperty(k))
+            keys.push(k);
+    }
+    // sort the matched frames by their x location
+    // ascending, then width descending
+    keys.sort(function(a, b){
+        return a - b;
+    });
+    // Step through frames saving only the biggest bottom-up frames
+    // thanks to the sort order. This relies on the tree property
+    // where children are always smaller than their parents.
+    for (var k in keys) {
+        var x = parseInt(keys[k]);
+        var w = matches[keys[k]];
+        if (x >= lastx + lastw) {
+            count += w;
+            lastx = x;
+            lastw = w;
+        }
+    }
+    // display matched percent
+    matchedtxt.classList.remove("hide");
+    var pct = 100 * count / maxwidth;
+    if (pct != 100) pct = pct.toFixed(1);
+    matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+}
+function format_percent(n) {
+    return n.toFixed(4) + "%";
+}
+]]></script><rect x="0" y="0" width="100%" height="758" fill="url(#background)"/><text id="title" fill="rgb(0,0,0)" x="50.0000%" y="24.00">Flame Graph</text><text id="details" fill="rgb(0,0,0)" x="10" y="741.00"> </text><text id="unzoom" class="hide" fill="rgb(0,0,0)" x="10" y="24.00">Reset Zoom</text><text id="search" fill="rgb(0,0,0)" x="1190" y="24.00">Search</text><text id="matched" fill="rgb(0,0,0)" x="1190" y="741.00"> </text><svg id="frames" x="10" width="1180" total_samples="32538"><g><title>`0x7FFF451E84CC (5 samples, 0.02%)</title><rect x="0.0338%" y="485" width="0.0154%" height="15" fill="rgb(227,0,7)" fg:x="11" fg:w="5"/><text x="0.2838%" y="495.50"></text></g><g><title>`0x7FFF451F63A0 (9 samples, 0.03%)</title><rect x="0.0246%" y="533" width="0.0277%" height="15" fill="rgb(217,0,24)" fg:x="8" fg:w="9"/><text x="0.2746%" y="543.50"></text></g><g><title>`0x7FFF45254294 (9 samples, 0.03%)</title><rect x="0.0246%" y="517" width="0.0277%" height="15" fill="rgb(221,193,54)" fg:x="8" fg:w="9"/><text x="0.2746%" y="527.50"></text></g><g><title>`0x7FFF451E701D (6 samples, 0.02%)</title><rect x="0.0338%" y="501" width="0.0184%" height="15" fill="rgb(248,212,6)" fg:x="11" fg:w="6"/><text x="0.2838%" y="511.50"></text></g><g><title>`0x7FFF4261553D (12 samples, 0.04%)</title><rect x="0.0246%" y="629" width="0.0369%" height="15" fill="rgb(208,68,35)" fg:x="8" fg:w="12"/><text x="0.2746%" y="639.50"></text></g><g><title>`0x7FFF425A423B (12 samples, 0.04%)</title><rect x="0.0246%" y="613" width="0.0369%" height="15" fill="rgb(232,128,0)" fg:x="8" fg:w="12"/><text x="0.2746%" y="623.50"></text></g><g><title>`0x7FFF42606225 (12 samples, 0.04%)</title><rect x="0.0246%" y="597" width="0.0369%" height="15" fill="rgb(207,160,47)" fg:x="8" fg:w="12"/><text x="0.2746%" y="607.50"></text></g><g><title>`0x7FFF42BE7E0F (12 samples, 0.04%)</title><rect x="0.0246%" y="581" width="0.0369%" height="15" fill="rgb(228,23,34)" fg:x="8" fg:w="12"/><text x="0.2746%" y="591.50"></text></g><g><title>`0x7FFF4521FA20 (12 samples, 0.04%)</title><rect x="0.0246%" y="565" width="0.0369%" height="15" fill="rgb(218,30,26)" fg:x="8" fg:w="12"/><text x="0.2746%" y="575.50"></text></g><g><title>`0x7FFF451F6020 (12 samples, 0.04%)</title><rect x="0.0246%" y="549" width="0.0369%" height="15" fill="rgb(220,122,19)" fg:x="8" fg:w="12"/><text x="0.2746%" y="559.50"></text></g><g><title>`0x7FFF42630046 (13 samples, 0.04%)</title><rect x="0.0246%" y="645" width="0.0400%" height="15" fill="rgb(250,228,42)" fg:x="8" fg:w="13"/><text x="0.2746%" y="655.50"></text></g><g><title>`0x7FFF452357F9 (4 samples, 0.01%)</title><rect x="0.1537%" y="37" width="0.0123%" height="15" fill="rgb(240,193,28)" fg:x="50" fg:w="4"/><text x="0.4037%" y="47.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::string::impl$63::write_str(alloc::string::String*, ref$ (8 samples, 0.02%)</title><rect x="0.1444%" y="261" width="0.0246%" height="15" fill="rgb(216,20,37)" fg:x="47" fg:w="8"/><text x="0.3944%" y="271.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::string::String::push_str(ref$ (6 samples, 0.02%)</title><rect x="0.1506%" y="245" width="0.0184%" height="15" fill="rgb(206,188,39)" fg:x="49" fg:w="6"/><text x="0.4006%" y="255.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;u8,alloc::alloc::Global&gt;::extend_from_slice(ref$&lt;slice2$ (6 samples, 0.02%)</title><rect x="0.1506%" y="229" width="0.0184%" height="15" fill="rgb(217,207,13)" fg:x="49" fg:w="6"/><text x="0.4006%" y="239.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::spec_extend::impl$4::spec_extend(alloc::vec::Vec&lt;u8,alloc::alloc::Global&gt;*, core::slice::iter::Iter (6 samples, 0.02%)</title><rect x="0.1506%" y="213" width="0.0184%" height="15" fill="rgb(231,73,38)" fg:x="49" fg:w="6"/><text x="0.4006%" y="223.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;u8,alloc::alloc::Global&gt;::append_elements(ptr_const$&lt;slice2$ (6 samples, 0.02%)</title><rect x="0.1506%" y="197" width="0.0184%" height="15" fill="rgb(225,20,46)" fg:x="49" fg:w="6"/><text x="0.4006%" y="207.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;u8,alloc::alloc::Global&gt;::reserve (5 samples, 0.02%)</title><rect x="0.1537%" y="181" width="0.0154%" height="15" fill="rgb(210,31,41)" fg:x="50" fg:w="5"/><text x="0.4037%" y="191.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVec&lt;u8,alloc::alloc::Global&gt;::reserve (5 samples, 0.02%)</title><rect x="0.1537%" y="165" width="0.0154%" height="15" fill="rgb(221,200,47)" fg:x="50" fg:w="5"/><text x="0.4037%" y="175.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVecInner&lt;alloc::alloc::Global&gt;::reserve (5 samples, 0.02%)</title><rect x="0.1537%" y="149" width="0.0154%" height="15" fill="rgb(226,26,5)" fg:x="50" fg:w="5"/><text x="0.4037%" y="159.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::impl$4::reserve::do_reserve_and_handle&lt;alloc::alloc::Global&gt;(alloc::raw_vec::RawVecInner (5 samples, 0.02%)</title><rect x="0.1537%" y="133" width="0.0154%" height="15" fill="rgb(249,33,26)" fg:x="50" fg:w="5"/><text x="0.4037%" y="143.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVecInner&lt;alloc::alloc::Global&gt;::grow_amortized (5 samples, 0.02%)</title><rect x="0.1537%" y="117" width="0.0154%" height="15" fill="rgb(235,183,28)" fg:x="50" fg:w="5"/><text x="0.4037%" y="127.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::result::impl$27::branch(enum2$&lt;core::result::Result&lt;core::ptr::non_null::NonNull&lt;slice2$ (5 samples, 0.02%)</title><rect x="0.1537%" y="101" width="0.0154%" height="15" fill="rgb(221,5,38)" fg:x="50" fg:w="5"/><text x="0.4037%" y="111.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVecInner&lt;alloc::alloc::Global&gt;::finish_grow&lt;alloc::alloc::Global&gt; (5 samples, 0.02%)</title><rect x="0.1537%" y="85" width="0.0154%" height="15" fill="rgb(247,18,42)" fg:x="50" fg:w="5"/><text x="0.4037%" y="95.50"></text></g><g><title>`0x7FFF452345ED (5 samples, 0.02%)</title><rect x="0.1537%" y="69" width="0.0154%" height="15" fill="rgb(241,131,45)" fg:x="50" fg:w="5"/><text x="0.4037%" y="79.50"></text></g><g><title>`0x7FFF45234895 (5 samples, 0.02%)</title><rect x="0.1537%" y="53" width="0.0154%" height="15" fill="rgb(249,31,29)" fg:x="50" fg:w="5"/><text x="0.4037%" y="63.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::fmt::Formatter::new (19 samples, 0.06%)</title><rect x="0.1383%" y="293" width="0.0584%" height="15" fill="rgb(225,111,53)" fg:x="45" fg:w="19"/><text x="0.3883%" y="303.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::fmt::num::imp::impl$15::fmt (18 samples, 0.06%)</title><rect x="0.1414%" y="277" width="0.0553%" height="15" fill="rgb(238,160,17)" fg:x="46" fg:w="18"/><text x="0.3914%" y="287.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::fmt::num::imp::impl$17::_fmt (6 samples, 0.02%)</title><rect x="0.1783%" y="261" width="0.0184%" height="15" fill="rgb(214,148,48)" fg:x="58" fg:w="6"/><text x="0.4283%" y="271.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::fmt::num::slice_buffer_to_str (6 samples, 0.02%)</title><rect x="0.1783%" y="245" width="0.0184%" height="15" fill="rgb(232,36,49)" fg:x="58" fg:w="6"/><text x="0.4283%" y="255.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::slice::impl$0::get_unchecked (6 samples, 0.02%)</title><rect x="0.1783%" y="229" width="0.0184%" height="15" fill="rgb(209,103,24)" fg:x="58" fg:w="6"/><text x="0.4283%" y="239.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::slice::index::impl$7::get_unchecked (6 samples, 0.02%)</title><rect x="0.1783%" y="213" width="0.0184%" height="15" fill="rgb(229,88,8)" fg:x="58" fg:w="6"/><text x="0.4283%" y="223.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::slice::index::impl$4::get_unchecked (6 samples, 0.02%)</title><rect x="0.1783%" y="197" width="0.0184%" height="15" fill="rgb(213,181,19)" fg:x="58" fg:w="6"/><text x="0.4283%" y="207.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::fmt::num::imp::impl$17::_fmt_inner (6 samples, 0.02%)</title><rect x="0.1783%" y="181" width="0.0184%" height="15" fill="rgb(254,191,54)" fg:x="58" fg:w="6"/><text x="0.4283%" y="191.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::iter::range::impl$15::next(core::ops::range::RangeInclusive (29 samples, 0.09%)</title><rect x="0.1291%" y="357" width="0.0891%" height="15" fill="rgb(241,83,37)" fg:x="42" fg:w="29"/><text x="0.3791%" y="367.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::iter::range::impl$14::spec_next(core::ops::range::RangeInclusive (29 samples, 0.09%)</title><rect x="0.1291%" y="341" width="0.0891%" height="15" fill="rgb(233,36,39)" fg:x="42" fg:w="29"/><text x="0.3791%" y="351.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::ops::range::RangeInclusive&lt;usize&gt;::is_empty (29 samples, 0.09%)</title><rect x="0.1291%" y="325" width="0.0891%" height="15" fill="rgb(226,3,54)" fg:x="42" fg:w="29"/><text x="0.3791%" y="335.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::fmt::write (26 samples, 0.08%)</title><rect x="0.1383%" y="309" width="0.0799%" height="15" fill="rgb(245,192,40)" fg:x="45" fg:w="26"/><text x="0.3883%" y="319.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::result::impl$27::branch (6 samples, 0.02%)</title><rect x="0.1998%" y="293" width="0.0184%" height="15" fill="rgb(238,167,29)" fg:x="65" fg:w="6"/><text x="0.4498%" y="303.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::string::impl$63::write_str(alloc::string::String*, ref$ (6 samples, 0.02%)</title><rect x="0.1998%" y="277" width="0.0184%" height="15" fill="rgb(232,182,51)" fg:x="65" fg:w="6"/><text x="0.4498%" y="287.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::string::String::push_str(ref$ (4 samples, 0.01%)</title><rect x="0.2059%" y="261" width="0.0123%" height="15" fill="rgb(231,60,39)" fg:x="67" fg:w="4"/><text x="0.4559%" y="271.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;u8,alloc::alloc::Global&gt;::extend_from_slice(ref$&lt;slice2$ (4 samples, 0.01%)</title><rect x="0.2059%" y="245" width="0.0123%" height="15" fill="rgb(208,69,12)" fg:x="67" fg:w="4"/><text x="0.4559%" y="255.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::spec_extend::impl$4::spec_extend(alloc::vec::Vec&lt;u8,alloc::alloc::Global&gt;*, core::slice::iter::Iter (4 samples, 0.01%)</title><rect x="0.2059%" y="229" width="0.0123%" height="15" fill="rgb(235,93,37)" fg:x="67" fg:w="4"/><text x="0.4559%" y="239.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;u8,alloc::alloc::Global&gt;::append_elements(ptr_const$&lt;slice2$ (4 samples, 0.01%)</title><rect x="0.2059%" y="213" width="0.0123%" height="15" fill="rgb(213,116,39)" fg:x="67" fg:w="4"/><text x="0.4559%" y="223.50"></text></g><g><title>`0x7FFF35760A37 (4 samples, 0.01%)</title><rect x="0.4241%" y="181" width="0.0123%" height="15" fill="rgb(222,207,29)" fg:x="138" fg:w="4"/><text x="0.6741%" y="191.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::string::impl$63::write_str(alloc::string::String*, ref$ (34 samples, 0.10%)</title><rect x="0.3719%" y="261" width="0.1045%" height="15" fill="rgb(206,96,30)" fg:x="121" fg:w="34"/><text x="0.6219%" y="271.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::string::String::push_str(ref$ (22 samples, 0.07%)</title><rect x="0.4088%" y="245" width="0.0676%" height="15" fill="rgb(218,138,4)" fg:x="133" fg:w="22"/><text x="0.6588%" y="255.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;u8,alloc::alloc::Global&gt;::extend_from_slice(ref$&lt;slice2$ (22 samples, 0.07%)</title><rect x="0.4088%" y="229" width="0.0676%" height="15" fill="rgb(250,191,14)" fg:x="133" fg:w="22"/><text x="0.6588%" y="239.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::spec_extend::impl$4::spec_extend(alloc::vec::Vec&lt;u8,alloc::alloc::Global&gt;*, core::slice::iter::Iter (22 samples, 0.07%)</title><rect x="0.4088%" y="213" width="0.0676%" height="15" fill="rgb(239,60,40)" fg:x="133" fg:w="22"/><text x="0.6588%" y="223.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;u8,alloc::alloc::Global&gt;::append_elements(ptr_const$&lt;slice2$ (22 samples, 0.07%)</title><rect x="0.4088%" y="197" width="0.0676%" height="15" fill="rgb(206,27,48)" fg:x="133" fg:w="22"/><text x="0.6588%" y="207.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::fmt::Formatter::pad_integral (65 samples, 0.20%)</title><rect x="0.4764%" y="261" width="0.1998%" height="15" fill="rgb(225,35,8)" fg:x="155" fg:w="65"/><text x="0.7264%" y="271.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::fmt::impl$12::pad_integral::write_prefix (21 samples, 0.06%)</title><rect x="0.6116%" y="245" width="0.0645%" height="15" fill="rgb(250,213,24)" fg:x="199" fg:w="21"/><text x="0.8616%" y="255.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::fmt::num::imp::impl$17::_fmt_inner (66 samples, 0.20%)</title><rect x="0.6792%" y="181" width="0.2028%" height="15" fill="rgb(247,123,22)" fg:x="221" fg:w="66"/><text x="0.9292%" y="191.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::mem::maybe_uninit::MaybeUninit::write (25 samples, 0.08%)</title><rect x="0.8052%" y="165" width="0.0768%" height="15" fill="rgb(231,138,38)" fg:x="262" fg:w="25"/><text x="1.0552%" y="175.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::fmt::Formatter::new (199 samples, 0.61%)</title><rect x="0.2735%" y="293" width="0.6116%" height="15" fill="rgb(231,145,46)" fg:x="89" fg:w="199"/><text x="0.5235%" y="303.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::fmt::num::imp::impl$15::fmt (188 samples, 0.58%)</title><rect x="0.3073%" y="277" width="0.5778%" height="15" fill="rgb(251,118,11)" fg:x="100" fg:w="188"/><text x="0.5573%" y="287.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::fmt::num::imp::impl$17::_fmt (68 samples, 0.21%)</title><rect x="0.6761%" y="261" width="0.2090%" height="15" fill="rgb(217,147,25)" fg:x="220" fg:w="68"/><text x="0.9261%" y="271.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::fmt::num::slice_buffer_to_str (68 samples, 0.21%)</title><rect x="0.6761%" y="245" width="0.2090%" height="15" fill="rgb(247,81,37)" fg:x="220" fg:w="68"/><text x="0.9261%" y="255.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::slice::impl$0::get_unchecked (68 samples, 0.21%)</title><rect x="0.6761%" y="229" width="0.2090%" height="15" fill="rgb(209,12,38)" fg:x="220" fg:w="68"/><text x="0.9261%" y="239.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::slice::index::impl$7::get_unchecked (68 samples, 0.21%)</title><rect x="0.6761%" y="213" width="0.2090%" height="15" fill="rgb(227,1,9)" fg:x="220" fg:w="68"/><text x="0.9261%" y="223.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::slice::index::impl$4::get_unchecked (68 samples, 0.21%)</title><rect x="0.6761%" y="197" width="0.2090%" height="15" fill="rgb(248,47,43)" fg:x="220" fg:w="68"/><text x="0.9261%" y="207.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::ptr::non_null::NonNull::read (11 samples, 0.03%)</title><rect x="0.8913%" y="293" width="0.0338%" height="15" fill="rgb(221,10,30)" fg:x="290" fg:w="11"/><text x="1.1413%" y="303.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::ptr::read (11 samples, 0.03%)</title><rect x="0.8913%" y="277" width="0.0338%" height="15" fill="rgb(210,229,1)" fg:x="290" fg:w="11"/><text x="1.1413%" y="287.50"></text></g><g><title>`0x7FFF357609EA (5 samples, 0.02%)</title><rect x="1.0449%" y="197" width="0.0154%" height="15" fill="rgb(222,148,37)" fg:x="340" fg:w="5"/><text x="1.2949%" y="207.50"></text></g><g><title>`0x7FFF45347513 (9 samples, 0.03%)</title><rect x="1.0726%" y="37" width="0.0277%" height="15" fill="rgb(234,67,33)" fg:x="349" fg:w="9"/><text x="1.3226%" y="47.50"></text></g><g><title>`0x7FFF452357F9 (12 samples, 0.04%)</title><rect x="1.0726%" y="53" width="0.0369%" height="15" fill="rgb(247,98,35)" fg:x="349" fg:w="12"/><text x="1.3226%" y="63.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;u8,alloc::alloc::Global&gt;::reserve (13 samples, 0.04%)</title><rect x="1.0726%" y="197" width="0.0400%" height="15" fill="rgb(247,138,52)" fg:x="349" fg:w="13"/><text x="1.3226%" y="207.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVec&lt;u8,alloc::alloc::Global&gt;::reserve (13 samples, 0.04%)</title><rect x="1.0726%" y="181" width="0.0400%" height="15" fill="rgb(213,79,30)" fg:x="349" fg:w="13"/><text x="1.3226%" y="191.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVecInner&lt;alloc::alloc::Global&gt;::reserve (13 samples, 0.04%)</title><rect x="1.0726%" y="165" width="0.0400%" height="15" fill="rgb(246,177,23)" fg:x="349" fg:w="13"/><text x="1.3226%" y="175.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::impl$4::reserve::do_reserve_and_handle&lt;alloc::alloc::Global&gt;(alloc::raw_vec::RawVecInner (13 samples, 0.04%)</title><rect x="1.0726%" y="149" width="0.0400%" height="15" fill="rgb(230,62,27)" fg:x="349" fg:w="13"/><text x="1.3226%" y="159.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVecInner&lt;alloc::alloc::Global&gt;::grow_amortized (13 samples, 0.04%)</title><rect x="1.0726%" y="133" width="0.0400%" height="15" fill="rgb(216,154,8)" fg:x="349" fg:w="13"/><text x="1.3226%" y="143.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::result::impl$27::branch(enum2$&lt;core::result::Result&lt;core::ptr::non_null::NonNull&lt;slice2$ (13 samples, 0.04%)</title><rect x="1.0726%" y="117" width="0.0400%" height="15" fill="rgb(244,35,45)" fg:x="349" fg:w="13"/><text x="1.3226%" y="127.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVecInner&lt;alloc::alloc::Global&gt;::finish_grow&lt;alloc::alloc::Global&gt; (13 samples, 0.04%)</title><rect x="1.0726%" y="101" width="0.0400%" height="15" fill="rgb(251,115,12)" fg:x="349" fg:w="13"/><text x="1.3226%" y="111.50"></text></g><g><title>`0x7FFF452345ED (13 samples, 0.04%)</title><rect x="1.0726%" y="85" width="0.0400%" height="15" fill="rgb(240,54,50)" fg:x="349" fg:w="13"/><text x="1.3226%" y="95.50"></text></g><g><title>`0x7FFF45234895 (13 samples, 0.04%)</title><rect x="1.0726%" y="69" width="0.0400%" height="15" fill="rgb(233,84,52)" fg:x="349" fg:w="13"/><text x="1.3226%" y="79.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::cmp::impls::impl$58::lt (296 samples, 0.91%)</title><rect x="0.2274%" y="325" width="0.9097%" height="15" fill="rgb(207,117,47)" fg:x="74" fg:w="296"/><text x="0.4774%" y="335.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::fmt::write (294 samples, 0.90%)</title><rect x="0.2336%" y="309" width="0.9036%" height="15" fill="rgb(249,43,39)" fg:x="76" fg:w="294"/><text x="0.4836%" y="319.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::result::impl$27::branch (69 samples, 0.21%)</title><rect x="0.9251%" y="293" width="0.2121%" height="15" fill="rgb(209,38,44)" fg:x="301" fg:w="69"/><text x="1.1751%" y="303.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::string::impl$63::write_str(alloc::string::String*, ref$ (68 samples, 0.21%)</title><rect x="0.9281%" y="277" width="0.2090%" height="15" fill="rgb(236,212,23)" fg:x="302" fg:w="68"/><text x="1.1781%" y="287.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::string::String::push_str(ref$ (41 samples, 0.13%)</title><rect x="1.0111%" y="261" width="0.1260%" height="15" fill="rgb(242,79,21)" fg:x="329" fg:w="41"/><text x="1.2611%" y="271.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;u8,alloc::alloc::Global&gt;::extend_from_slice(ref$&lt;slice2$ (41 samples, 0.13%)</title><rect x="1.0111%" y="245" width="0.1260%" height="15" fill="rgb(211,96,35)" fg:x="329" fg:w="41"/><text x="1.2611%" y="255.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::spec_extend::impl$4::spec_extend(alloc::vec::Vec&lt;u8,alloc::alloc::Global&gt;*, core::slice::iter::Iter (41 samples, 0.13%)</title><rect x="1.0111%" y="229" width="0.1260%" height="15" fill="rgb(253,215,40)" fg:x="329" fg:w="41"/><text x="1.2611%" y="239.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;u8,alloc::alloc::Global&gt;::append_elements(ptr_const$&lt;slice2$ (41 samples, 0.13%)</title><rect x="1.0111%" y="213" width="0.1260%" height="15" fill="rgb(211,81,21)" fg:x="329" fg:w="41"/><text x="1.2611%" y="223.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`memcpy (5 samples, 0.02%)</title><rect x="1.1218%" y="197" width="0.0154%" height="15" fill="rgb(208,190,38)" fg:x="365" fg:w="5"/><text x="1.3718%" y="207.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::string::impl$35::deref (349 samples, 1.07%)</title><rect x="0.0707%" y="485" width="1.0726%" height="15" fill="rgb(235,213,38)" fg:x="23" fg:w="349"/><text x="0.3207%" y="495.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::string::String::as_str (349 samples, 1.07%)</title><rect x="0.0707%" y="469" width="1.0726%" height="15" fill="rgb(237,122,38)" fg:x="23" fg:w="349"/><text x="0.3207%" y="479.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;u8,alloc::alloc::Global&gt;::as_slice (349 samples, 1.07%)</title><rect x="0.0707%" y="453" width="1.0726%" height="15" fill="rgb(244,218,35)" fg:x="23" fg:w="349"/><text x="0.3207%" y="463.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;u8,alloc::alloc::Global&gt;::as_ptr (349 samples, 1.07%)</title><rect x="0.0707%" y="437" width="1.0726%" height="15" fill="rgb(240,68,47)" fg:x="23" fg:w="349"/><text x="0.3207%" y="447.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVec&lt;u8,alloc::alloc::Global&gt;::ptr (349 samples, 1.07%)</title><rect x="0.0707%" y="421" width="1.0726%" height="15" fill="rgb(210,16,53)" fg:x="23" fg:w="349"/><text x="0.3207%" y="431.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVecInner&lt;alloc::alloc::Global&gt;::ptr (349 samples, 1.07%)</title><rect x="0.0707%" y="405" width="1.0726%" height="15" fill="rgb(235,124,12)" fg:x="23" fg:w="349"/><text x="0.3207%" y="415.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVecInner&lt;alloc::alloc::Global&gt;::non_null (349 samples, 1.07%)</title><rect x="0.0707%" y="389" width="1.0726%" height="15" fill="rgb(224,169,11)" fg:x="23" fg:w="349"/><text x="0.3207%" y="399.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`dev_utilities::generator::generate_asm (349 samples, 1.07%)</title><rect x="0.0707%" y="373" width="1.0726%" height="15" fill="rgb(250,166,2)" fg:x="23" fg:w="349"/><text x="0.3207%" y="383.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::iter::range::impl$6::next(core::ops::range::Range (301 samples, 0.93%)</title><rect x="0.2182%" y="357" width="0.9251%" height="15" fill="rgb(242,216,29)" fg:x="71" fg:w="301"/><text x="0.4682%" y="367.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::iter::range::impl$5::spec_next(core::ops::range::Range (301 samples, 0.93%)</title><rect x="0.2182%" y="341" width="0.9251%" height="15" fill="rgb(230,116,27)" fg:x="71" fg:w="301"/><text x="0.4682%" y="351.50"></text></g><g><title>`0x7FFF452309CA (4 samples, 0.01%)</title><rect x="1.1433%" y="325" width="0.0123%" height="15" fill="rgb(228,99,48)" fg:x="372" fg:w="4"/><text x="1.3933%" y="335.50"></text></g><g><title>`0x7FFF45341EF4 (4 samples, 0.01%)</title><rect x="1.1433%" y="309" width="0.0123%" height="15" fill="rgb(253,11,6)" fg:x="372" fg:w="4"/><text x="1.3933%" y="319.50"></text></g><g><title>`0x7FFF452309E7 (4 samples, 0.01%)</title><rect x="1.1556%" y="325" width="0.0123%" height="15" fill="rgb(247,143,39)" fg:x="376" fg:w="4"/><text x="1.4056%" y="335.50"></text></g><g><title>`0x7FFF452B1D2F (4 samples, 0.01%)</title><rect x="1.1556%" y="309" width="0.0123%" height="15" fill="rgb(236,97,10)" fg:x="376" fg:w="4"/><text x="1.4056%" y="319.50"></text></g><g><title>`0x7FFF45341FB4 (4 samples, 0.01%)</title><rect x="1.1556%" y="293" width="0.0123%" height="15" fill="rgb(233,208,19)" fg:x="376" fg:w="4"/><text x="1.4056%" y="303.50"></text></g><g><title>`0x7FFF452322AE (11 samples, 0.03%)</title><rect x="1.1433%" y="341" width="0.0338%" height="15" fill="rgb(216,164,2)" fg:x="372" fg:w="11"/><text x="1.3933%" y="351.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;u8,alloc::alloc::Global&gt;::with_capacity_in (13 samples, 0.04%)</title><rect x="1.1433%" y="437" width="0.0400%" height="15" fill="rgb(220,129,5)" fg:x="372" fg:w="13"/><text x="1.3933%" y="447.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVec&lt;u8,alloc::alloc::Global&gt;::with_capacity_in (13 samples, 0.04%)</title><rect x="1.1433%" y="421" width="0.0400%" height="15" fill="rgb(242,17,10)" fg:x="372" fg:w="13"/><text x="1.3933%" y="431.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVecInner&lt;alloc::alloc::Global&gt;::with_capacity_in (13 samples, 0.04%)</title><rect x="1.1433%" y="405" width="0.0400%" height="15" fill="rgb(242,107,0)" fg:x="372" fg:w="13"/><text x="1.3933%" y="415.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVecInner&lt;alloc::alloc::Global&gt;::try_allocate_in (13 samples, 0.04%)</title><rect x="1.1433%" y="389" width="0.0400%" height="15" fill="rgb(251,28,31)" fg:x="372" fg:w="13"/><text x="1.3933%" y="399.50"></text></g><g><title>`0x7FFF451FCCA4 (13 samples, 0.04%)</title><rect x="1.1433%" y="373" width="0.0400%" height="15" fill="rgb(233,223,10)" fg:x="372" fg:w="13"/><text x="1.3933%" y="383.50"></text></g><g><title>`0x7FFF451FD0D1 (13 samples, 0.04%)</title><rect x="1.1433%" y="357" width="0.0400%" height="15" fill="rgb(215,21,27)" fg:x="372" fg:w="13"/><text x="1.3933%" y="367.50"></text></g><g><title>`0x7FFF35760C29 (5 samples, 0.02%)</title><rect x="1.1832%" y="405" width="0.0154%" height="15" fill="rgb(232,23,21)" fg:x="385" fg:w="5"/><text x="1.4332%" y="415.50"></text></g><g><title>`0x7FFF35760C33 (13 samples, 0.04%)</title><rect x="1.2047%" y="405" width="0.0400%" height="15" fill="rgb(244,5,23)" fg:x="392" fg:w="13"/><text x="1.4547%" y="415.50"></text></g><g><title>`0x7FFF35760C3C (18 samples, 0.06%)</title><rect x="1.2508%" y="405" width="0.0553%" height="15" fill="rgb(226,81,46)" fg:x="407" fg:w="18"/><text x="1.5008%" y="415.50"></text></g><g><title>`0x7FFF35760C41 (6 samples, 0.02%)</title><rect x="1.3062%" y="405" width="0.0184%" height="15" fill="rgb(247,70,30)" fg:x="425" fg:w="6"/><text x="1.5562%" y="415.50"></text></g><g><title>`0x7FFF35760C46 (29 samples, 0.09%)</title><rect x="1.3246%" y="405" width="0.0891%" height="15" fill="rgb(212,68,19)" fg:x="431" fg:w="29"/><text x="1.5746%" y="415.50"></text></g><g><title>`0x7FFF35760C56 (35 samples, 0.11%)</title><rect x="1.4168%" y="405" width="0.1076%" height="15" fill="rgb(240,187,13)" fg:x="461" fg:w="35"/><text x="1.6668%" y="415.50"></text></g><g><title>`0x7FFF35760C66 (102 samples, 0.31%)</title><rect x="1.5244%" y="405" width="0.3135%" height="15" fill="rgb(223,113,26)" fg:x="496" fg:w="102"/><text x="1.7744%" y="415.50"></text></g><g><title>`0x7FFF35760C6E (806 samples, 2.48%)</title><rect x="1.8379%" y="405" width="2.4771%" height="15" fill="rgb(206,192,2)" fg:x="598" fg:w="806"/><text x="2.0879%" y="415.50">`0..</text></g><g><title>`0x7FFF35760C76 (964 samples, 2.96%)</title><rect x="4.3150%" y="405" width="2.9627%" height="15" fill="rgb(241,108,4)" fg:x="1404" fg:w="964"/><text x="4.5650%" y="415.50">`0x..</text></g><g><title>`0x7FFF35760C7E (14 samples, 0.04%)</title><rect x="7.2776%" y="405" width="0.0430%" height="15" fill="rgb(247,173,49)" fg:x="2368" fg:w="14"/><text x="7.5276%" y="415.50"></text></g><g><title>`0x7FFF35760C86 (20 samples, 0.06%)</title><rect x="7.3207%" y="405" width="0.0615%" height="15" fill="rgb(224,114,35)" fg:x="2382" fg:w="20"/><text x="7.5707%" y="415.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::impl$12::clone(alloc::vec::Vec (2,032 samples, 6.25%)</title><rect x="1.1433%" y="485" width="6.2450%" height="15" fill="rgb(245,159,27)" fg:x="372" fg:w="2032"/><text x="1.3933%" y="495.50">tokenize..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::slice::impl$0::to_vec_in(ref$&lt;slice2$ (2,032 samples, 6.25%)</title><rect x="1.1433%" y="469" width="6.2450%" height="15" fill="rgb(245,172,44)" fg:x="372" fg:w="2032"/><text x="1.3933%" y="479.50">tokenize..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::slice::impl$0::to_vec_in::impl$1::to_vec(ref$&lt;slice2$ (2,032 samples, 6.25%)</title><rect x="1.1433%" y="453" width="6.2450%" height="15" fill="rgb(236,23,11)" fg:x="372" fg:w="2032"/><text x="1.3933%" y="463.50">tokenize..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::ptr::const_ptr::impl$0::copy_to_nonoverlapping (2,019 samples, 6.21%)</title><rect x="1.1832%" y="437" width="6.2051%" height="15" fill="rgb(205,117,38)" fg:x="385" fg:w="2019"/><text x="1.4332%" y="447.50">tokenize..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::ptr::copy_nonoverlapping (2,019 samples, 6.21%)</title><rect x="1.1832%" y="421" width="6.2051%" height="15" fill="rgb(237,72,25)" fg:x="385" fg:w="2019"/><text x="1.4332%" y="431.50">tokenize..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::iter::range::impl$6::next(core::ops::range::Range (101 samples, 0.31%)</title><rect x="7.3883%" y="485" width="0.3104%" height="15" fill="rgb(244,70,9)" fg:x="2404" fg:w="101"/><text x="7.6383%" y="495.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::iter::range::impl$5::spec_next(core::ops::range::Range (101 samples, 0.31%)</title><rect x="7.3883%" y="469" width="0.3104%" height="15" fill="rgb(217,125,39)" fg:x="2404" fg:w="101"/><text x="7.6383%" y="479.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::cmp::impls::impl$76::lt (101 samples, 0.31%)</title><rect x="7.3883%" y="453" width="0.3104%" height="15" fill="rgb(235,36,10)" fg:x="2404" fg:w="101"/><text x="7.6383%" y="463.50"></text></g><g><title>`0x7FFF45259300 (101 samples, 0.31%)</title><rect x="7.3883%" y="437" width="0.3104%" height="15" fill="rgb(251,123,47)" fg:x="2404" fg:w="101"/><text x="7.6383%" y="447.50"></text></g><g><title>`0x7FFF452030B8 (100 samples, 0.31%)</title><rect x="7.3914%" y="421" width="0.3073%" height="15" fill="rgb(221,13,13)" fg:x="2405" fg:w="100"/><text x="7.6414%" y="431.50"></text></g><g><title>`0x7FFF452B1D2F (100 samples, 0.31%)</title><rect x="7.3914%" y="405" width="0.3073%" height="15" fill="rgb(238,131,9)" fg:x="2405" fg:w="100"/><text x="7.6414%" y="415.50"></text></g><g><title>`0x7FFF45341FB4 (100 samples, 0.31%)</title><rect x="7.3914%" y="389" width="0.3073%" height="15" fill="rgb(211,50,8)" fg:x="2405" fg:w="100"/><text x="7.6414%" y="399.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;u8,alloc::alloc::Global&gt;::with_capacity (107 samples, 0.33%)</title><rect x="7.6987%" y="421" width="0.3288%" height="15" fill="rgb(245,182,24)" fg:x="2505" fg:w="107"/><text x="7.9487%" y="431.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;u8,alloc::alloc::Global&gt;::with_capacity_in (107 samples, 0.33%)</title><rect x="7.6987%" y="405" width="0.3288%" height="15" fill="rgb(242,14,37)" fg:x="2505" fg:w="107"/><text x="7.9487%" y="415.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVec&lt;u8,alloc::alloc::Global&gt;::with_capacity_in (107 samples, 0.33%)</title><rect x="7.6987%" y="389" width="0.3288%" height="15" fill="rgb(246,228,12)" fg:x="2505" fg:w="107"/><text x="7.9487%" y="399.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVecInner&lt;alloc::alloc::Global&gt;::with_capacity_in (107 samples, 0.33%)</title><rect x="7.6987%" y="373" width="0.3288%" height="15" fill="rgb(213,55,15)" fg:x="2505" fg:w="107"/><text x="7.9487%" y="383.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVecInner&lt;alloc::alloc::Global&gt;::try_allocate_in (107 samples, 0.33%)</title><rect x="7.6987%" y="357" width="0.3288%" height="15" fill="rgb(209,9,3)" fg:x="2505" fg:w="107"/><text x="7.9487%" y="367.50"></text></g><g><title>`0x7FFF45259300 (106 samples, 0.33%)</title><rect x="7.7018%" y="341" width="0.3258%" height="15" fill="rgb(230,59,30)" fg:x="2506" fg:w="106"/><text x="7.9518%" y="351.50"></text></g><g><title>`0x7FFF452030B8 (103 samples, 0.32%)</title><rect x="7.7110%" y="325" width="0.3166%" height="15" fill="rgb(209,121,21)" fg:x="2509" fg:w="103"/><text x="7.9610%" y="335.50"></text></g><g><title>`0x7FFF452B1D2F (103 samples, 0.32%)</title><rect x="7.7110%" y="309" width="0.3166%" height="15" fill="rgb(220,109,13)" fg:x="2509" fg:w="103"/><text x="7.9610%" y="319.50"></text></g><g><title>`0x7FFF45341FB4 (103 samples, 0.32%)</title><rect x="7.7110%" y="293" width="0.3166%" height="15" fill="rgb(232,18,1)" fg:x="2509" fg:w="103"/><text x="7.9610%" y="303.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::iter::traits::iterator::Iterator::collect (126 samples, 0.39%)</title><rect x="7.6987%" y="485" width="0.3872%" height="15" fill="rgb(215,41,42)" fg:x="2505" fg:w="126"/><text x="7.9487%" y="495.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::impl$16::from_iter (126 samples, 0.39%)</title><rect x="7.6987%" y="469" width="0.3872%" height="15" fill="rgb(224,123,36)" fg:x="2505" fg:w="126"/><text x="7.9487%" y="479.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::spec_from_iter::impl$0::from_iter (126 samples, 0.39%)</title><rect x="7.6987%" y="453" width="0.3872%" height="15" fill="rgb(240,125,3)" fg:x="2505" fg:w="126"/><text x="7.9487%" y="463.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::spec_from_iter_nested::impl$1::from_iter (126 samples, 0.39%)</title><rect x="7.6987%" y="437" width="0.3872%" height="15" fill="rgb(205,98,50)" fg:x="2505" fg:w="126"/><text x="7.9487%" y="447.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::spec_extend::impl$1::spec_extend(alloc::vec::Vec (19 samples, 0.06%)</title><rect x="8.0275%" y="421" width="0.0584%" height="15" fill="rgb(205,185,37)" fg:x="2612" fg:w="19"/><text x="8.2775%" y="431.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;u8,alloc::alloc::Global&gt;::extend_trusted (19 samples, 0.06%)</title><rect x="8.0275%" y="405" width="0.0584%" height="15" fill="rgb(238,207,15)" fg:x="2612" fg:w="19"/><text x="8.2775%" y="415.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::iter::traits::iterator::Iterator::for_each(core::str::iter::Bytes, alloc::vec::impl$21::extend_trusted::closure_env$0 (19 samples, 0.06%)</title><rect x="8.0275%" y="389" width="0.0584%" height="15" fill="rgb(213,199,42)" fg:x="2612" fg:w="19"/><text x="8.2775%" y="399.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::iter::traits::iterator::Iterator::fold(core::str::iter::Bytes, tuple$&lt;&gt;, core::iter::traits::iterator::Iterator::for_each::call::closure_env$0&lt;u8,alloc::vec::impl$21::extend_trusted::closure_env$0 (19 samples, 0.06%)</title><rect x="8.0275%" y="373" width="0.0584%" height="15" fill="rgb(235,201,11)" fg:x="2612" fg:w="19"/><text x="8.2775%" y="383.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::iter::traits::iterator::Iterator::for_each::call::closure$0(core::iter::traits::iterator::Iterator::for_each::call::closure_env$0&lt;u8,alloc::vec::impl$21::extend_trusted::closure_env$0&lt;u8,alloc::alloc::Global,core::str::iter::Bytes&gt; &gt;*, tuple$ (19 samples, 0.06%)</title><rect x="8.0275%" y="357" width="0.0584%" height="15" fill="rgb(207,46,11)" fg:x="2612" fg:w="19"/><text x="8.2775%" y="367.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::impl$21::extend_trusted::closure$0(alloc::vec::impl$21::extend_trusted::closure_env$0 (19 samples, 0.06%)</title><rect x="8.0275%" y="341" width="0.0584%" height="15" fill="rgb(241,35,35)" fg:x="2612" fg:w="19"/><text x="8.2775%" y="351.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::ptr::write (19 samples, 0.06%)</title><rect x="8.0275%" y="325" width="0.0584%" height="15" fill="rgb(243,32,47)" fg:x="2612" fg:w="19"/><text x="8.2775%" y="335.50"></text></g><g><title>`0x7FFF452309CA (4 samples, 0.01%)</title><rect x="8.0859%" y="309" width="0.0123%" height="15" fill="rgb(247,202,23)" fg:x="2631" fg:w="4"/><text x="8.3359%" y="319.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`procem_default::tokenizer::Tokenizer::from(ref$&lt;slice2$ (6 samples, 0.02%)</title><rect x="8.0859%" y="453" width="0.0184%" height="15" fill="rgb(219,102,11)" fg:x="2631" fg:w="6"/><text x="8.3359%" y="463.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;enum2$&lt;procem_default::tokenizer::Token&gt;,alloc::alloc::Global&gt;::with_capacity (6 samples, 0.02%)</title><rect x="8.0859%" y="437" width="0.0184%" height="15" fill="rgb(243,110,44)" fg:x="2631" fg:w="6"/><text x="8.3359%" y="447.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;enum2$&lt;procem_default::tokenizer::Token&gt;,alloc::alloc::Global&gt;::with_capacity_in (6 samples, 0.02%)</title><rect x="8.0859%" y="421" width="0.0184%" height="15" fill="rgb(222,74,54)" fg:x="2631" fg:w="6"/><text x="8.3359%" y="431.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVec&lt;enum2$&lt;procem_default::tokenizer::Token&gt;,alloc::alloc::Global&gt;::with_capacity_in (6 samples, 0.02%)</title><rect x="8.0859%" y="405" width="0.0184%" height="15" fill="rgb(216,99,12)" fg:x="2631" fg:w="6"/><text x="8.3359%" y="415.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVecInner&lt;alloc::alloc::Global&gt;::with_capacity_in (6 samples, 0.02%)</title><rect x="8.0859%" y="389" width="0.0184%" height="15" fill="rgb(226,22,26)" fg:x="2631" fg:w="6"/><text x="8.3359%" y="399.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVecInner&lt;alloc::alloc::Global&gt;::try_allocate_in (6 samples, 0.02%)</title><rect x="8.0859%" y="373" width="0.0184%" height="15" fill="rgb(217,163,10)" fg:x="2631" fg:w="6"/><text x="8.3359%" y="383.50"></text></g><g><title>`0x7FFF451FCCA4 (6 samples, 0.02%)</title><rect x="8.0859%" y="357" width="0.0184%" height="15" fill="rgb(213,25,53)" fg:x="2631" fg:w="6"/><text x="8.3359%" y="367.50"></text></g><g><title>`0x7FFF451FD0D1 (6 samples, 0.02%)</title><rect x="8.0859%" y="341" width="0.0184%" height="15" fill="rgb(252,105,26)" fg:x="2631" fg:w="6"/><text x="8.3359%" y="351.50"></text></g><g><title>`0x7FFF452322AE (6 samples, 0.02%)</title><rect x="8.0859%" y="325" width="0.0184%" height="15" fill="rgb(220,39,43)" fg:x="2631" fg:w="6"/><text x="8.3359%" y="335.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;enum2$&lt;procem_default::tokenizer::Token&gt;,alloc::alloc::Global&gt;::as_mut_ptr (7 samples, 0.02%)</title><rect x="25.9481%" y="373" width="0.0215%" height="15" fill="rgb(229,68,48)" fg:x="8443" fg:w="7"/><text x="26.1981%" y="383.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`procem_default::tokenizer::Tokenizer::expect_comma (666 samples, 2.05%)</title><rect x="25.9143%" y="421" width="2.0468%" height="15" fill="rgb(252,8,32)" fg:x="8432" fg:w="666"/><text x="26.1643%" y="431.50">t..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;enum2$&lt;procem_default::tokenizer::Token&gt;,alloc::alloc::Global&gt;::push(enum2$ (666 samples, 2.05%)</title><rect x="25.9143%" y="405" width="2.0468%" height="15" fill="rgb(223,20,43)" fg:x="8432" fg:w="666"/><text x="26.1643%" y="415.50">t..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;enum2$&lt;procem_default::tokenizer::Token&gt;,alloc::alloc::Global&gt;::push_mut(enum2$ (666 samples, 2.05%)</title><rect x="25.9143%" y="389" width="2.0468%" height="15" fill="rgb(229,81,49)" fg:x="8432" fg:w="666"/><text x="26.1643%" y="399.50">t..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::ptr::write(enum2$&lt;procem_default::tokenizer::Token&gt;*, enum2$ (648 samples, 1.99%)</title><rect x="25.9696%" y="373" width="1.9915%" height="15" fill="rgb(236,28,36)" fg:x="8450" fg:w="648"/><text x="26.2196%" y="383.50">t..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;enum2$&lt;procem_default::tokenizer::Token&gt;,alloc::alloc::Global&gt;::push(enum2$ (4,338 samples, 13.33%)</title><rect x="28.4775%" y="405" width="13.3321%" height="15" fill="rgb(249,185,26)" fg:x="9266" fg:w="4338"/><text x="28.7275%" y="415.50">tokenizer_perf-25271..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;enum2$&lt;procem_default::tokenizer::Token&gt;,alloc::alloc::Global&gt;::push_mut(enum2$ (4,338 samples, 13.33%)</title><rect x="28.4775%" y="389" width="13.3321%" height="15" fill="rgb(249,174,33)" fg:x="9266" fg:w="4338"/><text x="28.7275%" y="399.50">tokenizer_perf-25271..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::ptr::write(enum2$&lt;procem_default::tokenizer::Token&gt;*, enum2$ (3,251 samples, 9.99%)</title><rect x="31.8182%" y="373" width="9.9914%" height="15" fill="rgb(233,201,37)" fg:x="10353" fg:w="3251"/><text x="32.0682%" y="383.50">tokenizer_perf..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`ars::ascii::eq_ignore_ascii_case(ref$&lt;slice2$&lt;u8&gt; &gt;, ref$&lt;slice2$ (233 samples, 0.72%)</title><rect x="41.8096%" y="405" width="0.7161%" height="15" fill="rgb(221,78,26)" fg:x="13604" fg:w="233"/><text x="42.0596%" y="415.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::iter::traits::iterator::Iterator::all(core::iter::adapters::zip::Zip&lt;core::slice::iter::Iter&lt;u8&gt;,core::slice::iter::Iter (211 samples, 0.65%)</title><rect x="41.8772%" y="389" width="0.6485%" height="15" fill="rgb(250,127,30)" fg:x="13626" fg:w="211"/><text x="42.1272%" y="399.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::iter::traits::iterator::Iterator::try_fold(core::iter::adapters::zip::Zip&lt;core::slice::iter::Iter&lt;u8&gt;,core::slice::iter::Iter&lt;u8&gt; &gt;*, tuple$&lt;&gt;, core::iter::traits::iterator::Iterator::all::check::closure_env$0&lt;tuple$&lt;ref$&lt;u8&gt;,ref$ (211 samples, 0.65%)</title><rect x="41.8772%" y="373" width="0.6485%" height="15" fill="rgb(230,49,44)" fg:x="13626" fg:w="211"/><text x="42.1272%" y="383.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::iter::traits::iterator::Iterator::all::check::closure$0(core::iter::traits::iterator::Iterator::all::check::closure_env$0&lt;tuple$&lt;ref$&lt;u8&gt;,ref$&lt;u8&gt; &gt;,ars::ascii::eq_ignore_ascii_case::closure_env$0&gt;*, tuple$&lt;&gt;, tuple$&lt;ref$&lt;u8&gt;,ref$ (211 samples, 0.65%)</title><rect x="41.8772%" y="357" width="0.6485%" height="15" fill="rgb(229,67,23)" fg:x="13626" fg:w="211"/><text x="42.1272%" y="367.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`ars::ascii::eq_ignore_ascii_case::closure$0(ars::ascii::eq_ignore_ascii_case::closure_env$0*, tuple$&lt;ref$&lt;u8&gt;,ref$ (211 samples, 0.65%)</title><rect x="41.8772%" y="341" width="0.6485%" height="15" fill="rgb(249,83,47)" fg:x="13626" fg:w="211"/><text x="42.1272%" y="351.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::num::impl$6::eq_ignore_ascii_case (211 samples, 0.65%)</title><rect x="41.8772%" y="325" width="0.6485%" height="15" fill="rgb(215,43,3)" fg:x="13626" fg:w="211"/><text x="42.1272%" y="335.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::num::impl$6::to_ascii_lowercase (168 samples, 0.52%)</title><rect x="42.0093%" y="309" width="0.5163%" height="15" fill="rgb(238,154,13)" fg:x="13669" fg:w="168"/><text x="42.2593%" y="319.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::num::impl$6::is_ascii_uppercase (158 samples, 0.49%)</title><rect x="42.0401%" y="293" width="0.4856%" height="15" fill="rgb(219,56,2)" fg:x="13679" fg:w="158"/><text x="42.2901%" y="303.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`procem_default::tokenizer::Tokenizer::get_curr_byte (459 samples, 1.41%)</title><rect x="42.5318%" y="405" width="1.4107%" height="15" fill="rgb(233,0,4)" fg:x="13839" fg:w="459"/><text x="42.7818%" y="415.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`enum2$&lt;core::option::Option&lt;ref$&lt;u8&gt; &gt; &gt;::map_or_else(enum2$&lt;core::option::Option&lt;ref$&lt;u8&gt; &gt; &gt;, procem_default::tokenizer::impl$0::get_curr_byte::closure_env$0, unsigned char (*) (459 samples, 1.41%)</title><rect x="42.5318%" y="389" width="1.4107%" height="15" fill="rgb(235,30,7)" fg:x="13839" fg:w="459"/><text x="42.7818%" y="399.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::ops::function::FnOnce::call_once(unsigned char (*) (155 samples, 0.48%)</title><rect x="43.4661%" y="373" width="0.4764%" height="15" fill="rgb(250,79,13)" fg:x="14143" fg:w="155"/><text x="43.7161%" y="383.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::num::impl$6::to_ascii_uppercase (155 samples, 0.48%)</title><rect x="43.4661%" y="357" width="0.4764%" height="15" fill="rgb(211,146,34)" fg:x="14143" fg:w="155"/><text x="43.7161%" y="367.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::num::impl$6::is_ascii_lowercase (155 samples, 0.48%)</title><rect x="43.4661%" y="341" width="0.4764%" height="15" fill="rgb(228,22,38)" fg:x="14143" fg:w="155"/><text x="43.7161%" y="351.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`procem_default::tokenizer::Tokenizer::expect_instruction_or_label (6,678 samples, 20.52%)</title><rect x="27.9612%" y="421" width="20.5237%" height="15" fill="rgb(235,168,5)" fg:x="9098" fg:w="6678"/><text x="28.2112%" y="431.50">tokenizer_perf-2527190b475df587...</text></g><g><title>tokenizer_perf-2527190b475df587.exe`procem_default::tokenizer::Tokenizer::is_valid_char (1,478 samples, 4.54%)</title><rect x="43.9425%" y="405" width="4.5424%" height="15" fill="rgb(221,155,16)" fg:x="14298" fg:w="1478"/><text x="44.1925%" y="415.50">token..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::num::impl$6::is_ascii_alphanumeric (431 samples, 1.32%)</title><rect x="47.1602%" y="389" width="1.3246%" height="15" fill="rgb(215,215,53)" fg:x="15345" fg:w="431"/><text x="47.4102%" y="399.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::num::impl$6::is_ascii_digit (132 samples, 0.41%)</title><rect x="49.1917%" y="405" width="0.4057%" height="15" fill="rgb(223,4,10)" fg:x="16006" fg:w="132"/><text x="49.4417%" y="415.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;enum2$&lt;procem_default::tokenizer::Token&gt;,alloc::alloc::Global&gt;::push(enum2$ (3,707 samples, 11.39%)</title><rect x="53.8109%" y="389" width="11.3928%" height="15" fill="rgb(234,103,6)" fg:x="17509" fg:w="3707"/><text x="54.0609%" y="399.50">tokenizer_perf-25..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;enum2$&lt;procem_default::tokenizer::Token&gt;,alloc::alloc::Global&gt;::push_mut(enum2$ (3,707 samples, 11.39%)</title><rect x="53.8109%" y="373" width="11.3928%" height="15" fill="rgb(227,97,0)" fg:x="17509" fg:w="3707"/><text x="54.0609%" y="383.50">tokenizer_perf-25..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::ptr::write(enum2$&lt;procem_default::tokenizer::Token&gt;*, enum2$ (2,566 samples, 7.89%)</title><rect x="57.3176%" y="357" width="7.8862%" height="15" fill="rgb(234,150,53)" fg:x="18650" fg:w="2566"/><text x="57.5676%" y="367.50">tokenizer_p..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`procem_default::tokenizer::Tokenizer::get_curr_byte (268 samples, 0.82%)</title><rect x="65.2038%" y="389" width="0.8237%" height="15" fill="rgb(228,201,54)" fg:x="21216" fg:w="268"/><text x="65.4538%" y="399.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`enum2$&lt;core::option::Option&lt;ref$&lt;u8&gt; &gt; &gt;::map_or_else(enum2$&lt;core::option::Option&lt;ref$&lt;u8&gt; &gt; &gt;, procem_default::tokenizer::impl$0::get_curr_byte::closure_env$0, unsigned char (*) (248 samples, 0.76%)</title><rect x="65.2652%" y="373" width="0.7622%" height="15" fill="rgb(222,22,37)" fg:x="21236" fg:w="248"/><text x="65.5152%" y="383.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::ops::function::FnOnce::call_once(unsigned char (*) (223 samples, 0.69%)</title><rect x="65.3421%" y="357" width="0.6854%" height="15" fill="rgb(237,53,32)" fg:x="21261" fg:w="223"/><text x="65.5921%" y="367.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::num::impl$6::to_ascii_uppercase (223 samples, 0.69%)</title><rect x="65.3421%" y="341" width="0.6854%" height="15" fill="rgb(233,25,53)" fg:x="21261" fg:w="223"/><text x="65.5921%" y="351.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::num::impl$6::is_ascii_lowercase (197 samples, 0.61%)</title><rect x="65.4220%" y="325" width="0.6054%" height="15" fill="rgb(210,40,34)" fg:x="21287" fg:w="197"/><text x="65.6720%" y="335.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::num::impl$6::is_ascii_whitespace (1,080 samples, 3.32%)</title><rect x="68.4154%" y="373" width="3.3192%" height="15" fill="rgb(241,220,44)" fg:x="22261" fg:w="1080"/><text x="68.6654%" y="383.50">tok..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`procem_default::tokenizer::Tokenizer::expect_numeric_literal (8,442 samples, 25.95%)</title><rect x="49.5974%" y="405" width="25.9450%" height="15" fill="rgb(235,28,35)" fg:x="16138" fg:w="8442"/><text x="49.8474%" y="415.50">tokenizer_perf-2527190b475df587.exe`proce..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`procem_default::tokenizer::Tokenizer::set_curr_idx_to_token_end (3,096 samples, 9.52%)</title><rect x="66.0274%" y="389" width="9.5150%" height="15" fill="rgb(210,56,17)" fg:x="21484" fg:w="3096"/><text x="66.2774%" y="399.50">tokenizer_perf..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`procem_default::tokenizer::Tokenizer::get_curr_byte (1,239 samples, 3.81%)</title><rect x="71.7346%" y="373" width="3.8079%" height="15" fill="rgb(224,130,29)" fg:x="23341" fg:w="1239"/><text x="71.9846%" y="383.50">toke..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`enum2$&lt;core::option::Option&lt;ref$&lt;u8&gt; &gt; &gt;::map_or_else(enum2$&lt;core::option::Option&lt;ref$&lt;u8&gt; &gt; &gt;, procem_default::tokenizer::impl$0::get_curr_byte::closure_env$0, unsigned char (*) (1,239 samples, 3.81%)</title><rect x="71.7346%" y="357" width="3.8079%" height="15" fill="rgb(235,212,8)" fg:x="23341" fg:w="1239"/><text x="71.9846%" y="367.50">toke..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::ops::function::FnOnce::call_once(unsigned char (*) (1,201 samples, 3.69%)</title><rect x="71.8514%" y="341" width="3.6911%" height="15" fill="rgb(223,33,50)" fg:x="23379" fg:w="1201"/><text x="72.1014%" y="351.50">toke..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::num::impl$6::to_ascii_uppercase (1,201 samples, 3.69%)</title><rect x="71.8514%" y="325" width="3.6911%" height="15" fill="rgb(219,149,13)" fg:x="23379" fg:w="1201"/><text x="72.1014%" y="335.50">toke..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::num::impl$6::is_ascii_lowercase (1,032 samples, 3.17%)</title><rect x="72.3708%" y="309" width="3.1717%" height="15" fill="rgb(250,156,29)" fg:x="23548" fg:w="1032"/><text x="72.6208%" y="319.50">tok..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`procem_default::tokenizer::Tokenizer::expect_literal (9,022 samples, 27.73%)</title><rect x="48.4848%" y="421" width="27.7276%" height="15" fill="rgb(216,193,19)" fg:x="15776" fg:w="9022"/><text x="48.7348%" y="431.50">tokenizer_perf-2527190b475df587.exe`procem_d..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`procem_default::tokenizer::Tokenizer::get_curr_byte (218 samples, 0.67%)</title><rect x="75.5424%" y="405" width="0.6700%" height="15" fill="rgb(216,135,14)" fg:x="24580" fg:w="218"/><text x="75.7924%" y="415.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`enum2$&lt;core::option::Option&lt;ref$&lt;u8&gt; &gt; &gt;::map_or_else(enum2$&lt;core::option::Option&lt;ref$&lt;u8&gt; &gt; &gt;, procem_default::tokenizer::impl$0::get_curr_byte::closure_env$0, unsigned char (*) (216 samples, 0.66%)</title><rect x="75.5486%" y="389" width="0.6638%" height="15" fill="rgb(241,47,5)" fg:x="24582" fg:w="216"/><text x="75.7986%" y="399.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::ops::function::FnOnce::call_once(unsigned char (*) (215 samples, 0.66%)</title><rect x="75.5517%" y="373" width="0.6608%" height="15" fill="rgb(233,42,35)" fg:x="24583" fg:w="215"/><text x="75.8017%" y="383.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::num::impl$6::to_ascii_uppercase (215 samples, 0.66%)</title><rect x="75.5517%" y="357" width="0.6608%" height="15" fill="rgb(231,13,6)" fg:x="24583" fg:w="215"/><text x="75.8017%" y="367.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::num::impl$6::is_ascii_lowercase (81 samples, 0.25%)</title><rect x="75.9635%" y="341" width="0.2489%" height="15" fill="rgb(207,181,40)" fg:x="24717" fg:w="81"/><text x="76.2135%" y="351.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;enum2$&lt;procem_default::tokenizer::Token&gt;,alloc::alloc::Global&gt;::as_mut_ptr (47 samples, 0.14%)</title><rect x="76.4399%" y="373" width="0.1444%" height="15" fill="rgb(254,173,49)" fg:x="24872" fg:w="47"/><text x="76.6899%" y="383.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVec&lt;enum2$&lt;procem_default::tokenizer::Token&gt;,alloc::alloc::Global&gt;::ptr (41 samples, 0.13%)</title><rect x="76.4583%" y="357" width="0.1260%" height="15" fill="rgb(221,1,38)" fg:x="24878" fg:w="41"/><text x="76.7083%" y="367.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVecInner&lt;alloc::alloc::Global&gt;::ptr (41 samples, 0.13%)</title><rect x="76.4583%" y="341" width="0.1260%" height="15" fill="rgb(206,124,46)" fg:x="24878" fg:w="41"/><text x="76.7083%" y="351.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVecInner&lt;alloc::alloc::Global&gt;::non_null (41 samples, 0.13%)</title><rect x="76.4583%" y="325" width="0.1260%" height="15" fill="rgb(249,21,11)" fg:x="24878" fg:w="41"/><text x="76.7083%" y="335.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;enum2$&lt;procem_default::tokenizer::Token&gt;,alloc::alloc::Global&gt;::push(enum2$ (1,709 samples, 5.25%)</title><rect x="76.3046%" y="405" width="5.2523%" height="15" fill="rgb(222,201,40)" fg:x="24828" fg:w="1709"/><text x="76.5546%" y="415.50">tokeni..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;enum2$&lt;procem_default::tokenizer::Token&gt;,alloc::alloc::Global&gt;::push_mut(enum2$ (1,709 samples, 5.25%)</title><rect x="76.3046%" y="389" width="5.2523%" height="15" fill="rgb(235,61,29)" fg:x="24828" fg:w="1709"/><text x="76.5546%" y="399.50">tokeni..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::ptr::write(enum2$&lt;procem_default::tokenizer::Token&gt;*, enum2$ (1,618 samples, 4.97%)</title><rect x="76.5843%" y="373" width="4.9726%" height="15" fill="rgb(219,207,3)" fg:x="24919" fg:w="1618"/><text x="76.8343%" y="383.50">tokeni..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::num::impl$6::is_ascii_digit (291 samples, 0.89%)</title><rect x="81.5569%" y="405" width="0.8943%" height="15" fill="rgb(222,56,46)" fg:x="26537" fg:w="291"/><text x="81.8069%" y="415.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::slice::impl$0::get(ref$&lt;slice2$ (79 samples, 0.24%)</title><rect x="82.4513%" y="389" width="0.2428%" height="15" fill="rgb(239,76,54)" fg:x="26828" fg:w="79"/><text x="82.7013%" y="399.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::slice::index::impl$2::get(unsigned long long, ref$&lt;slice2$ (79 samples, 0.24%)</title><rect x="82.4513%" y="373" width="0.2428%" height="15" fill="rgb(231,124,27)" fg:x="26828" fg:w="79"/><text x="82.7013%" y="383.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`procem_default::tokenizer::Tokenizer::expect_register (2,349 samples, 7.22%)</title><rect x="76.2124%" y="421" width="7.2193%" height="15" fill="rgb(249,195,6)" fg:x="24798" fg:w="2349"/><text x="76.4624%" y="431.50">tokenizer_..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`procem_default::tokenizer::Tokenizer::get_curr_byte (319 samples, 0.98%)</title><rect x="82.4513%" y="405" width="0.9804%" height="15" fill="rgb(237,174,47)" fg:x="26828" fg:w="319"/><text x="82.7013%" y="415.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`enum2$&lt;core::option::Option&lt;ref$&lt;u8&gt; &gt; &gt;::map_or_else(enum2$&lt;core::option::Option&lt;ref$&lt;u8&gt; &gt; &gt;, procem_default::tokenizer::impl$0::get_curr_byte::closure_env$0, unsigned char (*) (240 samples, 0.74%)</title><rect x="82.6941%" y="389" width="0.7376%" height="15" fill="rgb(206,201,31)" fg:x="26907" fg:w="240"/><text x="82.9441%" y="399.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::ops::function::FnOnce::call_once(unsigned char (*) (234 samples, 0.72%)</title><rect x="82.7125%" y="373" width="0.7192%" height="15" fill="rgb(231,57,52)" fg:x="26913" fg:w="234"/><text x="82.9625%" y="383.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::num::impl$6::to_ascii_uppercase (234 samples, 0.72%)</title><rect x="82.7125%" y="357" width="0.7192%" height="15" fill="rgb(248,177,22)" fg:x="26913" fg:w="234"/><text x="82.9625%" y="367.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::num::impl$6::is_ascii_lowercase (167 samples, 0.51%)</title><rect x="82.9184%" y="341" width="0.5132%" height="15" fill="rgb(215,211,37)" fg:x="26980" fg:w="167"/><text x="83.1684%" y="351.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;enum2$&lt;procem_default::tokenizer::Token&gt;,alloc::alloc::Global&gt;::as_mut_ptr (16 samples, 0.05%)</title><rect x="84.8331%" y="373" width="0.0492%" height="15" fill="rgb(241,128,51)" fg:x="27603" fg:w="16"/><text x="85.0831%" y="383.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVec&lt;enum2$&lt;procem_default::tokenizer::Token&gt;,alloc::alloc::Global&gt;::ptr (7 samples, 0.02%)</title><rect x="84.8608%" y="357" width="0.0215%" height="15" fill="rgb(227,165,31)" fg:x="27612" fg:w="7"/><text x="85.1108%" y="367.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVecInner&lt;alloc::alloc::Global&gt;::ptr (7 samples, 0.02%)</title><rect x="84.8608%" y="341" width="0.0215%" height="15" fill="rgb(228,167,24)" fg:x="27612" fg:w="7"/><text x="85.1108%" y="351.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::raw_vec::RawVecInner&lt;alloc::alloc::Global&gt;::non_null (7 samples, 0.02%)</title><rect x="84.8608%" y="325" width="0.0215%" height="15" fill="rgb(228,143,12)" fg:x="27612" fg:w="7"/><text x="85.1108%" y="335.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;enum2$&lt;procem_default::tokenizer::Token&gt;,alloc::alloc::Global&gt;::push(enum2$ (343 samples, 1.05%)</title><rect x="84.2246%" y="405" width="1.0542%" height="15" fill="rgb(249,149,8)" fg:x="27405" fg:w="343"/><text x="84.4746%" y="415.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`alloc::vec::Vec&lt;enum2$&lt;procem_default::tokenizer::Token&gt;,alloc::alloc::Global&gt;::push_mut(enum2$ (343 samples, 1.05%)</title><rect x="84.2246%" y="389" width="1.0542%" height="15" fill="rgb(243,35,44)" fg:x="27405" fg:w="343"/><text x="84.4746%" y="399.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::ptr::write(enum2$&lt;procem_default::tokenizer::Token&gt;*, enum2$ (129 samples, 0.40%)</title><rect x="84.8823%" y="373" width="0.3965%" height="15" fill="rgb(246,89,9)" fg:x="27619" fg:w="129"/><text x="85.1323%" y="383.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::num::impl$6::is_ascii_alphabetic (131 samples, 0.40%)</title><rect x="85.2788%" y="405" width="0.4026%" height="15" fill="rgb(233,213,13)" fg:x="27748" fg:w="131"/><text x="85.5288%" y="415.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`procem_default::tokenizer::Tokenizer::expect_section (922 samples, 2.83%)</title><rect x="83.4317%" y="421" width="2.8336%" height="15" fill="rgb(233,141,41)" fg:x="27147" fg:w="922"/><text x="83.6817%" y="431.50">to..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`procem_default::tokenizer::Tokenizer::get_curr_byte (190 samples, 0.58%)</title><rect x="85.6814%" y="405" width="0.5839%" height="15" fill="rgb(239,167,4)" fg:x="27879" fg:w="190"/><text x="85.9314%" y="415.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`enum2$&lt;core::option::Option&lt;ref$&lt;u8&gt; &gt; &gt;::map_or_else(enum2$&lt;core::option::Option&lt;ref$&lt;u8&gt; &gt; &gt;, procem_default::tokenizer::impl$0::get_curr_byte::closure_env$0, unsigned char (*) (190 samples, 0.58%)</title><rect x="85.6814%" y="389" width="0.5839%" height="15" fill="rgb(209,217,16)" fg:x="27879" fg:w="190"/><text x="85.9314%" y="399.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::ops::function::FnOnce::call_once(unsigned char (*) (189 samples, 0.58%)</title><rect x="85.6844%" y="373" width="0.5809%" height="15" fill="rgb(219,88,35)" fg:x="27880" fg:w="189"/><text x="85.9344%" y="383.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::num::impl$6::to_ascii_uppercase (189 samples, 0.58%)</title><rect x="85.6844%" y="357" width="0.5809%" height="15" fill="rgb(220,193,23)" fg:x="27880" fg:w="189"/><text x="85.9344%" y="367.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::num::impl$6::is_ascii_lowercase (144 samples, 0.44%)</title><rect x="85.8227%" y="341" width="0.4426%" height="15" fill="rgb(230,90,52)" fg:x="27925" fg:w="144"/><text x="86.0727%" y="351.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::slice::impl$0::get(ref$&lt;slice2$ (101 samples, 0.31%)</title><rect x="87.1473%" y="405" width="0.3104%" height="15" fill="rgb(252,106,19)" fg:x="28356" fg:w="101"/><text x="87.3973%" y="415.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::slice::index::impl$2::get(unsigned long long, ref$&lt;slice2$ (101 samples, 0.31%)</title><rect x="87.1473%" y="389" width="0.3104%" height="15" fill="rgb(206,74,20)" fg:x="28356" fg:w="101"/><text x="87.3973%" y="399.50"></text></g><g><title>tokenizer_perf-2527190b475df587.exe`procem_default::tokenizer::Tokenizer::get_curr_byte (4,001 samples, 12.30%)</title><rect x="86.2653%" y="421" width="12.2964%" height="15" fill="rgb(230,138,44)" fg:x="28069" fg:w="4001"/><text x="86.5153%" y="431.50">tokenizer_perf-252..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`enum2$&lt;core::option::Option&lt;ref$&lt;u8&gt; &gt; &gt;::map_or_else(enum2$&lt;core::option::Option&lt;ref$&lt;u8&gt; &gt; &gt;, procem_default::tokenizer::impl$0::get_curr_byte::closure_env$0, unsigned char (*) (3,613 samples, 11.10%)</title><rect x="87.4577%" y="405" width="11.1039%" height="15" fill="rgb(235,182,43)" fg:x="28457" fg:w="3613"/><text x="87.7077%" y="415.50">tokenizer_perf-2..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::ops::function::FnOnce::call_once(unsigned char (*) (3,335 samples, 10.25%)</title><rect x="88.3121%" y="389" width="10.2496%" height="15" fill="rgb(242,16,51)" fg:x="28735" fg:w="3335"/><text x="88.5621%" y="399.50">tokenizer_perf-..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::num::impl$6::to_ascii_uppercase (3,335 samples, 10.25%)</title><rect x="88.3121%" y="373" width="10.2496%" height="15" fill="rgb(248,9,4)" fg:x="28735" fg:w="3335"/><text x="88.5621%" y="383.50">tokenizer_perf-..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::num::impl$6::is_ascii_lowercase (2,430 samples, 7.47%)</title><rect x="91.0935%" y="357" width="7.4682%" height="15" fill="rgb(210,31,22)" fg:x="29640" fg:w="2430"/><text x="91.3435%" y="367.50">tokenizer_..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`core::ptr::drop_in_place(enum2$&lt;core::result::Result&lt;alloc::vec::Vec&lt;enum2$&lt;procem_default::tokenizer::Token&gt;,alloc::alloc::Global&gt;,alloc::vec::Vec&lt;enum2$ (29,887 samples, 91.85%)</title><rect x="8.0859%" y="485" width="91.8526%" height="15" fill="rgb(239,54,39)" fg:x="2631" fg:w="29887"/><text x="8.3359%" y="495.50">tokenizer_perf-2527190b475df587.exe`core::ptr::drop_in_place(enum2$&lt;core::result::Result&lt;alloc::vec::Vec&lt;enum2$&lt;procem_default::tokenizer::Token&gt;,alloc::..</text></g><g><title>tokenizer_perf-2527190b475df587.exe`procem_default::tokenizer::Tokenizer::tokenize(ref$&lt;slice2$ (29,887 samples, 91.85%)</title><rect x="8.0859%" y="469" width="91.8526%" height="15" fill="rgb(230,99,41)" fg:x="2631" fg:w="29887"/><text x="8.3359%" y="479.50">tokenizer_perf-2527190b475df587.exe`procem_default::tokenizer::Tokenizer::tokenize(ref$&lt;slice2$</text></g><g><title>tokenizer_perf-2527190b475df587.exe`procem_default::tokenizer::Tokenizer::run (29,881 samples, 91.83%)</title><rect x="8.1044%" y="453" width="91.8342%" height="15" fill="rgb(253,106,12)" fg:x="2637" fg:w="29881"/><text x="8.3544%" y="463.50">tokenizer_perf-2527190b475df587.exe`procem_default::tokenizer::Tokenizer::run</text></g><g><title>tokenizer_perf-2527190b475df587.exe`procem_default::tokenizer::Tokenizer::process_next_token (28,573 samples, 87.81%)</title><rect x="12.1243%" y="437" width="87.8142%" height="15" fill="rgb(213,46,41)" fg:x="3945" fg:w="28573"/><text x="12.3743%" y="447.50">tokenizer_perf-2527190b475df587.exe`procem_default::tokenizer::Tokenizer::process_next_token</text></g><g><title>tokenizer_perf-2527190b475df587.exe`procem_default::tokenizer::Tokenizer::is_valid_char (448 samples, 1.38%)</title><rect x="98.5617%" y="421" width="1.3769%" height="15" fill="rgb(215,133,35)" fg:x="32070" fg:w="448"/><text x="98.8117%" y="431.50"></text></g><g><title>`0x7FFF4526C53C (32,515 samples, 99.93%)</title><rect x="0.0123%" y="693" width="99.9293%" height="15" fill="rgb(213,28,5)" fg:x="4" fg:w="32515"/><text x="0.2623%" y="703.50">`0x7FFF4526C53C</text></g><g><title>`0x7FFF4440E8D7 (32,515 samples, 99.93%)</title><rect x="0.0123%" y="677" width="99.9293%" height="15" fill="rgb(215,77,49)" fg:x="4" fg:w="32515"/><text x="0.2623%" y="687.50">`0x7FFF4440E8D7</text></g><g><title>tokenizer_perf-2527190b475df587.exe`__scrt_common_main_seh() (32,511 samples, 99.92%)</title><rect x="0.0246%" y="661" width="99.9170%" height="15" fill="rgb(248,100,22)" fg:x="8" fg:w="32511"/><text x="0.2746%" y="671.50">tokenizer_perf-2527190b475df587.exe`__scrt_common_main_seh()</text></g><g><title>tokenizer_perf-2527190b475df587.exe`invoke_main() (32,497 samples, 99.87%)</title><rect x="0.0676%" y="645" width="99.8740%" height="15" fill="rgb(208,67,9)" fg:x="22" fg:w="32497"/><text x="0.3176%" y="655.50">tokenizer_perf-2527190b475df587.exe`invoke_main()</text></g><g><title>tokenizer_perf-2527190b475df587.exe`main (32,497 samples, 99.87%)</title><rect x="0.0676%" y="629" width="99.8740%" height="15" fill="rgb(219,133,21)" fg:x="22" fg:w="32497"/><text x="0.3176%" y="639.50">tokenizer_perf-2527190b475df587.exe`main</text></g><g><title>tokenizer_perf-2527190b475df587.exe`std::rt::lang_start_internal (32,497 samples, 99.87%)</title><rect x="0.0676%" y="613" width="99.8740%" height="15" fill="rgb(246,46,29)" fg:x="22" fg:w="32497"/><text x="0.3176%" y="623.50">tokenizer_perf-2527190b475df587.exe`std::rt::lang_start_internal</text></g><g><title>tokenizer_perf-2527190b475df587.exe`std::panic::catch_unwind (32,497 samples, 99.87%)</title><rect x="0.0676%" y="597" width="99.8740%" height="15" fill="rgb(246,185,52)" fg:x="22" fg:w="32497"/><text x="0.3176%" y="607.50">tokenizer_perf-2527190b475df587.exe`std::panic::catch_unwind</text></g><g><title>tokenizer_perf-2527190b475df587.exe`std::panicking::catch_unwind (32,497 samples, 99.87%)</title><rect x="0.0676%" y="581" width="99.8740%" height="15" fill="rgb(252,136,11)" fg:x="22" fg:w="32497"/><text x="0.3176%" y="591.50">tokenizer_perf-2527190b475df587.exe`std::panicking::catch_unwind</text></g><g><title>tokenizer_perf-2527190b475df587.exe`std::panicking::catch_unwind::do_call (32,497 samples, 99.87%)</title><rect x="0.0676%" y="565" width="99.8740%" height="15" fill="rgb(219,138,53)" fg:x="22" fg:w="32497"/><text x="0.3176%" y="575.50">tokenizer_perf-2527190b475df587.exe`std::panicking::catch_unwind::do_call</text></g><g><title>tokenizer_perf-2527190b475df587.exe`std::rt::lang_start_internal::closure$0 (32,497 samples, 99.87%)</title><rect x="0.0676%" y="549" width="99.8740%" height="15" fill="rgb(211,51,23)" fg:x="22" fg:w="32497"/><text x="0.3176%" y="559.50">tokenizer_perf-2527190b475df587.exe`std::rt::lang_start_internal::closure$0</text></g><g><title>tokenizer_perf-2527190b475df587.exe`std::rt::lang_start::closure$0&lt;tuple$&lt;&gt; &gt;(std::rt::lang_start::closure_env$0&lt;tuple$ (32,497 samples, 99.87%)</title><rect x="0.0676%" y="533" width="99.8740%" height="15" fill="rgb(247,221,28)" fg:x="22" fg:w="32497"/><text x="0.3176%" y="543.50">tokenizer_perf-2527190b475df587.exe`std::rt::lang_start::closure$0&lt;tuple$&lt;&gt; &gt;(std::rt::lang_start::closure_env$0&lt;tuple$</text></g><g><title>tokenizer_perf-2527190b475df587.exe`std::sys::backtrace::__rust_begin_short_backtrace&lt;void (*)(),tuple$&lt;&gt; &gt;(void (*) (32,497 samples, 99.87%)</title><rect x="0.0676%" y="517" width="99.8740%" height="15" fill="rgb(251,222,45)" fg:x="22" fg:w="32497"/><text x="0.3176%" y="527.50">tokenizer_perf-2527190b475df587.exe`std::sys::backtrace::__rust_begin_short_backtrace&lt;void (*)(),tuple$&lt;&gt; &gt;(void (*)</text></g><g><title>tokenizer_perf-2527190b475df587.exe`tokenizer_perf::main (32,497 samples, 99.87%)</title><rect x="0.0676%" y="501" width="99.8740%" height="15" fill="rgb(217,162,53)" fg:x="22" fg:w="32497"/><text x="0.3176%" y="511.50">tokenizer_perf-2527190b475df587.exe`tokenizer_perf::main</text></g><g><title>`0x7FFF451F6382 (4 samples, 0.01%)</title><rect x="99.9539%" y="581" width="0.0123%" height="15" fill="rgb(229,93,14)" fg:x="32523" fg:w="4"/><text x="100.2039%" y="591.50"></text></g><g><title>`0x7FFF451FAD95 (4 samples, 0.01%)</title><rect x="99.9539%" y="565" width="0.0123%" height="15" fill="rgb(209,67,49)" fg:x="32523" fg:w="4"/><text x="100.2039%" y="575.50"></text></g><g><title>`0x7FFF451E49F1 (4 samples, 0.01%)</title><rect x="99.9539%" y="549" width="0.0123%" height="15" fill="rgb(213,87,29)" fg:x="32523" fg:w="4"/><text x="100.2039%" y="559.50"></text></g><g><title>`0x7FFF45278B04 (8 samples, 0.02%)</title><rect x="99.9539%" y="629" width="0.0246%" height="15" fill="rgb(205,151,52)" fg:x="32523" fg:w="8"/><text x="100.2039%" y="639.50"></text></g><g><title>`0x7FFF4521FA20 (8 samples, 0.02%)</title><rect x="99.9539%" y="613" width="0.0246%" height="15" fill="rgb(253,215,39)" fg:x="32523" fg:w="8"/><text x="100.2039%" y="623.50"></text></g><g><title>`0x7FFF451F6020 (8 samples, 0.02%)</title><rect x="99.9539%" y="597" width="0.0246%" height="15" fill="rgb(221,220,41)" fg:x="32523" fg:w="8"/><text x="100.2039%" y="607.50"></text></g><g><title>`0x7FFF451F6414 (4 samples, 0.01%)</title><rect x="99.9662%" y="581" width="0.0123%" height="15" fill="rgb(218,133,21)" fg:x="32527" fg:w="4"/><text x="100.2162%" y="591.50"></text></g><g><title>`0x7FFF45276203 (4 samples, 0.01%)</title><rect x="99.9662%" y="565" width="0.0123%" height="15" fill="rgb(221,193,43)" fg:x="32527" fg:w="4"/><text x="100.2162%" y="575.50"></text></g><g><title>`0x7FFF45277716 (4 samples, 0.01%)</title><rect x="99.9662%" y="549" width="0.0123%" height="15" fill="rgb(240,128,52)" fg:x="32527" fg:w="4"/><text x="100.2162%" y="559.50"></text></g><g><title>`0x7FFF452776EA (4 samples, 0.01%)</title><rect x="99.9662%" y="533" width="0.0123%" height="15" fill="rgb(253,114,12)" fg:x="32527" fg:w="4"/><text x="100.2162%" y="543.50"></text></g><g><title>`0x7FFF451E97AC (4 samples, 0.01%)</title><rect x="99.9662%" y="517" width="0.0123%" height="15" fill="rgb(215,223,47)" fg:x="32527" fg:w="4"/><text x="100.2162%" y="527.50"></text></g><g><title>`0x7FFF451EBCAE (4 samples, 0.01%)</title><rect x="99.9662%" y="501" width="0.0123%" height="15" fill="rgb(248,225,23)" fg:x="32527" fg:w="4"/><text x="100.2162%" y="511.50"></text></g><g><title>`0x7FFF4533F89E (4 samples, 0.01%)</title><rect x="99.9662%" y="485" width="0.0123%" height="15" fill="rgb(250,108,0)" fg:x="32527" fg:w="4"/><text x="100.2162%" y="495.50"></text></g><g><title>`0x7FFF4529D6A5 (10 samples, 0.03%)</title><rect x="99.9539%" y="645" width="0.0307%" height="15" fill="rgb(228,208,7)" fg:x="32523" fg:w="10"/><text x="100.2039%" y="655.50"></text></g><g><title>all (32,538 samples, 100%)</title><rect x="0.0000%" y="709" width="100.0000%" height="15" fill="rgb(244,45,10)" fg:x="0" fg:w="32538"/><text x="0.2500%" y="719.50"></text></g><g><title>`0x7FFF452C910E (19 samples, 0.06%)</title><rect x="99.9416%" y="693" width="0.0584%" height="15" fill="rgb(207,125,25)" fg:x="32519" fg:w="19"/><text x="100.1916%" y="703.50"></text></g><g><title>`0x7FFF4529B83A (19 samples, 0.06%)</title><rect x="99.9416%" y="677" width="0.0584%" height="15" fill="rgb(210,195,18)" fg:x="32519" fg:w="19"/><text x="100.1916%" y="687.50"></text></g><g><title>`0x7FFF4529BA50 (19 samples, 0.06%)</title><rect x="99.9416%" y="661" width="0.0584%" height="15" fill="rgb(249,80,12)" fg:x="32519" fg:w="19"/><text x="100.1916%" y="671.50"></text></g></svg></svg>
