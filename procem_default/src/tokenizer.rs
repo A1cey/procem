@@ -9,11 +9,12 @@ use ars::range::Range;
 pub enum Token {
     Label(Range),
     Register(Range),
-    Literal(Literal),
+    ImmediateLiteral(ImmediateLiteral),
+    StringLiteral(Range),
     LabelOrInstruction(Range), // labels after jump instructions for example do not end with ':' and cannot be distinguished from instructions by the tokenizer
     Comma,
     End,
-    Section(Range),
+    Directive(Range),
 }
 
 impl Display for Token {
@@ -21,28 +22,28 @@ impl Display for Token {
         match self {
             Self::Label(range) => write!(f, "Label: {range:?}"),
             Self::Register(range) => write!(f, "Register: {range:?}"),
-            Self::Literal(literal) => write!(f, "Literal: {literal}"),
+            Self::ImmediateLiteral(literal) => write!(f, "Literal: {literal}"),
+            Self::StringLiteral(range) => write!(f, "String: {range:?}"),
             Self::LabelOrInstruction(range) => write!(f, "Label or Instruction: {range:?}"),
             Self::Comma => write!(f, "Comma"),
             Self::End => write!(f, "End"),
-            Self::Section(range) => write!(f, "Section: {range:?}"),
+            Self::Directive(range) => write!(f, "Section: {range:?}"),
         }
     }
 }
 
 #[doc(hidden)] // Only public for benchmarks.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Literal {
+pub enum ImmediateLiteral {
     Decimal(Range),
     Binary(Range),
     Hexadecimal(Range),
     Octal(Range),
     Boolean(bool),
-    String(Range),
     Char(char),
 }
 
-impl Display for Literal {
+impl Display for ImmediateLiteral {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Decimal(range) => write!(f, "Decimal: {range:?}"),
@@ -50,7 +51,6 @@ impl Display for Literal {
             Self::Hexadecimal(range) => write!(f, "Hexadecimal: {range:?}"),
             Self::Octal(range) => write!(f, "Octal: {range:?}"),
             Self::Boolean(b) => write!(f, "Boolean: {b}"),
-            Self::String(range) => write!(f, "String: {range:?}"),
             Self::Char(c) => write!(f, "Char: {c}"),
         }
     }
@@ -160,7 +160,7 @@ impl Tokenizer<'_> {
         let start = self.token_start_idx + 1; // do not count '.'
         let end = self.curr_idx;
 
-        self.tokens.push(Token::Section(Range(start, end)));
+        self.tokens.push(Token::Directive(Range(start, end)));
     }
 
     fn expect_instruction_or_label(&mut self) {
@@ -221,7 +221,9 @@ impl Tokenizer<'_> {
         self.curr_idx += 1;
 
         match self.get_curr_byte() {
-            b'\'' => self.tokens.push(Token::Literal(Literal::Char(char::from(b)))),
+            b'\'' => self
+                .tokens
+                .push(Token::ImmediateLiteral(ImmediateLiteral::Char(char::from(b)))),
             _ => self.add_error(TokenizerError::CharLiteral { idx: self.curr_idx }),
         }
 
@@ -235,10 +237,10 @@ impl Tokenizer<'_> {
             self.curr_idx += 1;
         }
 
-        self.tokens.push(Token::Literal(Literal::String(Range(
+        self.tokens.push(Token::StringLiteral(Range(
             self.token_start_idx + 1, // skip start '"'
             self.curr_idx,            // end '"' is excluded by exclusive range
-        ))));
+        )));
 
         self.curr_idx += 1; // skip end '"'
     }
@@ -250,35 +252,35 @@ impl Tokenizer<'_> {
             match self.get_curr_byte() {
                 b'B' | b'b' => {
                     self.set_curr_idx_to_token_end(); // TODO: this parses any bytes until space
-                    Literal::Binary(Range(
+                    ImmediateLiteral::Binary(Range(
                         self.token_start_idx + 1, // skip 'b'/'B'
                         self.curr_idx + 1,        // exclusive
                     ))
                 }
                 b'X' | b'x' => {
                     self.set_curr_idx_to_token_end(); // TODO: this parses any bytes until space
-                    Literal::Hexadecimal(Range(
+                    ImmediateLiteral::Hexadecimal(Range(
                         self.token_start_idx + 1, // skip 'x'/'X'
                         self.curr_idx + 1,        // exclusive
                     ))
                 }
                 b'O' | b'o' => {
                     self.set_curr_idx_to_token_end(); // TODO: this parses any bytes until space
-                    Literal::Octal(Range(
+                    ImmediateLiteral::Octal(Range(
                         self.token_start_idx + 1, // skip 'o'/'O'
                         self.curr_idx + 1,        // exclusive
                     ))
                 }
                 b'D' | b'd' => {
                     self.set_curr_idx_to_token_end(); // TODO: this parses any bytes until space
-                    Literal::Decimal(Range(
+                    ImmediateLiteral::Decimal(Range(
                         self.token_start_idx + 1, // skip 'd'/'D'
                         self.curr_idx + 1,        // exclusive
                     ))
                 }
                 b if b.is_ascii_whitespace() || b.is_ascii_digit() => {
                     self.set_curr_idx_to_token_end(); // TODO: this parses any bytes until space
-                    Literal::Decimal(Range(
+                    ImmediateLiteral::Decimal(Range(
                         self.token_start_idx - 1, // if only '0' then we need to include it for '042' the '0' could have been ignored
                         self.curr_idx,
                     ))
@@ -288,10 +290,10 @@ impl Tokenizer<'_> {
             }
         } else {
             self.set_curr_idx_to_token_end(); // TODO: this parses any bytes until space
-            Literal::Decimal(Range(self.token_start_idx, self.curr_idx + 1))
+            ImmediateLiteral::Decimal(Range(self.token_start_idx, self.curr_idx + 1))
         };
 
-        let lit = Token::Literal(literal);
+        let lit = Token::ImmediateLiteral(literal);
 
         self.tokens.push(lit);
 
@@ -304,7 +306,8 @@ impl Tokenizer<'_> {
         let lit = &self.input[self.token_start_idx..self.curr_idx];
 
         if lit.eq_ignore_ascii_case(b"true") {
-            self.tokens.push(Token::Literal(Literal::Boolean(true)));
+            self.tokens
+                .push(Token::ImmediateLiteral(ImmediateLiteral::Boolean(true)));
         } else {
             self.add_error(TokenizerError::BooleanTrueLiteral {
                 idx: self.token_start_idx,
@@ -318,7 +321,8 @@ impl Tokenizer<'_> {
         let lit = &self.input[self.token_start_idx..self.curr_idx];
 
         if lit.eq_ignore_ascii_case(b"false") {
-            self.tokens.push(Token::Literal(Literal::Boolean(false)));
+            self.tokens
+                .push(Token::ImmediateLiteral(ImmediateLiteral::Boolean(false)));
         } else {
             self.add_error(TokenizerError::BooleanFalseLiteral {
                 idx: self.token_start_idx,
@@ -352,10 +356,7 @@ mod test {
     use std::panic;
 
     use super::*;
-
-    #[test]
-    fn test_tokenize() {}
-
+    
     #[test]
     fn test_run() {
         let mut asm = "
@@ -375,8 +376,8 @@ mod test {
         let mut tokens = t.tokens.iter().into_iter();
 
         match tokens.next().unwrap() {
-            Token::Section(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "code"),
-            t => panic!("expected Section, got {t}"),
+            Token::Directive(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "code"),
+            t => panic!("expected Directive, got {t}"),
         }
         match tokens.next().unwrap() {
             Token::Label(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "main"),
@@ -395,11 +396,11 @@ mod test {
             t => panic!("expected Comma, got {t}"),
         }
         match tokens.next().unwrap() {
-            Token::Literal(l) => match l {
-                Literal::Decimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "5"),
+            Token::ImmediateLiteral(l) => match l {
+                ImmediateLiteral::Decimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "5"),
                 t => panic!("expected Decimal, got {t}"),
             },
-            t => panic!("expected Literal, got {t}"),
+            t => panic!("expected ImmediateLiteral, got {t}"),
         }
         match tokens.next().unwrap() {
             Token::LabelOrInstruction(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("nop")),
@@ -418,11 +419,11 @@ mod test {
             t => panic!("expected Comma, got {t}"),
         }
         match tokens.next().unwrap() {
-            Token::Literal(l) => match l {
-                Literal::Hexadecimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("Bc2a")),
+            Token::ImmediateLiteral(l) => match l {
+                ImmediateLiteral::Hexadecimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("Bc2a")),
                 t => panic!("expected Hexadecimal, got {t}"),
             },
-            t => panic!("expected Literal, got {t}"),
+            t => panic!("expected ImmediateLiteral, got {t}"),
         }
         match tokens.next().unwrap() {
             Token::LabelOrInstruction(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("Mul")),
@@ -484,14 +485,14 @@ mod test {
         t.expect_instruction_or_label();
         match t.tokens[0].clone() {
             Token::Label(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "main"),
-            _ => panic!(),
+            t => panic!("Expected Label got {t:?}"),
         }
         asm = "MAIN:".bytes().collect::<Vec<_>>();
         t = Tokenizer::from(&mut asm);
         t.expect_instruction_or_label();
         match t.tokens[0].clone() {
             Token::Label(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "MAIN"),
-            _ => panic!(),
+            t => panic!("Expected Label got {t:?}"),
         }
     }
 
@@ -501,15 +502,15 @@ mod test {
         let mut t = Tokenizer::from(&mut asm);
         t.expect_section();
         match t.tokens[0].clone() {
-            Token::Section(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "code"),
-            _ => panic!(),
+            Token::Directive(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "code"),
+            t => panic!("Expected Directive got {t:?}"),
         }
         asm = ".DATA".bytes().collect::<Vec<_>>();
         t = Tokenizer::from(&mut asm);
         t.expect_section();
         match t.tokens[0].clone() {
-            Token::Section(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "DATA"),
-            _ => panic!(),
+            Token::Directive(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "DATA"),
+            t => panic!("Expected Directive got {t:?}"),
         }
     }
 
@@ -575,64 +576,61 @@ mod test {
         let mut t = Tokenizer::from(&mut asm);
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token::Literal(l) => match l {
-                Literal::Decimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("42")),
+            Token::ImmediateLiteral(l) => match l {
+                ImmediateLiteral::Decimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("42")),
                 l => panic!("Expected Decimal got {l:?}"),
             },
-            t => panic!("Expected Literal got {t}"),
+            t => panic!("Expected ImmediateLiteral got {t}"),
         }
         let mut asm = "0x4H".bytes().collect::<Vec<_>>();
         let mut t = Tokenizer::from(&mut asm);
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token::Literal(l) => match l {
-                Literal::Hexadecimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("4H")),
+            Token::ImmediateLiteral(l) => match l {
+                ImmediateLiteral::Hexadecimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("4H")),
                 l => panic!("Expected Hexadecimal got {l:?}"),
             },
-            t => panic!("Expected Literal got {t}"),
+            t => panic!("Expected ImmediateLiteral got {t}"),
         }
         let mut asm = "0b010110".bytes().collect::<Vec<_>>();
         let mut t = Tokenizer::from(&mut asm);
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token::Literal(l) => match l {
-                Literal::Binary(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("010110")),
+            Token::ImmediateLiteral(l) => match l {
+                ImmediateLiteral::Binary(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("010110")),
                 l => panic!("Expected Binary got {l:?}"),
             },
-            t => panic!("Expected Literal got {t}"),
+            t => panic!("Expected ImmediateLiteral got {t}"),
         }
         let mut asm = "0o743".bytes().collect::<Vec<_>>();
         let mut t = Tokenizer::from(&mut asm);
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token::Literal(l) => match l {
-                Literal::Octal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("743")),
+            Token::ImmediateLiteral(l) => match l {
+                ImmediateLiteral::Octal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("743")),
                 l => panic!("Expected Octal got {l:?}"),
             },
-            t => panic!("Expected Literal got {t}"),
+            t => panic!("Expected ImmediateLiteral got {t}"),
         }
         let mut asm = "true".bytes().collect::<Vec<_>>();
         let mut t = Tokenizer::from(&mut asm);
         t.process_next_token();
-        assert_eq!(t.tokens[0], Token::Literal(Literal::Boolean(true)));
+        assert_eq!(t.tokens[0], Token::ImmediateLiteral(ImmediateLiteral::Boolean(true)));
         let mut asm = "false".bytes().collect::<Vec<_>>();
         let mut t = Tokenizer::from(&mut asm);
         t.process_next_token();
-        assert_eq!(t.tokens[0], Token::Literal(Literal::Boolean(false)));
+        assert_eq!(t.tokens[0], Token::ImmediateLiteral(ImmediateLiteral::Boolean(false)));
         let mut asm = "\"Hello, there\"".bytes().collect::<Vec<_>>();
         let mut t = Tokenizer::from(&mut asm);
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token::Literal(l) => match l {
-                Literal::String(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("Hello, there")),
-                l => panic!("Expected String got {l:?}"),
-            },
-            t => panic!("Expected Literal got {t}"),
+            Token::StringLiteral(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("Hello, there")),
+            t => panic!("Expected StringLiteral got {t:?}"),
         }
         let mut asm = "\'7\'".bytes().collect::<Vec<_>>();
         let mut t = Tokenizer::from(&mut asm);
         t.process_next_token();
-        assert_eq!(t.tokens[0], Token::Literal(Literal::Char('7')));
+        assert_eq!(t.tokens[0], Token::ImmediateLiteral(ImmediateLiteral::Char('7')));
     }
 
     #[test]
@@ -640,7 +638,7 @@ mod test {
         let mut asm = "\'B\'".bytes().collect::<Vec<_>>();
         let mut t = Tokenizer::from(&mut asm);
         t.process_next_token();
-        assert_eq!(t.tokens[0], Token::Literal(Literal::Char('B')));
+        assert_eq!(t.tokens[0], Token::ImmediateLiteral(ImmediateLiteral::Char('B')));
     }
 
     #[test]
@@ -651,14 +649,11 @@ mod test {
         let mut t = Tokenizer::from(&mut asm);
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token::Literal(l) => match l {
-                Literal::String(r) => assert_eq!(
-                    String::from_utf8_lossy(&asm[r]),
-                    ("Jajajajaja2498291849102+#amfl929r2jlsamfa3")
-                ),
-                _ => panic!(),
-            },
-            _ => panic!(),
+            Token::StringLiteral(r) => assert_eq!(
+                String::from_utf8_lossy(&asm[r]),
+                ("Jajajajaja2498291849102+#amfl929r2jlsamfa3")
+            ),
+            t => panic!("Expected StringLiteral got: {t:?}"),
         }
     }
 
@@ -668,8 +663,8 @@ mod test {
         let mut t = Tokenizer::from(&mut asm);
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token::Literal(l) => match l {
-                Literal::Decimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("42")),
+            Token::ImmediateLiteral(l) => match l {
+                ImmediateLiteral::Decimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("42")),
                 _ => panic!(),
             },
             _ => panic!(),
@@ -678,8 +673,8 @@ mod test {
         t = Tokenizer::from(&mut asm);
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token::Literal(l) => match l {
-                Literal::Decimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("42")),
+            Token::ImmediateLiteral(l) => match l {
+                ImmediateLiteral::Decimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("42")),
                 _ => panic!(),
             },
             _ => panic!(),
@@ -688,8 +683,8 @@ mod test {
         t = Tokenizer::from(&mut asm);
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token::Literal(l) => match l {
-                Literal::Decimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("-42")),
+            Token::ImmediateLiteral(l) => match l {
+                ImmediateLiteral::Decimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("-42")),
                 _ => panic!(),
             },
             _ => panic!(),
@@ -698,8 +693,8 @@ mod test {
         t = Tokenizer::from(&mut asm);
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token::Literal(l) => match l {
-                Literal::Hexadecimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("4H")),
+            Token::ImmediateLiteral(l) => match l {
+                ImmediateLiteral::Hexadecimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("4H")),
                 _ => panic!(),
             },
             _ => panic!(),
@@ -708,8 +703,8 @@ mod test {
         t = Tokenizer::from(&mut asm);
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token::Literal(l) => match l {
-                Literal::Binary(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("010110")),
+            Token::ImmediateLiteral(l) => match l {
+                ImmediateLiteral::Binary(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("010110")),
                 _ => panic!(),
             },
             _ => panic!(),
@@ -718,8 +713,8 @@ mod test {
         t = Tokenizer::from(&mut asm);
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token::Literal(l) => match l {
-                Literal::Octal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("743")),
+            Token::ImmediateLiteral(l) => match l {
+                ImmediateLiteral::Octal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("743")),
                 _ => panic!(),
             },
             _ => panic!(),
@@ -731,7 +726,7 @@ mod test {
         let mut asm = "TRUE".bytes().collect::<Vec<_>>();
         let mut t = Tokenizer::from(&mut asm);
         t.process_next_token();
-        assert_eq!(t.tokens[0], Token::Literal(Literal::Boolean(true)));
+        assert_eq!(t.tokens[0], Token::ImmediateLiteral(ImmediateLiteral::Boolean(true)));
     }
 
     #[test]
@@ -739,7 +734,7 @@ mod test {
         let mut asm = "FALSE".bytes().collect::<Vec<_>>();
         let mut t = Tokenizer::from(&mut asm);
         t.process_next_token();
-        assert_eq!(t.tokens[0], Token::Literal(Literal::Boolean(false)));
+        assert_eq!(t.tokens[0], Token::ImmediateLiteral(ImmediateLiteral::Boolean(false)));
     }
 
     #[test]
@@ -747,6 +742,9 @@ mod test {
         let mut asm = "0".bytes().collect::<Vec<_>>();
         let mut t = Tokenizer::from(&mut asm);
         t.process_next_token();
-        assert_eq!(t.tokens[0], Token::Literal(Literal::Decimal(Range(0, 1))));
+        assert_eq!(
+            t.tokens[0],
+            Token::ImmediateLiteral(ImmediateLiteral::Decimal(Range(0, 1)))
+        );
     }
 }

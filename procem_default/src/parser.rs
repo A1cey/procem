@@ -13,7 +13,7 @@ use crate::instruction::asm_instruction::{
 };
 use crate::instruction::operand::Operand;
 use crate::instruction::{Instruction, asm_instruction::ASMNoArgInstruction};
-use crate::tokenizer::{Literal, Token};
+use crate::tokenizer::{ImmediateLiteral, Token};
 use ars::range::Range;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
@@ -74,7 +74,7 @@ impl<'input, W: Word> Parser<'input, W> {
     // TODO: can instruction_count be replaced by self.instructions.len()?
     fn parse_next_token(&mut self, instruction_count: &mut usize) {
         match &self.tokens[self.idx] {
-            Token::Section(section) => self.parse_section(&self.input[section]),
+            Token::Directive(section) => self.parse_directive(&self.input[section]),
             Token::Label(label) => {
                 if let Some(old_instruction_idx) = self.labels.insert(&self.input[label], *instruction_count) {
                     self.add_error(ParserError::DuplicateLabel {
@@ -90,7 +90,7 @@ impl<'input, W: Word> Parser<'input, W> {
             Token::End => self.end_parsing = true,
             token => self.add_error(ParserError::InvalidToken {
                 idx: self.idx,
-                expected: "Label or Instruction",
+                expected: "Label, Instruction or Directive",
                 got: format!("{token:?}"),
             }),
         }
@@ -133,16 +133,24 @@ impl<'input, W: Word> Parser<'input, W> {
         }
     }
 
-    fn parse_section(&mut self, section: &[u8]) {
-        match section {
-            section if section.eq_ignore_ascii_case(b"code") => self.current_section = Section::Code,
-            section if section.eq_ignore_ascii_case(b"data") => self.current_section = Section::Data,
-            section if section.eq_ignore_ascii_case(b"bss") => self.current_section = Section::Bss,
+    fn parse_directive(&mut self, directive: &[u8]) {
+        match directive {
+            directive if directive.eq_ignore_ascii_case(b"code") => self.current_section = Section::Code,
+            directive if directive.eq_ignore_ascii_case(b"data") => self.current_section = Section::Data,
+            directive if directive.eq_ignore_ascii_case(b"bss") => self.current_section = Section::Bss,
+            directive if directive.eq_ignore_ascii_case(b"word") => {
+                todo!("Only allowed in data section, parse following tokens and store them in data vec")
+            }
+            directive if directive.eq_ignore_ascii_case(b"ascii") => {
+                todo!("Only allowed in data section, parse following tokens and store them in data vec")
+            }
+            directive if directive.eq_ignore_ascii_case(b"space") => {
+                todo!("Only allowed in bss section, parse following tokens and store them in bss ")
+            }
             _ => {
-                // TODO: Should section be reset to NotDefined here?
                 self.add_error(ParserError::InvalidSectionName {
                     idx: self.idx,
-                    section: Self::string_from_u8_slice(section),
+                    section: Self::string_from_u8_slice(directive),
                 });
             }
         }
@@ -209,7 +217,7 @@ impl<'input, W: Word> Parser<'input, W> {
             Some(Token::Register(reg)) => Ok(Operand::Register(
                 Register::try_from(&self.input[reg]).map_err(|err| ParserError::RegisterParsing { err })?,
             )),
-            Some(Token::Literal(lit)) => Ok(Operand::Value(self.convert_lit_to_val(lit)?)),
+            Some(Token::ImmediateLiteral(lit)) => Ok(Operand::Value(self.convert_lit_to_val(lit)?)),
             _ => Err(ParserError::InvalidToken {
                 idx: self.idx,
                 expected: "Register or Literal",
@@ -221,7 +229,7 @@ impl<'input, W: Word> Parser<'input, W> {
     fn expect_word(&mut self) -> Result<W, ParserError> {
         self.idx += 1; // manual, to enable borrow of self inside match
         match self.tokens.get(self.idx) {
-            Some(Token::Literal(lit)) => Ok(self.convert_lit_to_val(lit)?),
+            Some(Token::ImmediateLiteral(lit)) => Ok(self.convert_lit_to_val(lit)?),
             _ => Err(ParserError::InvalidToken {
                 idx: self.idx,
                 expected: "Literal",
@@ -243,39 +251,38 @@ impl<'input, W: Word> Parser<'input, W> {
             .map_or_else(|| "End".to_string(), |token| format!("{token:?}"))
     }
 
-    fn convert_lit_to_val(&self, lit: &Literal) -> Result<W, ParserError> {        
+    fn convert_lit_to_val(&self, lit: &ImmediateLiteral) -> Result<W, ParserError> {
         match lit {
-            Literal::Char(c) => Ok((*c as i32).into()),
-            Literal::Binary(range) => {
+            ImmediateLiteral::Char(c) => Ok((*c as i32).into()),
+            ImmediateLiteral::Binary(range) => {
                 let lit = String::from_utf8_lossy(&self.input[range]);
                 W::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
                     lit: lit.to_string(),
                     err,
                 })
             }
-            Literal::Boolean(b) => Ok(i32::from(*b).into()),
-            Literal::Decimal(range) => {
+            ImmediateLiteral::Boolean(b) => Ok(i32::from(*b).into()),
+            ImmediateLiteral::Decimal(range) => {
                 let lit = String::from_utf8_lossy(&self.input[range]);
                 W::from_str_radix(&lit, 10).map_err(|err| ParserError::LiteralParsing {
                     lit: lit.to_string(),
                     err,
                 })
             }
-            Literal::Hexadecimal(range) => {
+            ImmediateLiteral::Hexadecimal(range) => {
                 let lit = String::from_utf8_lossy(&self.input[range]);
                 W::from_str_radix(&lit, 16).map_err(|err| ParserError::LiteralParsing {
                     lit: lit.to_string(),
                     err,
                 })
             }
-            Literal::Octal(range) => {
+            ImmediateLiteral::Octal(range) => {
                 let lit = String::from_utf8_lossy(&self.input[range]);
                 W::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
                     lit: lit.to_string(),
                     err,
                 })
             }
-            Literal::String(_) => Err(ParserError::CannotConvertStrToVal), // TODO: String is only allowed in .data section
         }
     }
 
