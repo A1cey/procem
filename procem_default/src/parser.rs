@@ -63,29 +63,26 @@ impl<'input, W: Word> Parser<'input, W> {
     }
 
     fn run(&mut self) {
-        let mut instruction_count = 0;
-
         while self.idx < self.tokens.len() && !self.end_parsing {
-            self.parse_next_token(&mut instruction_count);
+            self.parse_next_token();
             self.idx += 1;
         }
     }
 
     // TODO: can instruction_count be replaced by self.instructions.len()?
-    fn parse_next_token(&mut self, instruction_count: &mut usize) {
+    fn parse_next_token(&mut self) {
         match &self.tokens[self.idx] {
             Token::Directive(section) => self.parse_directive(&self.input[section]),
             Token::Label(label) => {
-                if let Some(old_instruction_idx) = self.labels.insert(&self.input[label], *instruction_count) {
+                if let Some(old_instruction_idx) = self.labels.insert(&self.input[label], self.instructions.len()) {
                     self.add_error(ParserError::DuplicateLabel {
-                        idx: *instruction_count,
+                        idx: self.instructions.len(),
                         old_idx: old_instruction_idx,
                     });
                 }
             }
             Token::LabelOrInstruction(inst) => {
                 self.parse_instruction(&self.input[inst]); // Here only instructions are possible
-                *instruction_count += 1;
             }
             Token::End => self.end_parsing = true,
             token => self.add_error(ParserError::InvalidToken {
@@ -443,31 +440,30 @@ mod test {
             ";
         let tokens = Tokenizer::tokenize(input.as_bytes()).unwrap();
         let mut p = Parser::<I32>::new(&tokens, input.as_bytes());
-        let mut instruction_count = 0;
 
         assert_eq!(p.current_section, Section::NotDefined);
 
-        p.parse_next_token(&mut instruction_count);
+        p.parse_next_token();
         assert_eq!(p.current_section, Section::Code);
         p.idx += 1;
 
-        p.parse_next_token(&mut instruction_count);
+        p.parse_next_token();
         assert_eq!(p.current_section, Section::Bss);
         p.idx += 1;
 
-        p.parse_next_token(&mut instruction_count);
+        p.parse_next_token();
         assert_eq!(p.current_section, Section::Data);
         p.idx += 1;
 
-        p.parse_next_token(&mut instruction_count);
+        p.parse_next_token();
         assert_eq!(p.current_section, Section::Bss);
         p.idx += 1;
 
-        p.parse_next_token(&mut instruction_count);
+        p.parse_next_token();
         assert_eq!(p.current_section, Section::Code);
         p.idx += 1;
 
-        p.parse_next_token(&mut instruction_count);
+        p.parse_next_token();
         assert_eq!(p.current_section, Section::Code);
         assert_eq!(
             p.errors.unwrap()[0],
