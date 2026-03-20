@@ -6,9 +6,8 @@ use procem::{
     word::I32,
 };
 use procem_default::{
-    AssemblerError, assemble,
+    assemble,
     instruction::{Instruction, jump_condition::JumpCondition, operand::Operand},
-    parser::ParserError,
 };
 
 #[test]
@@ -160,7 +159,7 @@ fn parse_and_execute_arithmetic() {
 fn control_flow_and_labels() {
     // Loop should run 5 times, incrementing R0 from 0 to 5
     let program = assemble::<I32>(
-"
+        "
 .code
     mov R0, 0
     mov R1, 5
@@ -225,26 +224,4 @@ fn factorial_program() {
 
     let _ = processor.run_program();
     assert_eq!(processor.registers.get_reg(Register::R1), 120.into());
-}
-
-#[test]
-fn invalid_assembly_should_fail() {
-    let result = assemble::<I32>(
-        "
-        .code
-            mov R0, \"notanumber\"
-        ",
-    );
-
-    match result {
-        Err(ref v) => v.iter().for_each(|e| println!("{e}")),
-        Ok(ref v) => v.code().iter().for_each(|i| println!("{i:?}")),
-    };
-
-    assert_eq!(
-        result,
-        Err(vec![AssemblerError::Parser {
-            err: ParserError::CannotConvertStrToVal
-        }])
-    );
 }

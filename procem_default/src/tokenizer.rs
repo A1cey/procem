@@ -356,7 +356,7 @@ mod test {
     use std::panic;
 
     use super::*;
-    
+
     #[test]
     fn test_run() {
         let mut asm = "
