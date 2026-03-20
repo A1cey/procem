@@ -1,5 +1,5 @@
 use core::num::ParseIntError;
-use std::{collections::HashMap, num::TryFromIntError};
+use std::{collections::HashMap, marker::PhantomData, num::TryFromIntError};
 
 use procem::{
     register::{Register, RegisterError},
@@ -16,96 +16,283 @@ use crate::instruction::{Instruction, asm_instruction::ASMNoArgInstruction};
 use crate::tokenizer::{ImmediateLiteral, Token};
 use ars::range::Range;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
-pub(crate) enum Section {
-    Bss,
-    Code,
-    Data,
-    NotDefined,
-}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Bss;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Code;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Data;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Undefined;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Parser<'input, W> {
-    tokens: &'input [Token],
-    instructions: Vec<Instruction<W>>,
-    errors: Option<Vec<ParserError>>,
-    idx: usize,
-    labels: HashMap<&'input [u8], usize>,
-    input: &'input [u8],
-    current_section: Section,
-    end_parsing: bool,
+pub enum Parser<'input, W> {
+    Undefined(InnerParser<'input, W, Undefined>),
+    Code(InnerParser<'input, W, Code>),
+    Data(InnerParser<'input, W, Data>),
+    Bss(InnerParser<'input, W, Bss>),
 }
-
-// TODO: implement logic, that instructions can only be parsed when in .code section and similar for other sections
 
 impl<'input, W: Word> Parser<'input, W> {
     fn new(tokens: &'input [Token], input: &'input [u8]) -> Self {
-        Self {
+        Self::Undefined(InnerParser {
             tokens,
             errors: None,
             instructions: Vec::default(),
             idx: 0,
             labels: HashMap::default(),
             input,
-            current_section: Section::NotDefined,
             end_parsing: false,
-        }
+            _current_section: PhantomData,
+        })
     }
 
-    pub(crate) fn parse(tokens: &'input [Token], input: &'input [u8]) -> Result<Vec<Instruction<W>>, Vec<ParserError>> {
-        let mut parser = Parser::new(tokens, input);
-        parser.run();
+    /// Parse tokens into a list of instructions.
+    /// 
+    /// # Errors
+    /// Returns a list of errors that occurred during parsing.
+    pub fn parse(tokens: &'input [Token], input: &'input [u8]) -> Result<Vec<Instruction<W>>, Vec<ParserError>> {
+        let mut parser = Self::new(tokens, input);
 
-        match parser.errors {
-            None => Ok(parser.instructions),
-            Some(err) => Err(err),
+        while !parser.is_done() {
+            parser = parser.step();
         }
+        parser.finish()
     }
 
-    fn run(&mut self) {
-        while self.idx < self.tokens.len() && !self.end_parsing {
-            self.parse_next_token();
-            self.idx += 1;
-        }
-    }
+    fn step(self) -> Self {
+        let current_token = match &self {
+            Self::Undefined(p) => p.peak_token().cloned(),
+            Self::Code(p) => p.peak_token().cloned(),
+            Self::Data(p) => p.peak_token().cloned(),
+            Self::Bss(p) => p.peak_token().cloned(),
+        };
 
-    // TODO: can instruction_count be replaced by self.instructions.len()?
-    fn parse_next_token(&mut self) {
-        match &self.tokens[self.idx] {
-            Token::Directive(section) => self.parse_directive(&self.input[section]),
-            Token::Label(label) => {
-                if let Some(old_instruction_idx) = self.labels.insert(&self.input[label], self.instructions.len()) {
-                    self.add_error(ParserError::DuplicateLabel {
-                        idx: self.instructions.len(),
-                        old_idx: old_instruction_idx,
+        match current_token {
+            Some(Token::Directive(range)) => self.change_section(range),
+            Some(t) => match self {
+                Self::Undefined(mut p) => {
+                    p.add_error(ParserError::InvalidToken {
+                        idx: p.idx,
+                        expected: "Section Directive",
+                        got: t.to_string(),
                     });
+                    p.idx += 1;
+                    Self::Undefined(p)
                 }
-            }
-            Token::LabelOrInstruction(inst) => {
-                self.parse_instruction(&self.input[inst]); // Here only instructions are possible
-            }
-            Token::End => self.end_parsing = true,
-            token => self.add_error(ParserError::InvalidToken {
-                idx: self.idx,
-                expected: "Label, Instruction or Directive",
-                got: format!("{token:?}"),
-            }),
+                Self::Code(mut p) => {
+                    p.parse_next_token();
+                    p.idx += 1;
+                    Self::Code(p)
+                }
+                Self::Data(mut p) => {
+                    p.parse_next_token();
+                    p.idx += 1;
+                    Self::Data(p)
+                }
+                Self::Bss(mut p) => {
+                    p.parse_next_token();
+                    p.idx += 1;
+                    Self::Bss(p)
+                }
+            },
+            None => unreachable!("This function is never called with an invalid idx"),
         }
+    }
+
+    #[inline]
+    const fn input(&self) -> &[u8] {
+        match self {
+            Self::Undefined(p) => p.input,
+            Self::Code(p) => p.input,
+            Self::Data(p) => p.input,
+            Self::Bss(p) => p.input,
+        }
+    }
+
+    #[inline]
+    const fn is_done(&self) -> bool {
+        match self {
+            Self::Undefined(p) => p.end_parsing || p.idx >= p.tokens.len(),
+            Self::Code(p) => p.end_parsing || p.idx >= p.tokens.len(),
+            Self::Data(p) => p.end_parsing || p.idx >= p.tokens.len(),
+            Self::Bss(p) => p.end_parsing || p.idx >= p.tokens.len(),
+        }
+    }
+
+    #[inline]
+    fn finish(self) -> Result<Vec<Instruction<W>>, Vec<ParserError>> {
+        match self {
+            Self::Undefined(p) => p.errors.map_or(Ok(p.instructions), Err),
+            Self::Code(p) => p.errors.map_or(Ok(p.instructions), Err),
+            Self::Data(p) => p.errors.map_or(Ok(p.instructions), Err),
+            Self::Bss(p) => p.errors.map_or(Ok(p.instructions), Err),
+        }
+    }
+
+    fn change_section(self, range: Range) -> Self {
+        macro_rules! change_and_advance {
+            ($parser:expr, $method:ident, $variant:ident) => {{
+                let mut next = $parser.$method();
+                next.idx += 1;
+
+                Self::$variant(next)
+            }};
+        }
+
+        macro_rules! error_and_advance {
+            ($parser:expr, $variant:ident, $directive: expr) => {{
+                let got = string_from_u8_slice($directive);
+
+                $parser.add_error(ParserError::InvalidToken {
+                    idx: $parser.idx,
+                    expected: "Section Directive (code, data, bss)",
+                    got,
+                });
+                $parser.idx += 1;
+                Self::$variant($parser)
+            }};
+        }
+
+        let directive = self.input()[range].to_vec(); // NOTE: This allocates a vec every step!
+
+        match &directive {
+            directive if directive.eq_ignore_ascii_case(b"code") => match self {
+                Self::Undefined(p) => change_and_advance!(p, into_code, Code),
+                Self::Code(p) => change_and_advance!(p, into_code, Code),
+                Self::Data(p) => change_and_advance!(p, into_code, Code),
+                Self::Bss(p) => change_and_advance!(p, into_code, Code),
+            },
+            directive if directive.eq_ignore_ascii_case(b"data") => match self {
+                Self::Undefined(p) => change_and_advance!(p, into_data, Data),
+                Self::Code(p) => change_and_advance!(p, into_data, Data),
+                Self::Data(p) => change_and_advance!(p, into_data, Data),
+                Self::Bss(p) => change_and_advance!(p, into_data, Data),
+            },
+            directive if directive.eq_ignore_ascii_case(b"bss") => match self {
+                Self::Undefined(p) => change_and_advance!(p, into_bss, Bss),
+                Self::Code(p) => change_and_advance!(p, into_bss, Bss),
+                Self::Data(p) => change_and_advance!(p, into_bss, Bss),
+                Self::Bss(p) => change_and_advance!(p, into_bss, Bss),
+            },
+            directive => match self {
+                Self::Undefined(mut p) => error_and_advance!(p, Undefined, directive), // No directives other then sections allowed when section is still undefined
+                Self::Code(mut p) => error_and_advance!(p, Code, directive), // No directives allowed inside code sections
+                Self::Data(mut p) => {
+                    // directives allowed inside data sections
+                    p.parse_next_token();
+                    p.idx += 1;
+                    Self::Data(p)
+                }
+                Self::Bss(mut p) => {
+                    // directives allowed inside bss sections
+                    p.parse_next_token();
+                    p.idx += 1;
+                    Self::Bss(p)
+                }
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InnerParser<'input, W, Section = Undefined> {
+    tokens: &'input [Token],
+    instructions: Vec<Instruction<W>>,
+    errors: Option<Vec<ParserError>>,
+    idx: usize,
+    labels: HashMap<&'input [u8], usize>,
+    input: &'input [u8],
+    end_parsing: bool,
+    _current_section: PhantomData<Section>,
+}
+
+// TODO: implement logic, that instructions can only be parsed when in .code section and similar for other sections
+impl<'input, W: Word, Section> InnerParser<'input, W, Section> {
+    fn into_code(self) -> InnerParser<'input, W, Code> {
+        InnerParser {
+            tokens: self.tokens,
+            errors: self.errors,
+            instructions: self.instructions,
+            idx: self.idx,
+            labels: self.labels,
+            input: self.input,
+            end_parsing: self.end_parsing,
+            _current_section: PhantomData,
+        }
+    }
+
+    fn into_data(self) -> InnerParser<'input, W, Data> {
+        InnerParser {
+            tokens: self.tokens,
+            errors: self.errors,
+            instructions: self.instructions,
+            idx: self.idx,
+            labels: self.labels,
+            input: self.input,
+            end_parsing: self.end_parsing,
+            _current_section: PhantomData,
+        }
+    }
+
+    fn into_bss(self) -> InnerParser<'input, W, Bss> {
+        InnerParser {
+            tokens: self.tokens,
+            errors: self.errors,
+            instructions: self.instructions,
+            idx: self.idx,
+            labels: self.labels,
+            input: self.input,
+            end_parsing: self.end_parsing,
+            _current_section: PhantomData,
+        }
+    }
+
+    /// Returns the current token.
+    fn peak_token(&self) -> Option<&'_ Token> {
+        self.tokens.get(self.idx)
+    }
+
+    #[inline]
+    fn add_error(&mut self, err: ParserError) {
+        self.errors.get_or_insert_default().push(err);
     }
 
     #[inline]
     fn string_from_asm(&self, range: &Range) -> String {
         String::from_utf8_lossy(&self.input[range]).to_string()
     }
+}
 
-    #[inline]
-    fn string_from_u8_slice(slice: &[u8]) -> String {
-        String::from_utf8_lossy(slice).to_string()
-    }
+impl<W: Word> InnerParser<'_, W, Undefined> {}
 
-    #[inline]
-    fn add_error(&mut self, err: ParserError) {
-        self.errors.get_or_insert_default().push(err);
+impl<W: Word> InnerParser<'_, W, Code> {
+    fn parse_next_token(&mut self) {
+        match &self.tokens.get(self.idx) {
+            Some(t) => match t {
+                Token::Label(label) => {
+                    if let Some(old_instruction_idx) = self.labels.insert(&self.input[label], self.instructions.len()) {
+                        self.add_error(ParserError::DuplicateLabel {
+                            idx: self.instructions.len(),
+                            old_idx: old_instruction_idx,
+                        });
+                    }
+                }
+                Token::LabelOrInstruction(inst) => {
+                    // Here only instructions are possible
+                    // labels need to be written "<name>:" if they are at the start of an asm line
+                    // -> Labels like this are tokenized as Label not as LabelOrInstruction.
+                    self.parse_instruction(&self.input[inst]);
+                }
+                Token::End => self.end_parsing = true,
+                token => self.add_error(ParserError::InvalidToken {
+                    idx: self.idx,
+                    expected: "Label, Instruction or End",
+                    got: format!("{token:?}"),
+                }),
+            },
+            None => unreachable!("self.tokens is never indexed with an invalid idx."),
+        }
     }
 
     fn parse_instruction(&mut self, instruction: &[u8]) {
@@ -125,31 +312,8 @@ impl<'input, W: Word> Parser<'input, W> {
             },
             Err(()) => self.add_error(ParserError::UnknownInstruction {
                 idx: self.idx,
-                inst: Self::string_from_u8_slice(instruction),
+                inst: string_from_u8_slice(instruction),
             }),
-        }
-    }
-
-    fn parse_directive(&mut self, directive: &[u8]) {
-        match directive {
-            directive if directive.eq_ignore_ascii_case(b"code") => self.current_section = Section::Code,
-            directive if directive.eq_ignore_ascii_case(b"data") => self.current_section = Section::Data,
-            directive if directive.eq_ignore_ascii_case(b"bss") => self.current_section = Section::Bss,
-            directive if directive.eq_ignore_ascii_case(b"word") => {
-                todo!("Only allowed in data section, parse following tokens and store them in data vec")
-            }
-            directive if directive.eq_ignore_ascii_case(b"ascii") => {
-                todo!("Only allowed in data section, parse following tokens and store them in data vec")
-            }
-            directive if directive.eq_ignore_ascii_case(b"space") => {
-                todo!("Only allowed in bss section, parse following tokens and store them in bss ")
-            }
-            _ => {
-                self.add_error(ParserError::InvalidSectionName {
-                    idx: self.idx,
-                    section: Self::string_from_u8_slice(directive),
-                });
-            }
         }
     }
 
@@ -386,6 +550,83 @@ impl<'input, W: Word> Parser<'input, W> {
     }
 }
 
+impl<W: Word> InnerParser<'_, W, Data> {
+    fn parse_next_token(&mut self) {
+        match &self.tokens[self.idx] {
+            Token::Label(label) => {
+                if let Some(old_instruction_idx) = self.labels.insert(&self.input[label], self.instructions.len()) {
+                    self.add_error(ParserError::DuplicateLabel {
+                        idx: self.instructions.len(),
+                        old_idx: old_instruction_idx,
+                    });
+                }
+                todo!("Data labels and instruction len is not correct: separate data labels?");
+            }
+            Token::Directive(directive) => self.parse_directive(&self.input[directive]), // Expect directives
+            token => self.add_error(ParserError::InvalidToken {
+                idx: self.idx,
+                expected: "Label or Directive",
+                got: format!("{token:?}"),
+            }),
+        }
+    }
+
+    fn parse_directive(&mut self, directive: &[u8]) {
+        match directive {
+            directive if directive.eq_ignore_ascii_case(b"word") => {
+                todo!("Expect ImmediateLiterals / Comma")
+            }
+            directive if directive.eq_ignore_ascii_case(b"ascii") => {
+                todo!("Expect StringLiterals / Comma")
+            }
+            directive => self.add_error(ParserError::InvalidDirective {
+                idx: self.idx,
+                directive: string_from_u8_slice(directive),
+                expected: "Only .word and .ascii are allowed in .data sections.".to_string(),
+            }),
+        }
+    }
+}
+
+impl<W: Word> InnerParser<'_, W, Bss> {
+    fn parse_next_token(&mut self) {
+        match &self.tokens[self.idx] {
+            Token::Directive(section) => self.parse_directive(&self.input[section]),
+            Token::Label(label) => {
+                if let Some(old_instruction_idx) = self.labels.insert(&self.input[label], self.instructions.len()) {
+                    self.add_error(ParserError::DuplicateLabel {
+                        idx: self.instructions.len(),
+                        old_idx: old_instruction_idx,
+                    });
+                }
+                todo!("bss labels and instruction len is not correct: separate bss labels?");
+            }
+            Token::End => self.end_parsing = true,
+            token => self.add_error(ParserError::InvalidToken {
+                idx: self.idx,
+                expected: "Label or Directive",
+                got: format!("{token:?}"),
+            }),
+        }
+    }
+
+    fn parse_directive(&mut self, directive: &[u8]) {
+        match directive {
+            directive if directive.eq_ignore_ascii_case(b"space") => {}
+            directive => self.add_error(ParserError::InvalidDirective {
+                idx: self.idx,
+                directive: string_from_u8_slice(directive),
+                expected: "Only .space is allowed in .bss sections.".to_string(),
+            }),
+        }
+    }
+}
+
+#[inline]
+fn string_from_u8_slice(slice: &[u8]) -> String {
+    String::from_utf8_lossy(slice).to_string()
+}
+
 #[derive(Debug, Error, PartialEq, Eq, Clone)]
 pub enum ParserError {
     #[error("No tokens to parse.")]
@@ -417,6 +658,12 @@ pub enum ParserError {
     LabelIndexToWordConversionFailed { idx: usize, label: String },
     #[error("Invalid section name: {section} at {idx}.")]
     InvalidSectionName { idx: usize, section: String },
+    #[error("Invalid directive {directive} at {idx}: {expected}.")]
+    InvalidDirective {
+        idx: usize,
+        directive: String,
+        expected: String,
+    },
 }
 
 #[cfg(test)]
@@ -424,7 +671,7 @@ mod test {
     use procem::word::I32;
 
     use crate::{
-        parser::{Parser, ParserError, Section},
+        parser::{Parser, ParserError},
         tokenizer::Tokenizer,
     };
 
@@ -441,36 +688,39 @@ mod test {
         let tokens = Tokenizer::tokenize(input.as_bytes()).unwrap();
         let mut p = Parser::<I32>::new(&tokens, input.as_bytes());
 
-        assert_eq!(p.current_section, Section::NotDefined);
+        macro_rules! check {
+            ($variant:ident, $p:expr) => {
+                match p {
+                    Parser::$variant(_) => assert!(true),
+                    p => panic!("Expected Parser variant {}, got: {p:?}", stringify!($variant)),
+                }
+            };
+        }
 
-        p.parse_next_token();
-        assert_eq!(p.current_section, Section::Code);
-        p.idx += 1;
+        check!(Undefined, p);
+        p = p.step();
+        check!(Code, p);
+        p = p.step();
+        check!(Bss, p);
+        p = p.step();
+        check!(Data, p);
+        p = p.step();
+        check!(Bss, p);
+        p = p.step();
+        check!(Code, p);
+        p = p.step();
+        check!(Code, p);
 
-        p.parse_next_token();
-        assert_eq!(p.current_section, Section::Bss);
-        p.idx += 1;
-
-        p.parse_next_token();
-        assert_eq!(p.current_section, Section::Data);
-        p.idx += 1;
-
-        p.parse_next_token();
-        assert_eq!(p.current_section, Section::Bss);
-        p.idx += 1;
-
-        p.parse_next_token();
-        assert_eq!(p.current_section, Section::Code);
-        p.idx += 1;
-
-        p.parse_next_token();
-        assert_eq!(p.current_section, Section::Code);
-        assert_eq!(
-            p.errors.unwrap()[0],
-            ParserError::InvalidSectionName {
-                idx: 5,
-                section: "Invalid".to_string()
-            }
-        );
+        match p {
+            Parser::Code(p) => assert_eq!(
+                p.errors.unwrap()[0],
+                ParserError::InvalidToken {
+                    idx: 5,
+                    expected: "Section Directive (code, data, bss)",
+                    got: "Invalid".to_string()
+                }
+            ),
+            _ => unreachable!("check! before ensures, that Code is the Variant"),
+        }
     }
 }
