@@ -41,6 +41,8 @@ pub enum Parser<'input, W> {
 }
 
 impl<'input, W: Word> Parser<'input, W> {
+    #[inline]
+    #[must_use]
     fn new(tokens: &'input [Token], input: &'input [u8]) -> Self {
         Self::Undefined(InnerParser {
             tokens,
@@ -58,6 +60,7 @@ impl<'input, W: Word> Parser<'input, W> {
     ///
     /// # Errors
     /// Returns a list of errors that occurred during parsing.
+    #[inline]
     pub fn parse(tokens: &'input [Token], input: &'input [u8]) -> Result<Vec<Instruction<W>>, Vec<ParserError>> {
         let mut parser = Self::new(tokens, input);
 
@@ -67,6 +70,7 @@ impl<'input, W: Word> Parser<'input, W> {
         parser.finish()
     }
 
+    #[must_use]
     fn step(self) -> Self {
         let current_token = match &self {
             Self::Undefined(p) => p.peak_token().cloned(),
@@ -127,6 +131,7 @@ impl<'input, W: Word> Parser<'input, W> {
         }
     }
 
+    #[must_use]
     fn change_section(self, range: Range) -> Self {
         macro_rules! change_and_advance {
             ($parser:expr, $variant:ident, $method:ident) => {{
@@ -190,6 +195,8 @@ impl<'input, W: Word> Parser<'input, W> {
         }
     }
 
+    #[inline]
+    #[must_use]
     fn parse_section_directive<S>(parser: &InnerParser<'_, W, S>, range: Range) -> Section {
         match &parser.input[range] {
             directive if directive.eq_ignore_ascii_case(b"code") => Section::Code,
@@ -213,6 +220,8 @@ pub struct InnerParser<'input, W, Section = Undefined> {
 }
 
 impl<'input, W: Word, Section> InnerParser<'input, W, Section> {
+    #[inline]
+    #[must_use]
     fn into_code(self) -> InnerParser<'input, W, Code> {
         InnerParser {
             tokens: self.tokens,
@@ -226,6 +235,8 @@ impl<'input, W: Word, Section> InnerParser<'input, W, Section> {
         }
     }
 
+    #[inline]
+    #[must_use]
     fn into_data(self) -> InnerParser<'input, W, Data> {
         InnerParser {
             tokens: self.tokens,
@@ -239,6 +250,8 @@ impl<'input, W: Word, Section> InnerParser<'input, W, Section> {
         }
     }
 
+    #[inline]
+    #[must_use]
     fn into_bss(self) -> InnerParser<'input, W, Bss> {
         InnerParser {
             tokens: self.tokens,
@@ -253,6 +266,7 @@ impl<'input, W: Word, Section> InnerParser<'input, W, Section> {
     }
 
     /// Returns the current token.
+    #[inline]
     fn peak_token(&self) -> Option<&'_ Token> {
         self.tokens.get(self.idx)
     }
@@ -263,6 +277,7 @@ impl<'input, W: Word, Section> InnerParser<'input, W, Section> {
     }
 
     #[inline]
+    #[must_use]
     fn string_from_asm(&self, range: &Range) -> String {
         String::from_utf8_lossy(&self.input[range]).to_string()
     }
@@ -627,6 +642,7 @@ impl<W: Word> InnerParser<'_, W, Bss> {
 }
 
 #[inline]
+#[must_use]
 fn string_from_u8_slice(slice: &[u8]) -> String {
     String::from_utf8_lossy(slice).to_string()
 }
