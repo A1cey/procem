@@ -207,6 +207,10 @@ impl<'input, W: Word> Parser<'input, W> {
     }
 }
 
+// Add labels for bss and bss length to store at this label
+// Add labels for data and data to store at this label
+// Change labels in instructions to be marked for linking
+// Add linker to link labels in instructions to be linked to labels in code, data and bss -> jmp may only be mapped to code labels, reading data instructions can only read from data and bss labels 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InnerParser<'input, W, Section = Undefined> {
     tokens: &'input [Token],
@@ -336,6 +340,7 @@ impl<W: Word> InnerParser<'_, W, Code> {
         }
     }
 
+    // TODO: this only works for labels defined in previous code. To fix this mark this location as needing to be linked + add a linker step to link all labels to locations
     fn expect_destination(&mut self, instr: ASMJumpInstruction) {
         self.idx += 1;
 
@@ -352,7 +357,7 @@ impl<W: Word> InnerParser<'_, W, Code> {
                         });
                     }
                 },
-                None => self.add_error(ParserError::LabelNotFound {
+                None => self.add_error(ParserError::LabelNotFound { 
                     idx: self.idx,
                     label: self.string_from_asm(label),
                 }),
