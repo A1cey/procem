@@ -45,7 +45,7 @@ impl<'input, W: Word> Parser<'input, W> {
         Self::Undefined(InnerParser {
             tokens,
             errors: None,
-            instructions: Vec::default(),
+            instructions: Vec::with_capacity(tokens.len() / 3), // instructions most often are 4 tokens long, to balance out shorter ones 3 is used
             idx: 0,
             labels: HashMap::default(),
             input,
@@ -212,7 +212,6 @@ pub struct InnerParser<'input, W, Section = Undefined> {
     _current_section: PhantomData<Section>,
 }
 
-// TODO: implement logic, that instructions can only be parsed when in .code section and similar for other sections
 impl<'input, W: Word, Section> InnerParser<'input, W, Section> {
     fn into_code(self) -> InnerParser<'input, W, Code> {
         InnerParser {
