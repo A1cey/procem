@@ -96,7 +96,7 @@ impl Tokenizer<'_> {
         }
     }
 
-    // TODO: no labels or instructions can start with f or r as this will be interpreted as boolean literal or register 
+    // TODO: no labels or instructions can start with f or r as this will be interpreted as boolean literal or register
     fn process_next_token(&mut self) {
         self.token_start_idx = self.curr_idx;
 

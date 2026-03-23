@@ -63,10 +63,13 @@
 //! use procem::{processor::Processor, register::Register, word::I32};
 //! use procem_default::assemble;
 //!
+//! const MEM_SIZE: usize = 1024;
+//!
 //! // Assemble a program from asm
-//! let program = assemble::<I32>(
+//! let program = assemble::<MEM_SIZE, I32>(
 //!     "
 //!     .code
+//!     _start:
 //!         mov R0, 10
 //!         mov R1, 5
 //!         add R0, R1
@@ -77,8 +80,6 @@
 //! ).unwrap();
 //!
 //! // Create a processor and run the program
-//! const MEM_SIZE: usize = 1024;
-//!
 //! let mut processor = Processor::<MEM_SIZE, _, _, _, _>::builder()
 //!     .with_program(&program)
 //!     .build();
@@ -90,6 +91,7 @@
 //! ```
 //!
 use crate::instruction::Instruction;
+use crate::linker::{Linker, LinkerError};
 use crate::parser::{Parser, ParserError};
 use crate::tokenizer::{Tokenizer, TokenizerError};
 use procem::program::Program;
@@ -97,6 +99,7 @@ use procem::word::Word;
 use thiserror::Error;
 
 pub mod instruction;
+mod linker;
 pub mod parser;
 pub mod tokenizer;
 
@@ -114,13 +117,13 @@ pub type AssembledProgram<W> = Program<Instruction<W>, Vec<Instruction<W>>, W, V
 ///
 /// const MEM_SIZE: usize = 1024;
 ///
-/// let program = assemble::<I32>(
+/// let program = assemble::<MEM_SIZE, I32>(
 ///     "
 ///     .code
-///     loop:
+///     _start:
 ///         mov R0, 2
 ///         add R1, R0
-///         jmp loop
+///         jmp _start
 ///     ",
 /// )
 /// .unwrap();
@@ -128,7 +131,7 @@ pub type AssembledProgram<W> = Program<Instruction<W>, Vec<Instruction<W>>, W, V
 /// assert_eq!(
 ///     program,
 ///     Program::<Instruction<I32>, Vec<Instruction<I32>>, I32, Vec<I32>>::new(
-///         Header::default(),
+///         Header::new(I32::from(0), I32::from((MEM_SIZE - 1) as i32)),
 ///         Data::default(),
 ///         Bss::default(),
 ///         Code::from(
@@ -151,28 +154,36 @@ pub type AssembledProgram<W> = Program<Instruction<W>, Vec<Instruction<W>>, W, V
 ///     )
 /// );
 /// ```
-pub fn assemble<W: Word>(input: impl AsRef<str>) -> Result<AssembledProgram<W>, Vec<AssemblerError>> {
-    let mut input: Vec<u8> = input.as_ref().bytes().collect();
+pub fn assemble<const MEM_SIZE: usize, W: Word>(
+    input: impl AsRef<str>,
+) -> Result<AssembledProgram<W>, Vec<AssemblerError>> {
+    let input = input.as_ref().as_bytes();
 
-    let tokens = Tokenizer::tokenize(input.as_mut_slice())
+    let tokens =
+        Tokenizer::tokenize(input).map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())?;
+
+    let parsed = Parser::<'_, W>::parse(&tokens, input)
         .map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())?;
 
-    let _parsed = Parser::<'_, W>::parse(tokens.as_ref(), input.as_slice())
-        .map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())?;
-    
-    todo!("Linker step for parsed ")
+    Linker::<'_, MEM_SIZE, W>::link(input, parsed)
+        .map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum AssemblerError {
+    #[error("Error during tokenization: {err}")]
+    Tokenizer {
+        #[from]
+        err: TokenizerError,
+    },
     #[error("Error during parsing: {err}")]
     Parser {
         #[from]
         err: ParserError,
     },
-    #[error("Error during tokenization: {err}")]
-    Tokenizer {
+    #[error("Error during linking: {err}")]
+    Linker {
         #[from]
-        err: TokenizerError,
+        err: LinkerError,
     },
 }

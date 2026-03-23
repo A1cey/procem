@@ -4,7 +4,7 @@ pub mod operand;
 pub mod unlinked;
 
 use core::cmp::Ordering;
-
+// TODO: Stack grows down not up
 use procem::{
     instruction::Instruction as InstructionTrait,
     processor::Processor,

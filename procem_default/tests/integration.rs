@@ -15,13 +15,13 @@ fn simple_5x2_multiplication() {
     const MEM_SIZE: usize = 1024;
     type IS = Instruction<I32>;
 
-    let program = assemble::<I32>(
+    let program = assemble::<MEM_SIZE, I32>(
         "
         .code
-        input:
+        _start:
             mov R0, 2
             add R1, R0
-            jmp input
+            jmp _start
         ",
     );
     let program = match program {
@@ -32,7 +32,7 @@ fn simple_5x2_multiplication() {
     assert_eq!(
         program,
         Program::<IS, Vec<Instruction<I32>>, I32, Vec<I32>>::new(
-            Header::default(),
+            Header::new(I32::from(0), I32::from((MEM_SIZE - 1) as i32)),
             Data::default(),
             Bss::default(),
             Code::from(vec![
@@ -72,9 +72,11 @@ fn simple_5x2_multiplication() {
 
 #[test]
 fn parse_various_literals() {
-    let program = assemble::<I32>(
+    const MEM_SIZE: usize = 1024;
+    let program = assemble::<MEM_SIZE, I32>(
         "
         .code
+        _start:
             mov R0, 42
             mov R1, 0b101010
             mov R2, 0x2A
@@ -93,7 +95,7 @@ fn parse_various_literals() {
     assert_eq!(
         program,
         Program::new(
-            Header::default(),
+            Header::new(I32::from(0), I32::from((MEM_SIZE - 1) as i32)),
             Data::default(),
             Bss::default(),
             Code::from(vec![
@@ -132,9 +134,11 @@ fn parse_various_literals() {
 
 #[test]
 fn parse_and_execute_arithmetic() {
-    let program = assemble::<I32>(
+    const MEM_SIZE: usize = 1024;
+    let program = assemble::<MEM_SIZE, I32>(
         "
         .code
+        _start:
             mov R0, 10
             mov R1, 5
             add R0, R1
@@ -157,10 +161,12 @@ fn parse_and_execute_arithmetic() {
 
 #[test]
 fn control_flow_and_labels() {
+    const MEM_SIZE: usize = 1024;
     // Loop should run 5 times, incrementing R0 from 0 to 5
-    let program = assemble::<I32>(
+    let program = assemble::<MEM_SIZE, I32>(
         "
 .code
+_start:
     mov R0, 0
     mov R1, 5
 loop:
@@ -182,9 +188,11 @@ loop:
 
 #[test]
 fn test_overflow_and_flags() {
-    let program = assemble::<I32>(
+    const MEM_SIZE: usize = 1024;
+    let program = assemble::<MEM_SIZE, I32>(
         "
         .code
+        _start:
             mov R0, 2147483647
             add R0, 1
             cmp R0, -2147483648
@@ -204,9 +212,11 @@ fn test_overflow_and_flags() {
 
 #[test]
 fn factorial_program() {
-    let program = assemble::<I32>(
+    const MEM_SIZE: usize = 1024;
+    let program = assemble::<MEM_SIZE, I32>(
         "
         .code
+        _start:
             mov R0, 5
             mov R1, 1
         loop:
@@ -220,7 +230,9 @@ fn factorial_program() {
         Err(err) => panic!("{}", FmtSlice(&err)),
     };
 
-    let mut processor = Processor::<1024, _, _, _, _>::builder().with_program(&program).build();
+    let mut processor = Processor::<MEM_SIZE, _, _, _, _>::builder()
+        .with_program(&program)
+        .build();
 
     let _ = processor.run_program();
     assert_eq!(processor.registers.get_reg(Register::R1), 120.into());

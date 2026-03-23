@@ -33,8 +33,8 @@ pub(crate) struct Parsed<'input, W> {
 impl<W> Parsed<'_, W> {
     #[inline]
     #[must_use]
-    pub(crate) fn instructions(&self) -> &[Instruction<W>] {
-        &self.instructions
+    pub(crate) const fn mut_instructions(&mut self) -> &mut Vec<Instruction<W>> {
+        &mut self.instructions
     }
 
     #[inline]
@@ -45,14 +45,20 @@ impl<W> Parsed<'_, W> {
 
     #[inline]
     #[must_use]
-    pub(crate) fn unlinked_instructions(&self) -> &[UnlinkedInstruction] {
-        &self.unlinked_instructions
+    pub(crate) const fn mut_unlinked_instructions(&mut self) -> &mut Vec<UnlinkedInstruction> {
+        &mut self.unlinked_instructions
     }
 
     #[inline]
     #[must_use]
     pub(crate) fn data(&self) -> &[W] {
         &self.data
+    }
+
+    #[inline]
+    #[must_use]
+    pub(crate) const fn mut_data(&mut self) -> &mut Vec<W> {
+        &mut self.data
     }
 
     #[inline]
@@ -528,25 +534,6 @@ impl<W: Word> InnerParser<'_, W, Code> {
                 .push(UnlinkedInstruction::new(self.instructions.len(), *label));
             self.instructions
                 .push(Instruction::from_jump_instruction(instr, W::from(i32::MAX)));
-
-            // TODO: Code in linker ?
-            // match self.instruction_labels.get(&self.input[label]) {
-            //     Some(&idx) => match idx.try_into() {
-            //         Ok(idx) => {
-            //             self.instructions.push(Instruction::from_jump_instruction(instr, idx));
-            //         }
-            //         Err(_) => {
-            //             self.add_error(ParserError::LabelIndexToWordConversionFailed {
-            //                 idx: self.idx,
-            //                 label: self.string_from_asm(label),
-            //             });
-            //         }
-            //     },
-            //     None => self.add_error(ParserError::LabelNotFound {
-            //         idx: self.idx,
-            //         label: self.string_from_asm(label),
-            //     }),
-            // }
         } else {
             self.add_error(ParserError::InvalidToken {
                 idx: self.idx,
@@ -922,10 +909,7 @@ pub enum ParserError {
     CannotConvertStrToVal,
     #[error("Cannot convert literal {literal} to u32. This is likely due to the literal being too large.\n{err}")]
     CannotConvertLiteralToU32 { literal: usize, err: TryFromIntError },
-    #[error("Label \".{label}\" not found. Needed at {idx}.")]
-    LabelNotFound { idx: usize, label: String },
-    #[error("Index {idx} of label \".{label}\" cannot be converted to word.")]
-    LabelIndexToWordConversionFailed { idx: usize, label: String },
+
     #[error("Invalid section name: {section} at {idx}.")]
     InvalidSectionName { idx: usize, section: String },
     #[error("Invalid directive {directive} at {idx}: {expected}.")]
@@ -1008,7 +992,7 @@ mod test {
         let tokens = Tokenizer::tokenize(input.as_bytes()).unwrap();
         let parsed = Parser::<I32>::parse(&tokens, input.as_bytes()).unwrap();
 
-        assert_eq!(parsed.instructions().len(), 0);
+        assert_eq!(parsed.instructions.len(), 0);
         assert_eq!(parsed.instruction_labels().len(), 0);
         assert_eq!(parsed.data().len(), 0);
         assert_eq!(parsed.data_labels().len(), 0);
@@ -1035,7 +1019,7 @@ mod test {
         let tokens = Tokenizer::tokenize(input.as_bytes()).unwrap();
         let parsed = Parser::<I32>::parse(&tokens, input.as_bytes()).unwrap();
 
-        assert_eq!(parsed.instructions().len(), 0);
+        assert_eq!(parsed.instructions.len(), 0);
         assert_eq!(parsed.instruction_labels().len(), 0);
         assert_eq!(parsed.bss(), 0);
         assert_eq!(parsed.bss_labels().len(), 0);
@@ -1084,7 +1068,7 @@ mod test {
         let tokens = Tokenizer::tokenize(input.as_bytes()).unwrap();
         let parsed = Parser::<I32>::parse(&tokens, input.as_bytes()).unwrap();
 
-        assert_eq!(parsed.instructions().len(), 6);
+        assert_eq!(parsed.instructions.len(), 6);
         assert_eq!(parsed.instruction_labels().len(), 3);
         assert_eq!(parsed.data().len(), 1 + 1);
         assert_eq!(parsed.data_labels().len(), 1 + 1);

@@ -12,4 +12,16 @@ impl UnlinkedInstruction {
     pub(crate) const fn new(instr_idx: usize, label: Range) -> Self {
         Self { instr_idx, label }
     }
+
+    #[must_use]
+    #[inline]
+    pub(crate) const fn instr_idx(&self) -> usize {
+        self.instr_idx
+    }
+
+    #[must_use]
+    #[inline]
+    pub(crate) const fn label(&self) -> Range {
+        self.label
+    }
 }
