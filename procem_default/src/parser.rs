@@ -81,6 +81,13 @@ pub struct Data;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Undefined;
 
+enum Section {
+    Code,
+    Data,
+    Bss,
+    Invalid(String),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Parser<'input, W> {
     Undefined(InnerParser<'input, W, Undefined>),
@@ -90,10 +97,12 @@ pub enum Parser<'input, W> {
 }
 
 impl<'input, W: Word> Parser<'input, W> {
+    #[inline]
+    #[must_use]
     fn new(tokens: &'input [Token], input: &'input [u8]) -> Self {
         Self::Undefined(InnerParser {
             tokens,
-            instructions: Vec::default(),
+            instructions: Vec::with_capacity(tokens.len() / 3), // instructions most often are 4 tokens long, to balance out shorter ones 3 is used,
             instruction_labels: HashMap::default(),
             data: Vec::default(),
             data_labels: HashMap::default(),
@@ -120,6 +129,7 @@ impl<'input, W: Word> Parser<'input, W> {
         parser.finish()
     }
 
+    #[must_use]
     fn step(self) -> Self {
         let current_token = match &self {
             Self::Undefined(p) => p.get_token().copied(),
@@ -157,16 +167,6 @@ impl<'input, W: Word> Parser<'input, W> {
                 }
             },
             None => unreachable!("This function is never called with an invalid idx"),
-        }
-    }
-
-    #[inline]
-    const fn input(&self) -> &[u8] {
-        match self {
-            Self::Undefined(p) => p.input,
-            Self::Code(p) => p.input,
-            Self::Data(p) => p.input,
-            Self::Bss(p) => p.input,
         }
     }
 
@@ -214,9 +214,10 @@ impl<'input, W: Word> Parser<'input, W> {
         }
     }
 
+    #[must_use]
     fn change_section(self, range: Range) -> Self {
         macro_rules! change_and_advance {
-            ($parser:expr, $method:ident, $variant:ident) => {{
+            ($parser:expr, $variant:ident, $method:ident) => {{
                 let mut next = $parser.$method();
                 next.idx += 1;
 
@@ -225,41 +226,40 @@ impl<'input, W: Word> Parser<'input, W> {
         }
 
         macro_rules! error_and_advance {
-            ($parser:expr, $variant:ident, $directive: expr) => {{
-                let got = string_from_u8_slice($directive);
-
+            ($parser:expr, $variant:ident, $got: expr) => {{
                 $parser.add_error(ParserError::InvalidToken {
                     idx: $parser.idx,
                     expected: "Section Directive (code, data, bss)",
-                    got,
+                    got: $got,
                 });
                 $parser.idx += 1;
                 Self::$variant($parser)
             }};
         }
 
-        let directive = self.input()[range].to_vec(); // NOTE: This allocates a vec every step!
+        macro_rules! change_section {
+            ($variant:ident, $method:ident) => {
+                match self {
+                    Self::Undefined(p) => change_and_advance!(p, $variant, $method),
+                    Self::Code(p) => change_and_advance!(p, $variant, $method),
+                    Self::Data(p) => change_and_advance!(p, $variant, $method),
+                    Self::Bss(p) => change_and_advance!(p, $variant, $method),
+                }
+            };
+        }
 
-        match &directive {
-            directive if directive.eq_ignore_ascii_case(b"code") => match self {
-                Self::Undefined(p) => change_and_advance!(p, into_code, Code),
-                Self::Code(p) => change_and_advance!(p, into_code, Code),
-                Self::Data(p) => change_and_advance!(p, into_code, Code),
-                Self::Bss(p) => change_and_advance!(p, into_code, Code),
-            },
-            directive if directive.eq_ignore_ascii_case(b"data") => match self {
-                Self::Undefined(p) => change_and_advance!(p, into_data, Data),
-                Self::Code(p) => change_and_advance!(p, into_data, Data),
-                Self::Data(p) => change_and_advance!(p, into_data, Data),
-                Self::Bss(p) => change_and_advance!(p, into_data, Data),
-            },
-            directive if directive.eq_ignore_ascii_case(b"bss") => match self {
-                Self::Undefined(p) => change_and_advance!(p, into_bss, Bss),
-                Self::Code(p) => change_and_advance!(p, into_bss, Bss),
-                Self::Data(p) => change_and_advance!(p, into_bss, Bss),
-                Self::Bss(p) => change_and_advance!(p, into_bss, Bss),
-            },
-            directive => match self {
+        let section = match &self {
+            Self::Undefined(p) => Self::parse_section_directive(p, range),
+            Self::Code(p) => Self::parse_section_directive(p, range),
+            Self::Data(p) => Self::parse_section_directive(p, range),
+            Self::Bss(p) => Self::parse_section_directive(p, range),
+        };
+
+        match section {
+            Section::Code => change_section!(Code, into_code),
+            Section::Data => change_section!(Data, into_data),
+            Section::Bss => change_section!(Bss, into_bss),
+            Section::Invalid(directive) => match self {
                 Self::Undefined(mut p) => error_and_advance!(p, Undefined, directive), // No directives other then sections allowed when section is still undefined
                 Self::Code(mut p) => error_and_advance!(p, Code, directive), // No directives allowed inside code sections
                 Self::Data(mut p) => {
@@ -277,8 +277,23 @@ impl<'input, W: Word> Parser<'input, W> {
             },
         }
     }
+
+    #[inline]
+    #[must_use]
+    fn parse_section_directive<S>(parser: &InnerParser<'_, W, S>, range: Range) -> Section {
+        match &parser.input[range] {
+            directive if directive.eq_ignore_ascii_case(b"code") => Section::Code,
+            directive if directive.eq_ignore_ascii_case(b"data") => Section::Data,
+            directive if directive.eq_ignore_ascii_case(b"bss") => Section::Bss,
+            directive => Section::Invalid(string_from_u8_slice(directive)),
+        }
+    }
 }
 
+// Add labels for bss and bss length to store at this label
+// Add labels for data and data to store at this label
+// Change labels in instructions to be marked for linking
+// Add linker to link labels in instructions to be linked to labels in code, data and bss -> jmp may only be mapped to code labels, reading data instructions can only read from data and bss labels
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InnerParser<'input, W, Section = Undefined> {
     tokens: &'input [Token],
@@ -295,8 +310,9 @@ pub struct InnerParser<'input, W, Section = Undefined> {
     _current_section: PhantomData<Section>,
 }
 
-// TODO: implement logic, that instructions can only be parsed when in .code section and similar for other sections
 impl<'input, W: Word, Section> InnerParser<'input, W, Section> {
+    #[inline]
+    #[must_use]
     fn into_code(self) -> InnerParser<'input, W, Code> {
         InnerParser {
             tokens: self.tokens,
@@ -314,6 +330,8 @@ impl<'input, W: Word, Section> InnerParser<'input, W, Section> {
         }
     }
 
+    #[inline]
+    #[must_use]
     fn into_data(self) -> InnerParser<'input, W, Data> {
         InnerParser {
             tokens: self.tokens,
@@ -331,6 +349,8 @@ impl<'input, W: Word, Section> InnerParser<'input, W, Section> {
         }
     }
 
+    #[inline]
+    #[must_use]
     fn into_bss(self) -> InnerParser<'input, W, Bss> {
         InnerParser {
             tokens: self.tokens,
@@ -349,11 +369,13 @@ impl<'input, W: Word, Section> InnerParser<'input, W, Section> {
     }
 
     /// Returns the current token.
+    #[inline]
     fn get_token(&self) -> Option<&'_ Token> {
         self.tokens.get(self.idx)
     }
 
     /// Returns the next token if available.
+    #[inline]
     fn peak_token(&self) -> Option<&'_ Token> {
         self.tokens.get(self.idx + 1)
     }
@@ -476,6 +498,7 @@ impl<W: Word> InnerParser<'_, W, Code> {
         }
     }
 
+    // TODO: this only works for labels defined in previous code. To fix this mark this location as needing to be linked + add a linker step to link all labels to locations
     fn expect_destination(&mut self, instr: ASMJumpInstruction) {
         self.idx += 1;
 
@@ -846,6 +869,7 @@ impl<W: Word> InnerParser<'_, W, Bss> {
 }
 
 #[inline]
+#[must_use]
 fn string_from_u8_slice(slice: &[u8]) -> String {
     String::from_utf8_lossy(slice).to_string()
 }
