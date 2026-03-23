@@ -1,10 +1,10 @@
 pub(crate) mod asm_instruction;
 pub mod jump_condition;
 pub mod operand;
+pub mod unlinked;
 
 use core::cmp::Ordering;
 
-use ars::range::Range;
 use procem::{
     instruction::Instruction as InstructionTrait,
     processor::Processor,
@@ -74,8 +74,6 @@ pub enum Instruction<W> {
     /// The condition is checked before jumping and the jump is performed if the condition is met.
     /// See the assembly instruction at `JumpCondition`.
     Jump { to: W, condition: JumpCondition },
-    /// This instruction is only used internally and removed by the linker.
-    UnlinkedJump { instr: ASMJumpInstruction, label: Range },
     /// Compare the values of two operands and set the flags accordingly. This is the same as `SUBS` but disregards the result of the subtraction. (CMP)
     Cmp { lhs: Operand<W>, rhs: Operand<W> },
     /// Perform an xor operation on the value in the register with the value of the operand. (XOR)
@@ -120,9 +118,6 @@ impl<W: Word> InstructionTrait<W> for Instruction<W> {
             Self::Inc { reg, signed } => Self::inc(reg, signed, processor),
             Self::Dec { reg, signed } => Self::dec(reg, signed, processor),
             Self::Jump { to, condition } => Self::jmp(to, condition, processor),
-            Self::UnlinkedJump { .. } => {
-                unreachable!("This instruction is only internally used and removed by the linker.")
-            }
             Self::Cmp { lhs, rhs } => Self::cmp(lhs, rhs, processor),
             Self::Xor { reg, rhs } => Self::xor(reg, rhs, processor),
             Self::Or { reg, rhs } => Self::or(reg, rhs, processor),

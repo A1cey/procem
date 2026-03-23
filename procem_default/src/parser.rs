@@ -7,19 +7,23 @@ use procem::{
 };
 use thiserror::Error;
 
-use crate::instruction::asm_instruction::{
-    ASMInstruction, ASMJumpInstruction, ASMRegOperandInstruction, ASMRotateInstruction, ASMShiftInstruction,
-    ASMSingleOperandInstruction, ASMSingleRegInstruction, ASMTwoOperandInstruction,
-};
 use crate::instruction::operand::Operand;
 use crate::instruction::{Instruction, asm_instruction::ASMNoArgInstruction};
+use crate::instruction::{
+    asm_instruction::{
+        ASMInstruction, ASMJumpInstruction, ASMRegOperandInstruction, ASMRotateInstruction, ASMShiftInstruction,
+        ASMSingleOperandInstruction, ASMSingleRegInstruction, ASMTwoOperandInstruction,
+    },
+    unlinked::UnlinkedInstruction,
+};
 use crate::tokenizer::{ImmediateLiteral, Token};
 use ars::range::Range;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Parsed<'input, W> {
+pub(crate) struct Parsed<'input, W> {
     instructions: Vec<Instruction<W>>,
     instruction_labels: HashMap<&'input [u8], usize>,
+    unlinked_instructions: Vec<UnlinkedInstruction>,
     data: Vec<W>,
     data_labels: HashMap<&'input [u8], usize>,
     bss: usize,
@@ -29,32 +33,43 @@ pub struct Parsed<'input, W> {
 impl<W> Parsed<'_, W> {
     #[inline]
     #[must_use]
-    pub fn instructions(&self) -> &[Instruction<W>] {
+    pub(crate) fn instructions(&self) -> &[Instruction<W>] {
         &self.instructions
     }
+
     #[inline]
     #[must_use]
-    pub const fn instruction_labels(&self) -> &HashMap<&[u8], usize> {
+    pub(crate) const fn instruction_labels(&self) -> &HashMap<&[u8], usize> {
         &self.instruction_labels
     }
+
     #[inline]
     #[must_use]
-    pub fn data(&self) -> &[W] {
+    pub(crate) fn unlinked_instructions(&self) -> &[UnlinkedInstruction] {
+        &self.unlinked_instructions
+    }
+
+    #[inline]
+    #[must_use]
+    pub(crate) fn data(&self) -> &[W] {
         &self.data
     }
+
     #[inline]
     #[must_use]
-    pub const fn data_labels(&self) -> &HashMap<&[u8], usize> {
+    pub(crate) const fn data_labels(&self) -> &HashMap<&[u8], usize> {
         &self.data_labels
     }
+
     #[inline]
     #[must_use]
-    pub const fn bss(&self) -> usize {
+    pub(crate) const fn bss(&self) -> usize {
         self.bss
     }
+
     #[inline]
     #[must_use]
-    pub const fn bss_labels(&self) -> &HashMap<&[u8], usize> {
+    pub(crate) const fn bss_labels(&self) -> &HashMap<&[u8], usize> {
         &self.bss_labels
     }
 }
@@ -64,6 +79,7 @@ impl<'input, W, Section> From<InnerParser<'input, W, Section>> for Parsed<'input
         Self {
             instructions: p.instructions,
             instruction_labels: p.instruction_labels,
+            unlinked_instructions: p.unlinked_instructions,
             data: p.data,
             data_labels: p.data_labels,
             bss: p.bss,
@@ -104,6 +120,7 @@ impl<'input, W: Word> Parser<'input, W> {
             tokens,
             instructions: Vec::with_capacity(tokens.len() / 3), // instructions most often are 4 tokens long, to balance out shorter ones 3 is used,
             instruction_labels: HashMap::default(),
+            unlinked_instructions: Vec::default(),
             data: Vec::default(),
             data_labels: HashMap::default(),
             bss: 0,
@@ -120,7 +137,7 @@ impl<'input, W: Word> Parser<'input, W> {
     ///
     /// # Errors
     /// Returns a list of errors that occurred during parsing.
-    pub fn parse(tokens: &'input [Token], input: &'input [u8]) -> Result<Parsed<'input, W>, Vec<ParserError>> {
+    pub(crate) fn parse(tokens: &'input [Token], input: &'input [u8]) -> Result<Parsed<'input, W>, Vec<ParserError>> {
         let mut parser = Self::new(tokens, input);
 
         while !parser.is_done() {
@@ -299,6 +316,7 @@ pub struct InnerParser<'input, W, Section = Undefined> {
     tokens: &'input [Token],
     instructions: Vec<Instruction<W>>,
     instruction_labels: HashMap<&'input [u8], usize>,
+    unlinked_instructions: Vec<UnlinkedInstruction>,
     data: Vec<W>,
     data_labels: HashMap<&'input [u8], usize>,
     bss: usize,
@@ -318,6 +336,7 @@ impl<'input, W: Word, Section> InnerParser<'input, W, Section> {
             tokens: self.tokens,
             instructions: self.instructions,
             instruction_labels: self.instruction_labels,
+            unlinked_instructions: self.unlinked_instructions,
             data: self.data,
             data_labels: self.data_labels,
             bss: self.bss,
@@ -337,6 +356,7 @@ impl<'input, W: Word, Section> InnerParser<'input, W, Section> {
             tokens: self.tokens,
             instructions: self.instructions,
             instruction_labels: self.instruction_labels,
+            unlinked_instructions: self.unlinked_instructions,
             data: self.data,
             data_labels: self.data_labels,
             bss: self.bss,
@@ -356,6 +376,7 @@ impl<'input, W: Word, Section> InnerParser<'input, W, Section> {
             tokens: self.tokens,
             instructions: self.instructions,
             instruction_labels: self.instruction_labels,
+            unlinked_instructions: self.unlinked_instructions,
             data: self.data,
             data_labels: self.data_labels,
             bss: self.bss,
@@ -503,8 +524,10 @@ impl<W: Word> InnerParser<'_, W, Code> {
         self.idx += 1;
 
         if let Some(Token::LabelOrInstruction(label)) = self.tokens.get(self.idx) {
+            self.unlinked_instructions
+                .push(UnlinkedInstruction::new(self.instructions.len(), *label));
             self.instructions
-                .push(Instruction::UnlinkedJump { instr, label: *label });
+                .push(Instruction::from_jump_instruction(instr, W::from(i32::MAX)));
 
             // TODO: Code in linker ?
             // match self.instruction_labels.get(&self.input[label]) {
@@ -1065,7 +1088,7 @@ mod test {
         assert_eq!(parsed.instruction_labels().len(), 3);
         assert_eq!(parsed.data().len(), 1 + 1);
         assert_eq!(parsed.data_labels().len(), 1 + 1);
-        assert_eq!(parsed.bss, 5 + 10 + 5);
+        assert_eq!(parsed.bss(), 5 + 10 + 5);
         assert_eq!(parsed.bss_labels().len(), 1);
 
         assert_eq!(parsed.instruction_labels()[b"a".as_slice()], 0);
