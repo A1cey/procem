@@ -17,6 +17,62 @@ use crate::tokenizer::{ImmediateLiteral, Token};
 use ars::range::Range;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Parsed<'input, W> {
+    instructions: Vec<Instruction<W>>,
+    instruction_labels: HashMap<&'input [u8], usize>,
+    data: Vec<W>,
+    data_labels: HashMap<&'input [u8], usize>,
+    bss: usize,
+    bss_labels: HashMap<&'input [u8], usize>,
+}
+
+impl<W> Parsed<'_, W> {
+    #[inline]
+    #[must_use]
+    pub fn instructions(&self) -> &[Instruction<W>] {
+        &self.instructions
+    }
+    #[inline]
+    #[must_use]
+    pub const fn instruction_labels(&self) -> &HashMap<&[u8], usize> {
+        &self.instruction_labels
+    }
+    #[inline]
+    #[must_use]
+    pub fn data(&self) -> &[W] {
+        &self.data
+    }
+    #[inline]
+    #[must_use]
+    pub const fn data_labels(&self) -> &HashMap<&[u8], usize> {
+        &self.data_labels
+    }
+    #[inline]
+    #[must_use]
+    pub const fn bss(&self) -> usize {
+        self.bss
+    }
+    #[inline]
+    #[must_use]
+    pub const fn bss_labels(&self) -> &HashMap<&[u8], usize> {
+        &self.bss_labels
+    }
+}
+
+impl<'input, W, Section> From<InnerParser<'input, W, Section>> for Parsed<'input, W> {
+    fn from(p: InnerParser<'input, W, Section>) -> Self {
+        Self {
+            instructions: p.instructions,
+            instruction_labels: p.instruction_labels,
+            data: p.data,
+            data_labels: p.data_labels,
+            bss: p.bss,
+            bss_labels: p.bss_labels,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bss;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Code;
@@ -37,10 +93,14 @@ impl<'input, W: Word> Parser<'input, W> {
     fn new(tokens: &'input [Token], input: &'input [u8]) -> Self {
         Self::Undefined(InnerParser {
             tokens,
-            errors: None,
             instructions: Vec::default(),
+            instruction_labels: HashMap::default(),
+            data: Vec::default(),
+            data_labels: HashMap::default(),
+            bss: 0,
+            bss_labels: HashMap::default(),
+            errors: None,
             idx: 0,
-            labels: HashMap::default(),
             input,
             end_parsing: false,
             _current_section: PhantomData,
@@ -48,10 +108,10 @@ impl<'input, W: Word> Parser<'input, W> {
     }
 
     /// Parse tokens into a list of instructions.
-    /// 
+    ///
     /// # Errors
     /// Returns a list of errors that occurred during parsing.
-    pub fn parse(tokens: &'input [Token], input: &'input [u8]) -> Result<Vec<Instruction<W>>, Vec<ParserError>> {
+    pub fn parse(tokens: &'input [Token], input: &'input [u8]) -> Result<Parsed<'input, W>, Vec<ParserError>> {
         let mut parser = Self::new(tokens, input);
 
         while !parser.is_done() {
@@ -62,10 +122,10 @@ impl<'input, W: Word> Parser<'input, W> {
 
     fn step(self) -> Self {
         let current_token = match &self {
-            Self::Undefined(p) => p.peak_token().cloned(),
-            Self::Code(p) => p.peak_token().cloned(),
-            Self::Data(p) => p.peak_token().cloned(),
-            Self::Bss(p) => p.peak_token().cloned(),
+            Self::Undefined(p) => p.get_token().copied(),
+            Self::Code(p) => p.get_token().copied(),
+            Self::Data(p) => p.get_token().copied(),
+            Self::Bss(p) => p.get_token().copied(),
         };
 
         match current_token {
@@ -121,12 +181,36 @@ impl<'input, W: Word> Parser<'input, W> {
     }
 
     #[inline]
-    fn finish(self) -> Result<Vec<Instruction<W>>, Vec<ParserError>> {
+    fn finish(self) -> Result<Parsed<'input, W>, Vec<ParserError>> {
         match self {
-            Self::Undefined(p) => p.errors.map_or(Ok(p.instructions), Err),
-            Self::Code(p) => p.errors.map_or(Ok(p.instructions), Err),
-            Self::Data(p) => p.errors.map_or(Ok(p.instructions), Err),
-            Self::Bss(p) => p.errors.map_or(Ok(p.instructions), Err),
+            Self::Undefined(p) => {
+                if let Some(errors) = p.errors {
+                    Err(errors)
+                } else {
+                    Ok(Parsed::from(p))
+                }
+            }
+            Self::Code(p) => {
+                if let Some(errors) = p.errors {
+                    Err(errors)
+                } else {
+                    Ok(Parsed::from(p))
+                }
+            }
+            Self::Data(p) => {
+                if let Some(errors) = p.errors {
+                    Err(errors)
+                } else {
+                    Ok(Parsed::from(p))
+                }
+            }
+            Self::Bss(p) => {
+                if let Some(errors) = p.errors {
+                    Err(errors)
+                } else {
+                    Ok(Parsed::from(p))
+                }
+            }
         }
     }
 
@@ -199,9 +283,13 @@ impl<'input, W: Word> Parser<'input, W> {
 pub struct InnerParser<'input, W, Section = Undefined> {
     tokens: &'input [Token],
     instructions: Vec<Instruction<W>>,
+    instruction_labels: HashMap<&'input [u8], usize>,
+    data: Vec<W>,
+    data_labels: HashMap<&'input [u8], usize>,
+    bss: usize,
+    bss_labels: HashMap<&'input [u8], usize>,
     errors: Option<Vec<ParserError>>,
     idx: usize,
-    labels: HashMap<&'input [u8], usize>,
     input: &'input [u8],
     end_parsing: bool,
     _current_section: PhantomData<Section>,
@@ -212,10 +300,14 @@ impl<'input, W: Word, Section> InnerParser<'input, W, Section> {
     fn into_code(self) -> InnerParser<'input, W, Code> {
         InnerParser {
             tokens: self.tokens,
-            errors: self.errors,
             instructions: self.instructions,
+            instruction_labels: self.instruction_labels,
+            data: self.data,
+            data_labels: self.data_labels,
+            bss: self.bss,
+            bss_labels: self.bss_labels,
+            errors: self.errors,
             idx: self.idx,
-            labels: self.labels,
             input: self.input,
             end_parsing: self.end_parsing,
             _current_section: PhantomData,
@@ -225,10 +317,14 @@ impl<'input, W: Word, Section> InnerParser<'input, W, Section> {
     fn into_data(self) -> InnerParser<'input, W, Data> {
         InnerParser {
             tokens: self.tokens,
-            errors: self.errors,
             instructions: self.instructions,
+            instruction_labels: self.instruction_labels,
+            data: self.data,
+            data_labels: self.data_labels,
+            bss: self.bss,
+            bss_labels: self.bss_labels,
+            errors: self.errors,
             idx: self.idx,
-            labels: self.labels,
             input: self.input,
             end_parsing: self.end_parsing,
             _current_section: PhantomData,
@@ -238,10 +334,14 @@ impl<'input, W: Word, Section> InnerParser<'input, W, Section> {
     fn into_bss(self) -> InnerParser<'input, W, Bss> {
         InnerParser {
             tokens: self.tokens,
-            errors: self.errors,
             instructions: self.instructions,
+            instruction_labels: self.instruction_labels,
+            data: self.data,
+            data_labels: self.data_labels,
+            bss: self.bss,
+            bss_labels: self.bss_labels,
+            errors: self.errors,
             idx: self.idx,
-            labels: self.labels,
             input: self.input,
             end_parsing: self.end_parsing,
             _current_section: PhantomData,
@@ -249,7 +349,18 @@ impl<'input, W: Word, Section> InnerParser<'input, W, Section> {
     }
 
     /// Returns the current token.
+    fn get_token(&self) -> Option<&'_ Token> {
+        self.tokens.get(self.idx)
+    }
+
+    /// Returns the next token if available.
     fn peak_token(&self) -> Option<&'_ Token> {
+        self.tokens.get(self.idx + 1)
+    }
+
+    #[inline]
+    fn get_next(&mut self) -> Option<&'_ Token> {
+        self.idx += 1;
         self.tokens.get(self.idx)
     }
 
@@ -258,9 +369,54 @@ impl<'input, W: Word, Section> InnerParser<'input, W, Section> {
         self.errors.get_or_insert_default().push(err);
     }
 
-    #[inline]
-    fn string_from_asm(&self, range: &Range) -> String {
-        String::from_utf8_lossy(&self.input[range]).to_string()
+    fn convert_lit_to_word(&self, lit: ImmediateLiteral) -> Result<W, ParserError> {
+        match lit {
+            ImmediateLiteral::Char(c) => Ok(W::from(c as i32)),
+            ImmediateLiteral::Binary(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                W::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
+            }
+            ImmediateLiteral::Boolean(b) => Ok(W::from(i32::from(b))),
+            ImmediateLiteral::Decimal(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                W::from_str_radix(&lit, 10).map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
+            }
+            ImmediateLiteral::Hexadecimal(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                W::from_str_radix(&lit, 16).map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
+            }
+            ImmediateLiteral::Octal(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                W::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
+            }
+        }
+    }
+
+    fn expect_immediate_literal(&mut self) -> Result<ImmediateLiteral, ParserError> {
+        self.idx += 1; // manual, to enable borrow of self inside match
+        match self.tokens.get(self.idx) {
+            Some(token) => match token {
+                Token::ImmediateLiteral(lit) => Ok(*lit),
+                token => Err(ParserError::InvalidToken {
+                    idx: self.idx,
+                    expected: "ImmediateLiteral",
+                    got: token.to_string(),
+                }),
+            },
+            None => Err(ParserError::TokenNotFound { idx: self.idx }),
+        }
     }
 }
 
@@ -271,7 +427,10 @@ impl<W: Word> InnerParser<'_, W, Code> {
         match &self.tokens.get(self.idx) {
             Some(t) => match t {
                 Token::Label(label) => {
-                    if let Some(old_instruction_idx) = self.labels.insert(&self.input[label], self.instructions.len()) {
+                    if let Some(old_instruction_idx) = self
+                        .instruction_labels
+                        .insert(&self.input[label], self.instructions.len())
+                    {
                         self.add_error(ParserError::DuplicateLabel {
                             idx: self.instructions.len(),
                             old_idx: old_instruction_idx,
@@ -321,23 +480,27 @@ impl<W: Word> InnerParser<'_, W, Code> {
         self.idx += 1;
 
         if let Some(Token::LabelOrInstruction(label)) = self.tokens.get(self.idx) {
-            match self.labels.get(&self.input[label]) {
-                Some(&idx) => match idx.try_into() {
-                    Ok(idx) => {
-                        self.instructions.push(Instruction::from_jump_instruction(instr, idx));
-                    }
-                    Err(_) => {
-                        self.add_error(ParserError::LabelIndexToWordConversionFailed {
-                            idx: self.idx,
-                            label: self.string_from_asm(label),
-                        });
-                    }
-                },
-                None => self.add_error(ParserError::LabelNotFound {
-                    idx: self.idx,
-                    label: self.string_from_asm(label),
-                }),
-            }
+            self.instructions
+                .push(Instruction::UnlinkedJump { instr, label: *label });
+
+            // TODO: Code in linker ?
+            // match self.instruction_labels.get(&self.input[label]) {
+            //     Some(&idx) => match idx.try_into() {
+            //         Ok(idx) => {
+            //             self.instructions.push(Instruction::from_jump_instruction(instr, idx));
+            //         }
+            //         Err(_) => {
+            //             self.add_error(ParserError::LabelIndexToWordConversionFailed {
+            //                 idx: self.idx,
+            //                 label: self.string_from_asm(label),
+            //             });
+            //         }
+            //     },
+            //     None => self.add_error(ParserError::LabelNotFound {
+            //         idx: self.idx,
+            //         label: self.string_from_asm(label),
+            //     }),
+            // }
         } else {
             self.add_error(ParserError::InvalidToken {
                 idx: self.idx,
@@ -378,7 +541,7 @@ impl<W: Word> InnerParser<'_, W, Code> {
             Some(Token::Register(reg)) => Ok(Operand::Register(
                 Register::try_from(&self.input[reg]).map_err(|err| ParserError::RegisterParsing { err })?,
             )),
-            Some(Token::ImmediateLiteral(lit)) => Ok(Operand::Value(self.convert_lit_to_val(lit)?)),
+            Some(Token::ImmediateLiteral(lit)) => Ok(Operand::Value(self.convert_lit_to_word(*lit)?)),
             _ => Err(ParserError::InvalidToken {
                 idx: self.idx,
                 expected: "Register or Literal",
@@ -387,64 +550,11 @@ impl<W: Word> InnerParser<'_, W, Code> {
         }
     }
 
-    fn expect_word(&mut self) -> Result<W, ParserError> {
-        self.idx += 1; // manual, to enable borrow of self inside match
-        match self.tokens.get(self.idx) {
-            Some(Token::ImmediateLiteral(lit)) => Ok(self.convert_lit_to_val(lit)?),
-            _ => Err(ParserError::InvalidToken {
-                idx: self.idx,
-                expected: "Literal",
-                got: self.current_token_string(),
-            }),
-        }
-    }
-
-    #[inline]
-    fn get_next(&mut self) -> Option<&'_ Token> {
-        self.idx += 1;
-        self.tokens.get(self.idx)
-    }
-
     #[inline]
     fn current_token_string(&self) -> String {
         self.tokens
             .get(self.idx)
             .map_or_else(|| "End".to_string(), |token| format!("{token:?}"))
-    }
-
-    fn convert_lit_to_val(&self, lit: &ImmediateLiteral) -> Result<W, ParserError> {
-        match lit {
-            ImmediateLiteral::Char(c) => Ok((*c as i32).into()),
-            ImmediateLiteral::Binary(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                W::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
-            }
-            ImmediateLiteral::Boolean(b) => Ok(i32::from(*b).into()),
-            ImmediateLiteral::Decimal(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                W::from_str_radix(&lit, 10).map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
-            }
-            ImmediateLiteral::Hexadecimal(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                W::from_str_radix(&lit, 16).map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
-            }
-            ImmediateLiteral::Octal(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                W::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
-            }
-        }
     }
 
     fn expect_reg_operand_instruction(&mut self, instr: ASMRegOperandInstruction) {
@@ -515,13 +625,18 @@ impl<W: Word> InnerParser<'_, W, Code> {
             return self.add_error(err);
         }
 
-        let literal = match self.expect_word() {
+        let literal = match self.expect_immediate_literal() {
             Ok(lit) => lit,
             Err(err) => return self.add_error(err),
         };
 
+        let word = match self.convert_lit_to_word(literal) {
+            Ok(word) => word,
+            Err(err) => return self.add_error(err),
+        };
+
         self.instructions
-            .push(Instruction::from_shift_instruction(instr, register, literal));
+            .push(Instruction::from_shift_instruction(instr, register, word));
     }
 
     fn expect_rotate_instruction(&mut self, instr: ASMRotateInstruction) {
@@ -534,12 +649,17 @@ impl<W: Word> InnerParser<'_, W, Code> {
             return self.add_error(err);
         }
 
-        let literal = match self.expect_word() {
+        let literal = match self.expect_immediate_literal() {
             Ok(lit) => lit,
             Err(err) => return self.add_error(err),
         };
 
-        let literal: usize = literal.into();
+        let word = match self.convert_lit_to_word(literal) {
+            Ok(word) => word,
+            Err(err) => return self.add_error(err),
+        };
+
+        let literal: usize = word.into();
         let literal: u32 = match literal.try_into() {
             Ok(lit) => lit,
             Err(err) => return self.add_error(ParserError::CannotConvertLiteralToU32 { literal, err }),
@@ -554,53 +674,14 @@ impl<W: Word> InnerParser<'_, W, Data> {
     fn parse_next_token(&mut self) {
         match &self.tokens[self.idx] {
             Token::Label(label) => {
-                if let Some(old_instruction_idx) = self.labels.insert(&self.input[label], self.instructions.len()) {
+                if let Some(old_data_idx) = self.data_labels.insert(&self.input[label], self.data.len()) {
                     self.add_error(ParserError::DuplicateLabel {
                         idx: self.instructions.len(),
-                        old_idx: old_instruction_idx,
+                        old_idx: old_data_idx,
                     });
                 }
-                todo!("Data labels and instruction len is not correct: separate data labels?");
             }
-            Token::Directive(directive) => self.parse_directive(&self.input[directive]), // Expect directives
-            token => self.add_error(ParserError::InvalidToken {
-                idx: self.idx,
-                expected: "Label or Directive",
-                got: format!("{token:?}"),
-            }),
-        }
-    }
-
-    fn parse_directive(&mut self, directive: &[u8]) {
-        match directive {
-            directive if directive.eq_ignore_ascii_case(b"word") => {
-                todo!("Expect ImmediateLiterals / Comma")
-            }
-            directive if directive.eq_ignore_ascii_case(b"ascii") => {
-                todo!("Expect StringLiterals / Comma")
-            }
-            directive => self.add_error(ParserError::InvalidDirective {
-                idx: self.idx,
-                directive: string_from_u8_slice(directive),
-                expected: "Only .word and .ascii are allowed in .data sections.".to_string(),
-            }),
-        }
-    }
-}
-
-impl<W: Word> InnerParser<'_, W, Bss> {
-    fn parse_next_token(&mut self) {
-        match &self.tokens[self.idx] {
-            Token::Directive(section) => self.parse_directive(&self.input[section]),
-            Token::Label(label) => {
-                if let Some(old_instruction_idx) = self.labels.insert(&self.input[label], self.instructions.len()) {
-                    self.add_error(ParserError::DuplicateLabel {
-                        idx: self.instructions.len(),
-                        old_idx: old_instruction_idx,
-                    });
-                }
-                todo!("bss labels and instruction len is not correct: separate bss labels?");
-            }
+            Token::Directive(directive) => self.parse_directive(&self.input[directive]),
             Token::End => self.end_parsing = true,
             token => self.add_error(ParserError::InvalidToken {
                 idx: self.idx,
@@ -612,12 +693,154 @@ impl<W: Word> InnerParser<'_, W, Bss> {
 
     fn parse_directive(&mut self, directive: &[u8]) {
         match directive {
-            directive if directive.eq_ignore_ascii_case(b"space") => {}
+            directive if directive.eq_ignore_ascii_case(b"word") => self.parse_words(),
+            directive if directive.eq_ignore_ascii_case(b"ascii") => self.parse_ascii(),
+            directive => self.add_error(ParserError::InvalidDirective {
+                idx: self.idx,
+                directive: string_from_u8_slice(directive),
+                expected: "Only .word and .ascii are allowed in .data sections.".to_string(),
+            }),
+        }
+    }
+
+    #[inline]
+    fn parse_words(&mut self) {
+        self.expect_word();
+
+        while let Some(Token::Comma) = self.peak_token() {
+            self.idx += 1;
+            self.expect_word();
+        }
+    }
+
+    #[inline]
+    fn expect_word(&mut self) {
+        match self.expect_immediate_literal() {
+            Ok(lit) => match self.convert_lit_to_word(lit) {
+                Ok(word) => self.data.push(word),
+                Err(err) => self.add_error(err),
+            },
+            Err(err) => self.add_error(err),
+        }
+    }
+
+    #[inline]
+    fn parse_ascii(&mut self) {
+        self.expect_string_literal();
+
+        while let Some(Token::Comma) = self.peak_token() {
+            self.idx += 1;
+            self.expect_string_literal();
+        }
+    }
+
+    fn expect_string_literal(&mut self) {
+        self.idx += 1;
+        let token = self.tokens.get(self.idx);
+
+        match token {
+            Some(token) => match token {
+                Token::StringLiteral(lit) => {
+                    self.data
+                        .extend(self.input[lit].iter().map(|&byte| W::from(i32::from(byte))));
+                }
+                token => self.add_error(ParserError::InvalidToken {
+                    idx: self.idx,
+                    expected: "ImmediateLiteral",
+                    got: token.to_string(),
+                }),
+            },
+            None => self.add_error(ParserError::TokenNotFound { idx: self.idx }),
+        }
+    }
+}
+
+impl<W: Word> InnerParser<'_, W, Bss> {
+    fn parse_next_token(&mut self) {
+        match &self.tokens[self.idx] {
+            Token::Label(label) => {
+                if let Some(old_bss_idx) = self.bss_labels.insert(&self.input[label], self.bss) {
+                    self.add_error(ParserError::DuplicateLabel {
+                        idx: self.instructions.len(),
+                        old_idx: old_bss_idx,
+                    });
+                }
+            }
+            Token::Directive(section) => self.parse_directive(&self.input[section]),
+            Token::End => self.end_parsing = true,
+            token => self.add_error(ParserError::InvalidToken {
+                idx: self.idx,
+                expected: "Label or Directive",
+                got: format!("{token:?}"),
+            }),
+        }
+    }
+
+    #[inline]
+    fn parse_directive(&mut self, directive: &[u8]) {
+        match directive {
+            directive if directive.eq_ignore_ascii_case(b"space") => self.parse_space(),
             directive => self.add_error(ParserError::InvalidDirective {
                 idx: self.idx,
                 directive: string_from_u8_slice(directive),
                 expected: "Only .space is allowed in .bss sections.".to_string(),
             }),
+        }
+    }
+
+    #[inline]
+    fn parse_space(&mut self) {
+        self.expect_space();
+
+        while let Some(Token::Comma) = self.peak_token() {
+            self.idx += 1;
+            self.expect_space();
+        }
+    }
+
+    #[inline]
+    fn expect_space(&mut self) {
+        match self.expect_immediate_literal() {
+            Ok(lit) => match self.convert_lit_to_usize(lit) {
+                Ok(space) => self.bss += space,
+                Err(err) => self.add_error(err),
+            },
+            Err(err) => self.add_error(err),
+        }
+    }
+
+    fn convert_lit_to_usize(&self, lit: ImmediateLiteral) -> Result<usize, ParserError> {
+        match lit {
+            ImmediateLiteral::Decimal(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                lit.parse().map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
+            }
+            ImmediateLiteral::Binary(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                usize::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
+            }
+            ImmediateLiteral::Hexadecimal(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                usize::from_str_radix(&lit, 16).map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
+            }
+            ImmediateLiteral::Octal(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                usize::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
+            }
+            ImmediateLiteral::Boolean(b) => Ok(usize::from(b)),
+            ImmediateLiteral::Char(c) => Ok(c as usize),
         }
     }
 }
@@ -664,6 +887,8 @@ pub enum ParserError {
         directive: String,
         expected: String,
     },
+    #[error("Expected Literal at idx {idx} but got nothing.")]
+    TokenNotFound { idx: usize },
 }
 
 #[cfg(test)]
@@ -722,5 +947,108 @@ mod test {
             ),
             _ => unreachable!("check! before ensures, that Code is the Variant"),
         }
+    }
+
+    #[test]
+    fn parse_bss() {
+        let input = "
+            .bss
+                a:
+                .space 5
+                .space 10
+                b: .space 5, 0xA
+            ";
+        let tokens = Tokenizer::tokenize(input.as_bytes()).unwrap();
+        let parsed = Parser::<I32>::parse(&tokens, input.as_bytes()).unwrap();
+
+        assert_eq!(parsed.instructions().len(), 0);
+        assert_eq!(parsed.instruction_labels().len(), 0);
+        assert_eq!(parsed.data().len(), 0);
+        assert_eq!(parsed.data_labels().len(), 0);
+
+        assert_eq!(parsed.bss, 5 + 10 + 5 + 10);
+        let labels = parsed.bss_labels();
+        assert_eq!(labels.len(), 2);
+        assert_eq!(labels[b"a".as_slice()], 0);
+        assert_eq!(labels[b"b".as_slice()], 5 + 10);
+    }
+
+    #[test]
+    fn parse_data() {
+        let input = "
+            .data
+                a:
+                    .word 5
+                    .word 10
+                b:
+                    .ascii \"Hello World!\", \"\0\"
+                c:
+                    .word 5, 0xA
+            ";
+        let tokens = Tokenizer::tokenize(input.as_bytes()).unwrap();
+        let parsed = Parser::<I32>::parse(&tokens, input.as_bytes()).unwrap();
+
+        assert_eq!(parsed.instructions().len(), 0);
+        assert_eq!(parsed.instruction_labels().len(), 0);
+        assert_eq!(parsed.bss(), 0);
+        assert_eq!(parsed.bss_labels().len(), 0);
+
+        assert_eq!(parsed.data.len(), 1 + 1 + b"Hello World!".len() + b"\0".len() + 1 + 1);
+        let labels = parsed.data_labels();
+        assert_eq!(labels.len(), 3);
+        assert_eq!(labels[b"a".as_slice()], 0);
+        assert_eq!(labels[b"b".as_slice()], 1 + 1);
+        assert_eq!(labels[b"c".as_slice()], 1 + 1 + b"Hello World!".len() + b"\0".len());
+    }
+
+    #[test]
+    fn parse_all_sections() {
+        let input = "
+            .code
+            a:
+                mov R1, 0
+                jmp g
+
+            .bss
+            b:
+                .space 5, 0xA
+
+            .code
+            c:
+                mov R0, R1
+                jmp a
+
+            .data
+            d:
+                .word 2
+
+            .bss
+                .space 5
+
+            .data
+            e:
+                .word 8
+
+            .code
+            g:
+                add R1, 0o1
+                jmp c
+            ";
+        let tokens = Tokenizer::tokenize(input.as_bytes()).unwrap();
+        let parsed = Parser::<I32>::parse(&tokens, input.as_bytes()).unwrap();
+
+        assert_eq!(parsed.instructions().len(), 6);
+        assert_eq!(parsed.instruction_labels().len(), 3);
+        assert_eq!(parsed.data().len(), 1 + 1);
+        assert_eq!(parsed.data_labels().len(), 1 + 1);
+        assert_eq!(parsed.bss, 5 + 10 + 5);
+        assert_eq!(parsed.bss_labels().len(), 1);
+
+        assert_eq!(parsed.instruction_labels()[b"a".as_slice()], 0);
+        assert_eq!(parsed.instruction_labels()[b"c".as_slice()], 2);
+        assert_eq!(parsed.instruction_labels()[b"g".as_slice()], 4);
+        assert_eq!(parsed.data_labels()[b"d".as_slice()], 0);
+        assert_eq!(parsed.data_labels()[b"e".as_slice()], 1);
+        assert_eq!(parsed.bss_labels()[b"b".as_slice()], 0);
     }
 }

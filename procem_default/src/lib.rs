@@ -92,7 +92,7 @@
 use crate::instruction::Instruction;
 use crate::parser::{Parser, ParserError};
 use crate::tokenizer::{Tokenizer, TokenizerError};
-use procem::program::{Bss, Code, Data, Header, Program};
+use procem::program::Program;
 use procem::word::Word;
 use thiserror::Error;
 
@@ -157,15 +157,10 @@ pub fn assemble<W: Word>(input: impl AsRef<str>) -> Result<AssembledProgram<W>, 
     let tokens = Tokenizer::tokenize(input.as_mut_slice())
         .map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())?;
 
-    let instructions = Parser::parse(tokens.as_ref(), input.as_slice())
+    let _parsed = Parser::<'_, W>::parse(tokens.as_ref(), input.as_slice())
         .map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())?;
-
-    Ok(Program::new(
-        Header::default(),
-        Data::default(),
-        Bss::default(),
-        Code::from(instructions),
-    ))
+    
+    todo!("Linker step for parsed ")
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]

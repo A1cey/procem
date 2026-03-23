@@ -5,7 +5,7 @@ use thiserror::Error;
 use ars::range::Range;
 
 #[doc(hidden)] // Only public for benchmarks.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Token {
     Label(Range),
     Register(Range),
@@ -33,7 +33,7 @@ impl Display for Token {
 }
 
 #[doc(hidden)] // Only public for benchmarks.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ImmediateLiteral {
     Decimal(Range),
     Binary(Range),
@@ -96,6 +96,7 @@ impl Tokenizer<'_> {
         }
     }
 
+    // TODO: no labels or instructions can start with f or r as this will be interpreted as boolean literal or register 
     fn process_next_token(&mut self) {
         self.token_start_idx = self.curr_idx;
 
@@ -138,15 +139,14 @@ impl Tokenizer<'_> {
             .expect("The index should not be greater or equal to the length of the input. This should never happen.")
     }
 
-    fn set_curr_idx_to_token_end(&mut self) {
-        if self.get_curr_byte().is_ascii_whitespace() {
+    fn set_curr_idx_to_immediate_literal_end(&mut self) {
+        if !self.get_curr_byte().is_ascii_hexdigit() {
             return;
         }
 
-        while self.curr_idx < self.input_len && !self.get_curr_byte().is_ascii_whitespace() {
+        while self.curr_idx < self.input_len && self.get_curr_byte().is_ascii_hexdigit() {
             self.curr_idx += 1;
         }
-
         self.curr_idx -= 1;
     }
 
@@ -251,35 +251,39 @@ impl Tokenizer<'_> {
             self.token_start_idx = self.curr_idx; // token_start can be moved, beginning '0' can be ignored
             match self.get_curr_byte() {
                 b'B' | b'b' => {
-                    self.set_curr_idx_to_token_end(); // TODO: this parses any bytes until space
+                    self.curr_idx += 1; // skip 'b'/'B'
+                    self.set_curr_idx_to_immediate_literal_end();
                     ImmediateLiteral::Binary(Range(
                         self.token_start_idx + 1, // skip 'b'/'B'
                         self.curr_idx + 1,        // exclusive
                     ))
                 }
                 b'X' | b'x' => {
-                    self.set_curr_idx_to_token_end(); // TODO: this parses any bytes until space
+                    self.curr_idx += 1; // skip 'x'/'X'
+                    self.set_curr_idx_to_immediate_literal_end();
                     ImmediateLiteral::Hexadecimal(Range(
                         self.token_start_idx + 1, // skip 'x'/'X'
                         self.curr_idx + 1,        // exclusive
                     ))
                 }
                 b'O' | b'o' => {
-                    self.set_curr_idx_to_token_end(); // TODO: this parses any bytes until space
+                    self.curr_idx += 1; // skip 'o'/'O'
+                    self.set_curr_idx_to_immediate_literal_end();
                     ImmediateLiteral::Octal(Range(
                         self.token_start_idx + 1, // skip 'o'/'O'
                         self.curr_idx + 1,        // exclusive
                     ))
                 }
                 b'D' | b'd' => {
-                    self.set_curr_idx_to_token_end(); // TODO: this parses any bytes until space
+                    self.curr_idx += 1; // skip 'd'/'D'
+                    self.set_curr_idx_to_immediate_literal_end();
                     ImmediateLiteral::Decimal(Range(
                         self.token_start_idx + 1, // skip 'd'/'D'
                         self.curr_idx + 1,        // exclusive
                     ))
                 }
                 b if b.is_ascii_whitespace() || b.is_ascii_digit() => {
-                    self.set_curr_idx_to_token_end(); // TODO: this parses any bytes until space
+                    self.set_curr_idx_to_immediate_literal_end();
                     ImmediateLiteral::Decimal(Range(
                         self.token_start_idx - 1, // if only '0' then we need to include it for '042' the '0' could have been ignored
                         self.curr_idx,
@@ -289,7 +293,11 @@ impl Tokenizer<'_> {
                 _ => todo!("Error case no matching digit after 0 (allowed: x,d,b,o)"),
             }
         } else {
-            self.set_curr_idx_to_token_end(); // TODO: this parses any bytes until space
+            if self.get_curr_byte() == b'-' {
+                self.curr_idx += 1; // skip '-'
+            }
+
+            self.set_curr_idx_to_immediate_literal_end();
             ImmediateLiteral::Decimal(Range(self.token_start_idx, self.curr_idx + 1))
         };
 
@@ -582,12 +590,12 @@ mod test {
             },
             t => panic!("Expected ImmediateLiteral got {t}"),
         }
-        let mut asm = "0x4H".bytes().collect::<Vec<_>>();
+        let mut asm = "0x4F".bytes().collect::<Vec<_>>();
         let mut t = Tokenizer::from(&mut asm);
         t.process_next_token();
         match t.tokens[0].clone() {
             Token::ImmediateLiteral(l) => match l {
-                ImmediateLiteral::Hexadecimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("4H")),
+                ImmediateLiteral::Hexadecimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("4F")),
                 l => panic!("Expected Hexadecimal got {l:?}"),
             },
             t => panic!("Expected ImmediateLiteral got {t}"),
@@ -689,12 +697,12 @@ mod test {
             },
             _ => panic!(),
         }
-        asm = "0x4H".bytes().collect::<Vec<_>>();
+        asm = "0x4F".bytes().collect::<Vec<_>>();
         t = Tokenizer::from(&mut asm);
         t.process_next_token();
         match t.tokens[0].clone() {
             Token::ImmediateLiteral(l) => match l {
-                ImmediateLiteral::Hexadecimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("4H")),
+                ImmediateLiteral::Hexadecimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("4F")),
                 _ => panic!(),
             },
             _ => panic!(),
