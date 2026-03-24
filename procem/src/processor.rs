@@ -37,7 +37,7 @@ use crate::word::Word;
 pub struct Processor<'program, const MEM_SIZE: usize, Inst, Insts, W: Word, Words> {
     pub registers: Registers<W>,
     pub mem: Memory<MEM_SIZE, W>,
-    program: Option<&'program Program<Inst, Insts, W, Words>>,
+    program: Option<&'program Program<MEM_SIZE, Inst, Insts, W, Words>>,
 }
 
 impl<'program, const MEM_SIZE: usize, Inst, Insts, W, Words> Processor<'program, MEM_SIZE, Inst, Insts, W, Words>
@@ -68,8 +68,36 @@ where
     ///
     /// The program cannot be changed after being loaded. You cannot mutate the program through the processor; replace it with a different [`Program`] to change behavior
     #[inline]
-    pub const fn load_program(&mut self, program: &'program Program<Inst, Insts, W, Words>) {
+    pub fn load_program(&mut self, program: &'program Program<MEM_SIZE, Inst, Insts, W, Words>) {
         self.program = Some(program);
+        self.load_header();
+        self.load_data();
+    }
+
+    #[inline]
+    fn load_data(&mut self) {
+        match self.program {
+            Some(program) => {
+                let base_addr = program.data().base_addr().into();
+                let data = program.data().data();
+                self.mem.as_mut_slice()[base_addr..data.len()].clone_from_slice(data);
+            }
+            None => unreachable!("This function is only called after program is loaded into processor."),
+        }
+    }
+
+    #[inline]
+    fn load_header(&mut self) {
+        match self.program {
+            Some(program) => {
+                let init_pc = program.header().init_pc();
+                let init_sp = program.header().init_sp();
+
+                self.registers.set_reg(Register::PC, init_pc);
+                self.registers.set_reg(Register::SP, init_sp);
+            }
+            None => unreachable!("This function is only called after program is loaded into processor."),
+        }
     }
 
     /// Runs the entire program.
@@ -122,7 +150,7 @@ where
 pub struct ProcessorBuilder<'program, const MEM_SIZE: usize, Inst, Insts, W, Words> {
     registers: Option<Registers<W>>,
     mem: Option<Memory<MEM_SIZE, W>>,
-    program: Option<&'program Program<Inst, Insts, W, Words>>,
+    program: Option<&'program Program<MEM_SIZE, Inst, Insts, W, Words>>,
 }
 
 impl<'program, const MEM_SIZE: usize, Inst, Insts, W: Word, Words>
@@ -157,7 +185,7 @@ impl<'program, const MEM_SIZE: usize, Inst, Insts, W: Word, Words>
     /// Sets the program for the `ProcessorBuilder`.
     #[must_use]
     #[inline]
-    pub const fn with_program(mut self, program: &'program Program<Inst, Insts, W, Words>) -> Self {
+    pub const fn with_program(mut self, program: &'program Program<MEM_SIZE, Inst, Insts, W, Words>) -> Self {
         self.program = Some(program);
         self
     }

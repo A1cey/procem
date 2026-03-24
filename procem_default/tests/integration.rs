@@ -6,14 +6,13 @@ use procem::{
     word::I32,
 };
 use procem_default::{
-    assemble,
+    AssembledProgram, assemble,
     instruction::{Instruction, jump_condition::JumpCondition, operand::Operand},
 };
 
 #[test]
 fn simple_5x2_multiplication() {
     const MEM_SIZE: usize = 1024;
-    type IS = Instruction<I32>;
 
     let program = assemble::<MEM_SIZE, I32>(
         "
@@ -31,7 +30,7 @@ fn simple_5x2_multiplication() {
 
     assert_eq!(
         program,
-        Program::<IS, Vec<Instruction<I32>>, I32, Vec<I32>>::new(
+        AssembledProgram::<MEM_SIZE, I32>::new(
             Header::new(I32::from(0), I32::from((MEM_SIZE - 1) as i32)),
             Data::default(),
             Bss::default(),
@@ -53,9 +52,7 @@ fn simple_5x2_multiplication() {
         )
     );
 
-    let mut processor = Processor::<MEM_SIZE, _, _, _, _>::builder()
-        .with_program(&program)
-        .build();
+    let mut processor = Processor::builder().with_program(&program).build();
 
     println!("{processor}");
 
@@ -152,7 +149,7 @@ fn parse_and_execute_arithmetic() {
         Err(err) => panic!("{}", FmtSlice(&err)),
     };
 
-    let mut processor = Processor::<1024, _, _, _, _>::builder().with_program(&program).build();
+    let mut processor = Processor::builder().with_program(&program).build();
 
     let _ = processor.run_program();
 
@@ -180,7 +177,7 @@ loop:
         Err(err) => panic!("{}", FmtSlice(&err)),
     };
 
-    let mut processor = Processor::<1024, _, _, _, _>::builder().with_program(&program).build();
+    let mut processor = Processor::builder().with_program(&program).build();
 
     let _ = processor.run_program();
     assert_eq!(processor.registers.get_reg(Register::R0), 5.into());
@@ -203,7 +200,7 @@ fn test_overflow_and_flags() {
         Err(err) => panic!("{}", FmtSlice(&err)),
     };
 
-    let mut processor = Processor::<1024, _, _, _, _>::builder().with_program(&program).build();
+    let mut processor = Processor::builder().with_program(&program).build();
 
     let _ = processor.run_program();
     assert_eq!(processor.registers.get_reg(Register::R0), i32::MIN.into());
@@ -230,7 +227,7 @@ fn factorial_program() {
         Err(err) => panic!("{}", FmtSlice(&err)),
     };
 
-    let mut processor = Processor::<MEM_SIZE, _, _, _, _>::builder()
+    let mut processor = Processor::builder()
         .with_program(&program)
         .build();
 

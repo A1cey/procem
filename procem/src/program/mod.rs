@@ -1,9 +1,13 @@
 //! The [`Program`] definition.
+mod bss;
 mod code;
-mod sections;
+mod data;
+mod header;
 
+pub use bss::Bss;
 pub use code::Code;
-pub use sections::{Bss, Data, Header};
+pub use data::Data;
+pub use header::Header;
 
 use crate::instruction::Instruction;
 use crate::processor::ProcessorError;
@@ -21,14 +25,14 @@ use core::ops::Deref;
 ///
 /// An instruction can be fetched from the program using the [`fetch`](Program::fetch), [`try_fetch`](Program::try_fetch), or [`fetch_unchecked`](Program::fetch_unchecked) methods.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct Program<Inst, Insts, W, Words> {
+pub struct Program<const MEM_SIZE: usize, Inst, Insts, W, Words> {
     header: Header<W>,
     data: Data<W, Words>,
     bss: Bss<W>,
     code: Code<Inst, Insts, W>,
 }
 
-impl<Inst, Insts, W, Words> Program<Inst, Insts, W, Words>
+impl<const MEM_SIZE: usize, Inst, Insts, W, Words> Program<MEM_SIZE, Inst, Insts, W, Words>
 where
     Inst: Instruction<W>,
     Insts: Deref<Target = [Inst]>,

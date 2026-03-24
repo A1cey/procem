@@ -80,9 +80,7 @@
 //! ).unwrap();
 //!
 //! // Create a processor and run the program
-//! let mut processor = Processor::<MEM_SIZE, _, _, _, _>::builder()
-//!     .with_program(&program)
-//!     .build();
+//! let mut processor = Processor::builder().with_program(&program).build();
 //!
 //! let _ = processor.run_program();
 //!
@@ -103,7 +101,7 @@ mod linker;
 pub mod parser;
 pub mod tokenizer;
 
-pub type AssembledProgram<W> = Program<Instruction<W>, Vec<Instruction<W>>, W, Vec<W>>;
+pub type AssembledProgram<const MEM_SIZE: usize, W> = Program<MEM_SIZE, Instruction<W>, Vec<Instruction<W>>, W, Vec<W>>;
 
 /// Assembles Program from assembly code.
 ///
@@ -113,7 +111,7 @@ pub type AssembledProgram<W> = Program<Instruction<W>, Vec<Instruction<W>>, W, V
 /// # Example
 /// ```
 /// use procem::{program::{Program, Code, Header, Bss, Data}, register::Register, word::I32};
-/// use procem_default::{assemble, instruction::{Instruction, jump_condition::JumpCondition, operand::Operand} };
+/// use procem_default::{assemble, AssembledProgram, instruction::{Instruction, jump_condition::JumpCondition, operand::Operand} };
 ///
 /// const MEM_SIZE: usize = 1024;
 ///
@@ -130,7 +128,7 @@ pub type AssembledProgram<W> = Program<Instruction<W>, Vec<Instruction<W>>, W, V
 ///
 /// assert_eq!(
 ///     program,
-///     Program::<Instruction<I32>, Vec<Instruction<I32>>, I32, Vec<I32>>::new(
+///     AssembledProgram::<MEM_SIZE, I32>::new(
 ///         Header::new(I32::from(0), I32::from((MEM_SIZE - 1) as i32)),
 ///         Data::default(),
 ///         Bss::default(),
@@ -156,7 +154,7 @@ pub type AssembledProgram<W> = Program<Instruction<W>, Vec<Instruction<W>>, W, V
 /// ```
 pub fn assemble<const MEM_SIZE: usize, W: Word>(
     input: impl AsRef<str>,
-) -> Result<AssembledProgram<W>, Vec<AssemblerError>> {
+) -> Result<AssembledProgram<MEM_SIZE, W>, Vec<AssemblerError>> {
     let input = input.as_ref().as_bytes();
 
     let tokens =

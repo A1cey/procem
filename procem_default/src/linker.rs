@@ -20,7 +20,7 @@ pub struct Linker<'input, const MEM_SIZE: usize, W> {
 }
 
 impl<'input, const MEM_SIZE: usize, W: Word> Linker<'input, MEM_SIZE, W> {
-    pub fn link(input: &'input [u8], parsed: Parsed<'input, W>) -> Result<AssembledProgram<W>, Vec<LinkerError>> {
+    pub fn link(input: &'input [u8], parsed: Parsed<'input, W>) -> Result<AssembledProgram<MEM_SIZE, W>, Vec<LinkerError>> {
         let mut linker = Self {
             errors: Vec::new(),
             input,
@@ -36,7 +36,7 @@ impl<'input, const MEM_SIZE: usize, W: Word> Linker<'input, MEM_SIZE, W> {
         Ok(program)
     }
 
-    fn run(&mut self) -> AssembledProgram<W> {
+    fn run(&mut self) -> AssembledProgram<MEM_SIZE, W> {
         let unlinked_instructions = mem::take(self.parsed.mut_unlinked_instructions());
 
         for unlinked_instruction in unlinked_instructions {
