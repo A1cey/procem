@@ -6,7 +6,7 @@
 
 - [`Processor`](src/processor.rs): Emulates a processor with general-purpose registers, program counter, stack pointer, flags, and memory.
 - [`Program`](src/program.rs): Container for a sequence of instructions to be executed by the processor.
-- [`Instruction`](src/instruction.rs): Trait for defining custom instruction sets. A default instruction set is implemented in the procem_default crate.
+- [`Instruction`](src/instruction.rs): Trait for defining custom instruction sets. A default instruction set is implemented in the procasm crate.
 - [`Registers`](src/register.rs): General-purpose registers, program counter, stack pointer, and flags.
 - [`Memory`](src/memory.rs): Fixed-size memory for processor operations.
 - [`Word`](src/word.rs): Trait for word-size types. Word is already implemented for all signed integer types.
@@ -15,11 +15,11 @@
 
 You can implement your own instruction set by implementing the `Instruction` trait, and support custom word types by implementing the `Word` trait. Alternatively, you can use the default instruction set and word types.
 
-### Example: Using procem_default
+### Example: Using procasm
 
 ```rust
 use procem::{processor::Processor, register::Register, word::I32};
-use procem_default::assemble;
+use procasm::assemble;
 
 // Assemble a program from asm
 let program = assemble::<I32>(

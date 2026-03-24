@@ -2,10 +2,9 @@ use ars::fmt::slice::FmtSlice;
 use procem::{
     processor::Processor,
     program::{Bss, Code, Data, Header, Program},
-    register::Register,
-    word::I32,
+    register::Register, word::I32,
 };
-use procem_default::{
+use procasm::{
     AssembledProgram, assemble,
     instruction::{Instruction, jump_condition::JumpCondition, operand::Operand},
 };

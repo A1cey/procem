@@ -12,5 +12,5 @@
 ## Command
 
 Get the exe: cargo bench --bench tokenizer_perf --no-run
-Time it: timeit { procem_default/benches/bin/<name>.exe }
+Time it: timeit { procasm/benches/bin/<name>.exe }
 Flamegraph: cargo flamegraph --bench tokenizer_perf

@@ -30,14 +30,14 @@ use crate::word::Word;
 /// # }
 /// # let mut processor = Processor::<4, _,  Vec<Inst<I64>>,_, Vec<I64>>::new();
 /// // Default memory values are all zero.
-/// assert_eq!(processor.mem.read(processor.registers.get_reg(Register::SP)), 0.into());
+/// assert_eq!(processor.mem.read(processor.registers.get_reg(Register::SP)), 0isize.into());
 ///
-/// processor.mem.write(processor.registers.get_reg(Register::SP), 1.into());
-/// assert_eq!(processor.mem.read(processor.registers.get_reg(Register::SP)), 1.into());
+/// processor.mem.write(processor.registers.get_reg(Register::SP), 1isize.into());
+/// assert_eq!(processor.mem.read(processor.registers.get_reg(Register::SP)), 1isize.into());
 ///
 /// processor.registers.inc(Register::SP);
-/// processor.mem.write(processor.registers.get_reg(Register::SP), 10.into());
-/// assert_eq!(processor.mem.read(processor.registers.get_reg(Register::SP)), 10.into());
+/// processor.mem.write(processor.registers.get_reg(Register::SP), 10isize.into());
+/// assert_eq!(processor.mem.read(processor.registers.get_reg(Register::SP)), 10isize.into());
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]

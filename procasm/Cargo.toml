@@ -1,10 +1,10 @@
 [package]
-name = "procem_default"
+name = "procasm"
 version = "0.2.0"
 edition = "2024"
-repository = "https://github.com/A1cey/procem/tree/main/procem_default"
+repository = "https://github.com/A1cey/procem/tree/main/procasm"
 license = "MIT"
-description = "A default implementation of an instruction set for the procem library"
+description = "procasm is the default implementation of an instruction set for the procem library"
 keywords = ["processor", "emulator", "simulator", "cpu", "procem"]
 
 [dependencies]
@@ -13,7 +13,7 @@ thiserror = { workspace = true }
 ars = {workspace= true, features= ["alloc"]}
 
 [lib]
-name = "procem_default"
+name = "procasm"
 
 [dev-dependencies]
 criterion = "0.8.2"

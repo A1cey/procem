@@ -5,7 +5,7 @@
 //! The processor operates by loading and executing an assembly [`Program`](program::Program).
 //! A [`Program`](program::Program) is a collection of assembly instructions that the processor iterates over and executes.
 //! The instruction set in use must implement the [`Instruction`](instruction::Instruction) trait.
-//! A default instruction set is available in the [`procem_default`](../procem_default/index.html) crate.
+//! A default instruction set is available in the [`procasm`](../procasm/index.html) crate.
 //!
 //! The [`Registers`](register::Registers) and [`Memory`](memory::Memory) use [`Word`](word::Word) as their data type.
 //!

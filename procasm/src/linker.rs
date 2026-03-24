@@ -1,15 +1,13 @@
 use std::mem;
 
-use procem::{
-    program::{Bss, Code, Data, Header, Program},
-    word::Word,
-};
+use procem::program::{Bss, Code, Data, Header, Program};
 use thiserror::Error;
 
 use crate::{
     AssembledProgram,
     instruction::{Instruction, unlinked::UnlinkedInstruction},
     parser::Parsed,
+    word::ProcasmWord,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,8 +17,11 @@ pub struct Linker<'input, const MEM_SIZE: usize, W> {
     parsed: Parsed<'input, W>,
 }
 
-impl<'input, const MEM_SIZE: usize, W: Word> Linker<'input, MEM_SIZE, W> {
-    pub fn link(input: &'input [u8], parsed: Parsed<'input, W>) -> Result<AssembledProgram<MEM_SIZE, W>, Vec<LinkerError>> {
+impl<'input, const MEM_SIZE: usize, W: ProcasmWord> Linker<'input, MEM_SIZE, W> {
+    pub fn link(
+        input: &'input [u8],
+        parsed: Parsed<'input, W>,
+    ) -> Result<AssembledProgram<MEM_SIZE, W>, Vec<LinkerError>> {
         let mut linker = Self {
             errors: Vec::new(),
             input,
@@ -94,8 +95,8 @@ impl<'input, const MEM_SIZE: usize, W: Word> Linker<'input, MEM_SIZE, W> {
         let init_pc = self.get_init_pc();
         let init_sp = self.get_init_sp();
         Header::new(
-            init_pc.unwrap_or_else(|| W::from(i32::MAX)),
-            init_sp.unwrap_or_else(|| W::from(i32::MAX)),
+            init_pc.unwrap_or_else(|| W::from(isize::MAX)),
+            init_sp.unwrap_or_else(|| W::from(isize::MAX)),
         )
     }
 
@@ -132,7 +133,7 @@ impl<'input, const MEM_SIZE: usize, W: Word> Linker<'input, MEM_SIZE, W> {
         let Ok(init_sp) = { MEM_SIZE - 1 }.try_into() else {
             self.errors.push(LinkerError::MemorySizeToBig {
                 mem_size: MEM_SIZE,
-                max_word_value: W::from(i32::MAX).into(),
+                max_word_value: W::from(isize::MAX).into(),
             });
             return None;
         };
@@ -157,7 +158,7 @@ impl<'input, const MEM_SIZE: usize, W: Word> Linker<'input, MEM_SIZE, W> {
         } else {
             self.errors.push(LinkerError::DataToBigForBss {
                 data_size: self.parsed.data().len(),
-                max_word_value: W::from(i32::MAX).into(),
+                max_word_value: W::from(isize::MAX).into(),
                 bss_size: self.parsed.bss(),
             });
             W::from(0)
@@ -168,7 +169,7 @@ impl<'input, const MEM_SIZE: usize, W: Word> Linker<'input, MEM_SIZE, W> {
         } else {
             self.errors.push(LinkerError::BssToBig {
                 bss_size: self.parsed.data().len(),
-                max_word_value: W::from(i32::MAX).into(),
+                max_word_value: W::from(isize::MAX).into(),
             });
             W::from(0)
         };

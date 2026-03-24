@@ -1,7 +1,7 @@
 use std::hint::black_box;
 
 use dev_utilities::generator::generate_asm;
-use procem_default::tokenizer::Tokenizer;
+use procasm::tokenizer::Tokenizer;
 
 fn main() {
     // 1_000_000 instructions

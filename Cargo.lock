@@ -322,21 +322,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "procem"
-version = "0.2.0"
-dependencies = [
- "ars",
- "thiserror",
-]
-
-[[package]]
-name = "procem_default"
+name = "procasm"
 version = "0.2.0"
 dependencies = [
  "ars",
  "criterion",
  "dev_utilities",
  "procem",
+ "thiserror",
+]
+
+[[package]]
+name = "procem"
+version = "0.2.0"
+dependencies = [
+ "ars",
  "thiserror",
 ]
 

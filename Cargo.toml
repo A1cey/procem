@@ -1,5 +1,5 @@
 [workspace]
-members = ["procem_default", "procem", "dev_utilities"]
+members = ["procasm", "procem", "dev_utilities"]
 resolver = "3"
 
 [profile.bench]

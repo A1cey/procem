@@ -1,4 +1,4 @@
-//! **`procem_default`** is a toy Rust library that provides a default implementation of the [`Instruction`](../procem/instruction/trait.Instruction.html) trait of the [`procem`](../procem/index.html) library.
+//! **`procasm`** is a toy Rust library that provides a default implementation of the [`Instruction`](../procem/instruction/trait.Instruction.html) trait of the [`procem`](../procem/index.html) library.
 //!
 //! # Instruction set
 //!
@@ -61,7 +61,7 @@
 //! # Example
 //! ```
 //! use procem::{processor::Processor, register::Register, word::I32};
-//! use procem_default::assemble;
+//! use procasm::assemble;
 //!
 //! const MEM_SIZE: usize = 1024;
 //!
@@ -92,14 +92,15 @@ use crate::instruction::Instruction;
 use crate::linker::{Linker, LinkerError};
 use crate::parser::{Parser, ParserError};
 use crate::tokenizer::{Tokenizer, TokenizerError};
+use crate::word::ProcasmWord;
 use procem::program::Program;
-use procem::word::Word;
 use thiserror::Error;
 
 pub mod instruction;
 mod linker;
 pub mod parser;
 pub mod tokenizer;
+pub mod word;
 
 pub type AssembledProgram<const MEM_SIZE: usize, W> = Program<MEM_SIZE, Instruction<W>, Vec<Instruction<W>>, W, Vec<W>>;
 
@@ -111,7 +112,7 @@ pub type AssembledProgram<const MEM_SIZE: usize, W> = Program<MEM_SIZE, Instruct
 /// # Example
 /// ```
 /// use procem::{program::{Program, Code, Header, Bss, Data}, register::Register, word::I32};
-/// use procem_default::{assemble, AssembledProgram, instruction::{Instruction, jump_condition::JumpCondition, operand::Operand} };
+/// use procasm::{assemble, AssembledProgram, instruction::{Instruction, jump_condition::JumpCondition, operand::Operand}};
 ///
 /// const MEM_SIZE: usize = 1024;
 ///
@@ -152,7 +153,7 @@ pub type AssembledProgram<const MEM_SIZE: usize, W> = Program<MEM_SIZE, Instruct
 ///     )
 /// );
 /// ```
-pub fn assemble<const MEM_SIZE: usize, W: Word>(
+pub fn assemble<const MEM_SIZE: usize, W: ProcasmWord>(
     input: impl AsRef<str>,
 ) -> Result<AssembledProgram<MEM_SIZE, W>, Vec<AssemblerError>> {
     let input = input.as_ref().as_bytes();
