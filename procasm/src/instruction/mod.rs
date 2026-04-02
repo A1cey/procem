@@ -247,7 +247,7 @@ impl<W: ProcasmWord> Instruction<W> {
         from: Operand<W>,
         processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
     ) {
-        processor.registers.inc(Register::SP);
+        processor.registers.dec(Register::SP);
         let sp = processor.registers.sp();
 
         processor.mem.write(sp, from.resolve(processor));
@@ -262,7 +262,7 @@ impl<W: ProcasmWord> Instruction<W> {
         let sp = processor.registers.sp();
         let val = processor.mem.read(sp);
 
-        processor.registers.dec(Register::SP);
+        processor.registers.inc(Register::SP);
         processor.registers.set_reg(to, val);
     }
 
@@ -1214,6 +1214,43 @@ mod test {
             assert_eq!(processor.registers.get_flag(Flag::S), false);
             assert_eq!(processor.registers.get_flag(Flag::V), false);
             assert_eq!(processor.registers.get_flag(Flag::Z), false);
+        }
+    }
+    
+    mod stack {
+        use super::*;
+        use procem::processor::Processor;
+
+        #[test]
+        fn test_push_pop() {
+            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
+
+            processor
+                .registers
+                .set_reg(Register::SP, W::try_from(MEM_SIZE - 1).unwrap());
+            processor.registers.set_reg(Register::R0, 1isize.into());
+
+            [
+                Instruction::Push {
+                    from: Operand::Register(Register::R0),
+                },
+                Instruction::Push {
+                    from: Operand::Register(Register::R0),
+                },
+                Instruction::Pop { to: Register::R1 },
+                Instruction::Push {
+                    from: Operand::Register(Register::R0),
+                },
+                Instruction::Pop { to: Register::R2 },
+                Instruction::Pop { to: Register::R3 },
+            ]
+            .iter()
+            .for_each(|&inst| IS::execute(inst, &mut processor));
+
+            assert_eq!(processor.registers.get_reg(Register::R1), W::from(1isize));
+            assert_eq!(processor.registers.get_reg(Register::R2), W::from(1isize));
+            assert_eq!(processor.registers.get_reg(Register::R3), W::from(1isize));
+            assert_eq!(processor.registers.sp(), W::try_from(MEM_SIZE - 1).unwrap());
         }
     }
 }
