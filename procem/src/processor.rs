@@ -72,6 +72,7 @@ where
         self.program = Some(program);
         self.load_header();
         self.load_data();
+        self.load_bss();
     }
 
     #[inline]
@@ -81,6 +82,18 @@ where
                 let base_addr = program.data().base_addr().into();
                 let data = program.data().data();
                 self.mem.as_mut_slice()[base_addr..data.len()].clone_from_slice(data);
+            }
+            None => unreachable!("This function is only called after program is loaded into processor."),
+        }
+    }
+
+    #[inline]
+    fn load_bss(&mut self) {
+        match self.program {
+            Some(program) => {
+                let base_addr = program.bss().base_addr().into();
+                let end_addr = program.bss().end_addr().into();
+                self.mem.as_mut_slice()[base_addr..end_addr + 1].fill(W::from(0));
             }
             None => unreachable!("This function is only called after program is loaded into processor."),
         }
