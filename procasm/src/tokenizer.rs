@@ -40,7 +40,7 @@ pub enum ImmediateLiteral {
     Hexadecimal(Range),
     Octal(Range),
     Boolean(bool),
-    Char(char),
+    Char(u8),
 }
 
 impl Display for ImmediateLiteral {
@@ -221,9 +221,7 @@ impl Tokenizer<'_> {
         self.curr_idx += 1;
 
         match self.get_curr_byte() {
-            b'\'' => self
-                .tokens
-                .push(Token::ImmediateLiteral(ImmediateLiteral::Char(char::from(b)))),
+            b'\'' => self.tokens.push(Token::ImmediateLiteral(ImmediateLiteral::Char(b))),
             _ => self.add_error(TokenizerError::CharLiteral { idx: self.curr_idx }),
         }
 
@@ -638,7 +636,7 @@ mod test {
         let mut asm = "\'7\'".bytes().collect::<Vec<_>>();
         let mut t = Tokenizer::from(&mut asm);
         t.process_next_token();
-        assert_eq!(t.tokens[0], Token::ImmediateLiteral(ImmediateLiteral::Char('7')));
+        assert_eq!(t.tokens[0], Token::ImmediateLiteral(ImmediateLiteral::Char(b'7')));
     }
 
     #[test]
@@ -646,7 +644,7 @@ mod test {
         let mut asm = "\'B\'".bytes().collect::<Vec<_>>();
         let mut t = Tokenizer::from(&mut asm);
         t.process_next_token();
-        assert_eq!(t.tokens[0], Token::ImmediateLiteral(ImmediateLiteral::Char('B')));
+        assert_eq!(t.tokens[0], Token::ImmediateLiteral(ImmediateLiteral::Char(b'B')));
     }
 
     #[test]

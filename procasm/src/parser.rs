@@ -418,7 +418,7 @@ impl<'input, W: ProcasmWord, Section> InnerParser<'input, W, Section> {
 
     fn convert_lit_to_word(&self, lit: ImmediateLiteral) -> Result<W, ParserError> {
         match lit {
-            ImmediateLiteral::Char(c) => Ok(W::from(c as isize)),
+            ImmediateLiteral::Char(c) => Ok(W::from(isize::from(c))),
             ImmediateLiteral::Binary(range) => {
                 let lit = String::from_utf8_lossy(&self.input[range]);
                 W::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
