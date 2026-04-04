@@ -106,10 +106,7 @@ macro_rules! from_isize {
     ($name: ident, $type: ty $(,)? ) => {
         impl ::core::convert::From<isize> for $name {
             fn from(value: isize) -> Self {
-                #[allow(clippy::cast_possible_truncation)]
-                #[allow(clippy::cast_lossless)]
-                #[allow(clippy::cast_sign_loss)]
-                $name(value as $type)
+                $name(<$type>::try_from(value).expect(concat!("Value out of range for {}", stringify!($name))))
             }
         }
     };
