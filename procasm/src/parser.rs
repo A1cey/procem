@@ -871,7 +871,7 @@ impl<W: ProcasmWord> InnerParser<'_, W, Bss> {
                 })
             }
             ImmediateLiteral::Boolean(b) => Ok(usize::from(b)),
-            ImmediateLiteral::Char(c) => Ok(c as usize),
+            ImmediateLiteral::Char(c) => Ok(usize::from(c)),
         }
     }
 }
