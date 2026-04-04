@@ -30,12 +30,8 @@ pub const GENERAL_REGISTER_COUNT: usize = 16;
 /// There are two convenience methods for incrementing and decrementing registers: [`inc`](Registers::inc) and [`dec`](Registers::dec).
 #[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, Ord, Default)]
 pub struct Registers<W> {
-    // General purpose registers.
-    general: [W; GENERAL_REGISTER_COUNT],
-    // Program counter register.
-    pc: W,
-    // Stack pointer register.
-    sp: W,
+    // General purpose registers, program counter (pc) and stack pointer (sp).
+    registers: [W; GENERAL_REGISTER_COUNT + 2],
     // Flags: carry flag (C), signed flag (S), overflow flag (V), zero condition flag (Z).
     flags: [bool; 4],
 }
@@ -45,43 +41,33 @@ impl<W: Word> Registers<W> {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            general: [W::default(); GENERAL_REGISTER_COUNT],
-            pc: W::default(),
-            sp: W::default(),
+            registers: [W::default(); GENERAL_REGISTER_COUNT + 2],
             flags: [false; 4],
         }
     }
 
     /// Get the value of a register.
     #[inline]
-    pub const fn get_reg(&self, reg: Register) -> W {
-        match reg {
-            Register::PC => self.pc,
-            Register::SP => self.sp,
-            _ => self.general[reg as usize],
-        }
+    pub fn get_reg(&self, reg: Register) -> W {
+        self.registers[usize::from(reg)]
     }
 
     /// Get the value of the program counter register.
     #[inline]
-    pub const fn pc(&self) -> W {
-        self.pc
+    pub fn pc(&self) -> W {
+        self.registers[usize::from(Register::PC)]
     }
 
     /// Get the value of the stack pointer register.
     #[inline]
-    pub const fn sp(&self) -> W {
-        self.sp
+    pub fn sp(&self) -> W {
+        self.registers[usize::from(Register::SP)]
     }
 
     /// Set the value of a register.
     #[inline]
-    pub const fn set_reg(&mut self, reg: Register, val: W) {
-        match reg {
-            Register::PC => self.pc = val,
-            Register::SP => self.sp = val,
-            _ => self.general[reg as usize] = val,
-        }
+    pub fn set_reg(&mut self, reg: Register, val: W) {
+        self.registers[usize::from(reg)] = val;
     }
 
     /// Get the value of a flag.
@@ -104,29 +90,21 @@ impl<W: Word> Registers<W> {
     /// Increment the value in a register by one.
     #[inline]
     pub fn inc(&mut self, reg: Register) {
-        match reg {
-            Register::PC => self.pc += 1.into(),
-            Register::SP => self.sp += 1.into(),
-            _ => self.general[reg as usize] += 1.into(),
-        }
+        self.registers[usize::from(reg)] += 1.into();
     }
 
     /// Decrement the value in a register by one.
     #[inline]
     pub fn dec(&mut self, reg: Register) {
-        match reg {
-            Register::PC => self.pc -= 1.into(),
-            Register::SP => self.sp -= 1.into(),
-            _ => self.general[reg as usize] -= 1.into(),
-        }
+        self.registers[usize::from(reg)] -= 1.into();
     }
 }
 
 impl<W: Word> core::fmt::Display for Registers<W> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
         write!(f, "general:\t")?;
-        writeln!(f, "{}", FmtSlice(self.general.as_slice()))?;
-        writeln!(f, "pc:\t\t{}\nsp:\t\t{}", self.pc, self.sp)?;
+        writeln!(f, "{}", FmtSlice(self.registers.as_slice()))?;
+        writeln!(f, "pc:\t\t{}\nsp:\t\t{}", self.pc(), self.sp())?;
         writeln!(
             f,
             "flags:\t\t[C: {}, S: {}, V: {}, Z: {}]",
@@ -223,6 +201,31 @@ impl TryFrom<&[u8]> for Register {
                 #[cfg(not(feature = "alloc"))]
                 RegisterError::ConversionFailed,
             ),
+        }
+    }
+}
+
+impl From<Register> for usize {
+    fn from(reg: Register) -> Self {
+        match reg {
+            Register::R0 => 0,
+            Register::R1 => 1,
+            Register::R2 => 2,
+            Register::R3 => 3,
+            Register::R4 => 4,
+            Register::R5 => 5,
+            Register::R6 => 6,
+            Register::R7 => 7,
+            Register::R8 => 8,
+            Register::R9 => 9,
+            Register::R10 => 10,
+            Register::R11 => 11,
+            Register::R12 => 12,
+            Register::R13 => 13,
+            Register::R14 => 14,
+            Register::R15 => 15,
+            Register::PC => 16,
+            Register::SP => 17,
         }
     }
 }

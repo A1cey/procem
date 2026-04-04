@@ -233,7 +233,11 @@ impl<W: ProcasmWord> Instruction<W> {
 
     /// Copy a value from an operand to a register.
     #[inline]
+<<<<<<< HEAD:procasm/src/instruction/mod.rs
     const fn mov<const MEM_SIZE: usize, Insts, Words>(
+=======
+    fn mov<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+>>>>>>> 70ae210 (Replaced casts with usize::from in register.rs):procem_default/src/instruction/mod.rs
         to: Register,
         from: Operand<W>,
         processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
@@ -287,7 +291,11 @@ impl<W: ProcasmWord> Instruction<W> {
     /// Set program pointer to value, effectively jumping to the instruction at this point in the program.
     /// The condition is checked before jumping and the jump is performed if the condition is met.
     #[inline]
+<<<<<<< HEAD:procasm/src/instruction/mod.rs
     const fn jmp<const MEM_SIZE: usize, Insts, Words>(
+=======
+    fn jmp<const STACK_SIZE: usize, P: Deref<Target = [Self]>>(
+>>>>>>> 70ae210 (Replaced casts with usize::from in register.rs):procem_default/src/instruction/mod.rs
         to: W,
         condition: JumpCondition,
         processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
