@@ -12,11 +12,7 @@ pub enum Operand<W> {
 impl<W: Word> Operand<W> {
     /// Resolve the operand to a value.
     #[inline]
-<<<<<<< HEAD:procasm/src/instruction/operand.rs
-    pub(crate) const fn resolve<const MEM_SIZE: usize, Insts, Words>(
-=======
-    pub(crate) fn resolve<const STACK_SIZE: usize, P>(
->>>>>>> 70ae210 (Replaced casts with usize::from in register.rs):procem_default/src/instruction/operand.rs
+    pub(crate) fn resolve<const MEM_SIZE: usize, Insts, Words>(
         self,
         processor: &Processor<MEM_SIZE, Instruction<W>, Insts, W, Words>,
     ) -> W {

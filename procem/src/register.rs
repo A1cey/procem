@@ -70,23 +70,6 @@ impl<W: Word> Registers<W> {
         self.registers[usize::from(reg)] = val;
     }
 
-    /// Get the value of a flag.
-    #[inline]
-    pub const fn get_flag(&self, f: Flag) -> bool {
-        match f {
-            Flag::C => self.flags[0],
-            Flag::S => self.flags[1],
-            Flag::V => self.flags[2],
-            Flag::Z => self.flags[3],
-        }
-    }
-
-    /// Set the value of a flag.
-    #[inline]
-    pub const fn set_flag(&mut self, f: Flag, val: bool) {
-        self.flags[f as usize] = val;
-    }
-
     /// Increment the value in a register by one.
     #[inline]
     pub fn inc(&mut self, reg: Register) {
@@ -97,6 +80,18 @@ impl<W: Word> Registers<W> {
     #[inline]
     pub fn dec(&mut self, reg: Register) {
         self.registers[usize::from(reg)] -= 1.into();
+    }
+
+    /// Get the value of a flag.
+    #[inline]
+    pub fn get_flag(&self, flag: Flag) -> bool {
+        self.flags[usize::from(flag)]
+    }
+
+    /// Set the value of a flag.
+    #[inline]
+    pub fn set_flag(&mut self, flag: Flag, val: bool) {
+        self.flags[usize::from(flag)] = val;
     }
 }
 
@@ -241,6 +236,17 @@ pub enum Flag {
     V,
     /// Zero condition flag. Normally set when the last arithmetic, logical or bitwise computation resulted in zero.
     Z,
+}
+
+impl From<Flag> for usize {
+    fn from(reg: Flag) -> Self {
+        match reg {
+            Flag::C => 0,
+            Flag::S => 1,
+            Flag::V => 2,
+            Flag::Z => 3,
+        }
+    }
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq, Hash)]
