@@ -3,3 +3,4 @@
  labels must be addresses into .data or .bss
 - labels allowed in mov, ldr, str as values -> mov R1, label: stores address in R1; label must be in .bss or .data 
 - Add Comment syntax
+- allow labels that start with r(0), f(alse) and t(rue)
