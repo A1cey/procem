@@ -531,7 +531,7 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
             self.unlinked_instructions
                 .push(UnlinkedInstruction::new(self.instructions.len(), *label));
             self.instructions
-                .push(Instruction::from_jump_instruction(instr, W::from(isize::MAX)));
+                .push(Instruction::from_jump_instruction(instr, <W as ProcasmWord>::max()));
         } else {
             self.add_error(ParserError::InvalidToken {
                 idx: self.idx,

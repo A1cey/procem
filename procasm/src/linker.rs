@@ -95,8 +95,8 @@ impl<'input, const MEM_SIZE: usize, W: ProcasmWord> Linker<'input, MEM_SIZE, W> 
         let init_pc = self.get_init_pc();
         let init_sp = self.get_init_sp();
         Header::new(
-            init_pc.unwrap_or_else(|| W::from(isize::MAX)),
-            init_sp.unwrap_or_else(|| W::from(isize::MAX)),
+            init_pc.unwrap_or_else(|| <W as ProcasmWord>::max()),
+            init_sp.unwrap_or_else(|| <W as ProcasmWord>::max()),
         )
     }
 
@@ -133,7 +133,7 @@ impl<'input, const MEM_SIZE: usize, W: ProcasmWord> Linker<'input, MEM_SIZE, W> 
         let Ok(init_sp) = { MEM_SIZE - 1 }.try_into() else {
             self.errors.push(LinkerError::MemorySizeToBig {
                 mem_size: MEM_SIZE,
-                max_word_value: W::from(isize::MAX).into(),
+                max_word_value: <W as ProcasmWord>::max().into(),
             });
             return None;
         };
@@ -158,7 +158,7 @@ impl<'input, const MEM_SIZE: usize, W: ProcasmWord> Linker<'input, MEM_SIZE, W> 
         } else {
             self.errors.push(LinkerError::DataToBigForBss {
                 data_size: self.parsed.data().len(),
-                max_word_value: W::from(isize::MAX).into(),
+                max_word_value: <W as ProcasmWord>::max().into(),
                 bss_size: self.parsed.bss(),
             });
             W::from(0)
@@ -169,7 +169,7 @@ impl<'input, const MEM_SIZE: usize, W: ProcasmWord> Linker<'input, MEM_SIZE, W> 
         } else {
             self.errors.push(LinkerError::BssToBig {
                 bss_size: self.parsed.data().len(),
-                max_word_value: W::from(isize::MAX).into(),
+                max_word_value: <W as ProcasmWord>::max().into(),
             });
             W::from(0)
         };

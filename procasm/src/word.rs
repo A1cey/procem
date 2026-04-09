@@ -48,6 +48,9 @@ pub trait ProcasmWord: Word {
     /// Convenience wrapper over Rust's [`rotate_right()`](i32::rotate_right()).
     #[must_use]
     fn rotate_right(&self, val: u32) -> Self;
+
+    #[must_use]
+    fn max() -> Self;
 }
 
 // Implements the ProcasmWord trait for the procem Word wrapper structs.
@@ -103,6 +106,10 @@ macro_rules! impl_word {
 
             fn rotate_right(&self, val: u32) -> Self {
                 Self::from(<$type>::rotate_right(<$type>::from(*self), val))
+            }
+
+            fn max() -> Self {
+                Self::from(<$type>::MAX)
             }
         }
     };

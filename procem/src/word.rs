@@ -106,7 +106,7 @@ macro_rules! from_isize {
     ($name: ident, $type: ty $(,)? ) => {
         impl ::core::convert::From<isize> for $name {
             fn from(value: isize) -> Self {
-                $name(<$type>::try_from(value).expect(concat!("Value out of range for {}", stringify!($name))))
+                $name(<$type>::try_from(value).expect(concat!("Value out of range for ", stringify!($name))))
             }
         }
     };
