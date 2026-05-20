@@ -30,6 +30,10 @@ pub enum Instruction<W> {
     Nop,
     /// Copy a value from the operand to the register. (MOV)
     Mov { to: Register, from: Operand<W> },
+    /// Store a value from a register to a memory location. (STR)
+    Str { from: Register, to: W },
+    /// Load a value from a memory location into a register. (LDR)
+    Ldr { from: W, to: Register },
     /// Push a value from the operand to the stack. (PUSH)
     Push { from: Operand<W> },
     /// Pop a value from the stack to the register. (POP)
@@ -109,6 +113,8 @@ impl<W: ProcasmWord> InstructionTrait<W> for Instruction<W> {
         match instruction {
             Self::Nop => (),
             Self::Mov { to, from } => Self::mov(to, from, processor),
+            Self::Str { from, to } => Self::str(from, to, processor),
+            Self::Ldr { from, to } => Self::ldr(from, to, processor),
             Self::Push { from } => Self::push(from, processor),
             Self::Pop { to } => Self::pop(to, processor),
             Self::Call { addr } => Self::call(addr, processor),
@@ -239,6 +245,28 @@ impl<W: ProcasmWord> Instruction<W> {
         processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
     ) {
         processor.registers.set_reg(to, from.resolve(processor));
+    }
+
+    /// Store a value from a register into a memory location.
+    #[inline]
+    fn str<const MEM_SIZE: usize, Insts, Words>(
+        from: Register,
+        to: W,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+    ) {
+        let val = processor.registers.get_reg(from);
+        processor.mem.write(to, val);
+    }
+
+    /// Load a value from a memory location into a register.
+    #[inline]
+    fn ldr<const MEM_SIZE: usize, Insts, Words>(
+        from: W,
+        to: Register,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+    ) {
+        let val = processor.mem.read(from);
+        processor.registers.set_reg(to, val);
     }
 
     /// Push a value from the operand to the stack.
@@ -605,6 +633,74 @@ mod test {
                 &mut processor,
             );
             assert_eq!(processor.registers.get_reg(Register::R0), 10isize.into());
+        }
+    }
+
+    mod ldr_str {
+        use super::*;
+
+        #[test]
+        fn test_str() {
+            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
+            processor.registers.set_reg(Register::R0, 42i8.into());
+
+            let _ = IS::execute(
+                Instruction::Str {
+                    from: Register::R0,
+                    to: 0i8.into(),
+                },
+                &mut processor,
+            );
+
+            assert_eq!(processor.mem.read(0i8.into()), I8::from(42i8));
+        }
+
+        #[test]
+        #[should_panic]
+        fn test_str_invalid_memory_location_panics() {
+            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
+
+            let _ = IS::execute(
+                Instruction::Str {
+                    from: Register::R0,
+                    to: (MEM_SIZE as i8).into(),
+                },
+                &mut processor,
+            );
+
+            unreachable!("Panic should happen before")
+        }
+
+        #[test]
+        fn test_ldr() {
+            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
+            processor.mem.write(0i8.into(), 42i8.into());
+
+            let _ = IS::execute(
+                Instruction::Ldr {
+                    from: 0i8.into(),
+                    to: Register::R0,
+                },
+                &mut processor,
+            );
+
+            assert_eq!(processor.registers.get_reg(Register::R0), I8::from(42i8));
+        }
+
+        #[test]
+        #[should_panic]
+        fn test_ldr_invalid_memory_location_panics() {
+            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
+
+            let _ = IS::execute(
+                Instruction::Ldr {
+                    from: (MEM_SIZE as i8).into(),
+                    to: Register::R0,
+                },
+                &mut processor,
+            );
+
+            unreachable!("Panic should happen before")
         }
     }
 
