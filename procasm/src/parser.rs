@@ -426,7 +426,6 @@ impl<'input, W: ProcasmWord, Section> InnerParser<'input, W, Section> {
                     err,
                 })
             }
-            ImmediateLiteral::Boolean(b) => Ok(W::from(isize::from(b))),
             ImmediateLiteral::Decimal(range) => {
                 let lit = String::from_utf8_lossy(&self.input[range]);
                 W::from_str_radix(&lit, 10).map_err(|err| ParserError::LiteralParsing {
@@ -473,22 +472,15 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
     fn parse_next_token(&mut self) {
         match &self.tokens.get(self.idx) {
             Some(t) => match t {
-                Token::Label(label) => {
-                    if let Some(old_instruction_idx) = self
-                        .instruction_labels
-                        .insert(&self.input[label], self.instructions.len())
+                Token::Identifier(range) => {
+                    // At the start of a new line only labels and instructions are valid identifiers
+                    if let Some(token) = self.peak_token()
+                        && *token == Token::Colon
                     {
-                        self.add_error(ParserError::DuplicateLabel {
-                            idx: self.instructions.len(),
-                            old_idx: old_instruction_idx,
-                        });
+                        self.parse_label(*range);
+                    } else {
+                        self.parse_instruction(&self.input[range]);
                     }
-                }
-                Token::LabelOrInstruction(inst) => {
-                    // Here only instructions are possible
-                    // labels need to be written "<name>:" if they are at the start of an asm line
-                    // -> Labels like this are tokenized as Label not as LabelOrInstruction.
-                    self.parse_instruction(&self.input[inst]);
                 }
                 Token::End => self.end_parsing = true,
                 token => self.add_error(ParserError::InvalidToken {
@@ -499,6 +491,19 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
             },
             None => unreachable!("self.tokens is never indexed with an invalid idx."),
         }
+    }
+
+    fn parse_label(&mut self, range: Range) {
+        if let Some(old_instruction_idx) = self
+            .instruction_labels
+            .insert(&self.input[range], self.instructions.len())
+        {
+            self.add_error(ParserError::DuplicateLabel {
+                idx: self.instructions.len(),
+                old_idx: old_instruction_idx,
+            });
+        }
+        self.idx += 1; // Skip the colon after label
     }
 
     fn parse_instruction(&mut self, instruction: &[u8]) {
@@ -523,19 +528,18 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
         }
     }
 
-    // TODO: this only works for labels defined in previous code. To fix this mark this location as needing to be linked + add a linker step to link all labels to locations
     fn expect_destination(&mut self, instr: ASMJumpInstruction) {
         self.idx += 1;
 
-        if let Some(Token::LabelOrInstruction(label)) = self.tokens.get(self.idx) {
+        if let Some(Token::Identifier(range)) = self.tokens.get(self.idx) {
             self.unlinked_instructions
-                .push(UnlinkedInstruction::new(self.instructions.len(), *label));
+                .push(UnlinkedInstruction::new(self.instructions.len(), *range));
             self.instructions
                 .push(Instruction::from_jump_instruction(instr, <W as ProcasmWord>::max()));
         } else {
             self.add_error(ParserError::InvalidToken {
                 idx: self.idx,
-                expected: "Label",
+                expected: "Identifier (Label)",
                 got: self.current_token_string(),
             });
         }
@@ -544,8 +548,8 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
     fn expect_register(&mut self) -> Result<Register, ParserError> {
         self.idx += 1; // manual, to enable borrow of self inside match
         match self.tokens.get(self.idx) {
-            Some(Token::Register(reg)) => {
-                Register::try_from(&self.input[reg]).map_err(|err| ParserError::RegisterParsing { err })
+            Some(Token::Identifier(range)) => {
+                Register::try_from(&self.input[range]).map_err(|err| ParserError::RegisterParsing { err })
             }
             _ => Err(ParserError::InvalidToken {
                 idx: self.idx,
@@ -569,13 +573,13 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
     fn expect_operand(&mut self) -> Result<Operand<W>, ParserError> {
         self.idx += 1; // manual, to enable borrow of self inside match
         match self.tokens.get(self.idx) {
-            Some(Token::Register(reg)) => Ok(Operand::Register(
-                Register::try_from(&self.input[reg]).map_err(|err| ParserError::RegisterParsing { err })?,
+            Some(Token::Identifier(range)) => Ok(Operand::Register(
+                Register::try_from(&self.input[range]).map_err(|err| ParserError::RegisterParsing { err })?,
             )),
             Some(Token::ImmediateLiteral(lit)) => Ok(Operand::Value(self.convert_lit_to_word(*lit)?)),
             _ => Err(ParserError::InvalidToken {
                 idx: self.idx,
-                expected: "Register or Literal",
+                expected: "Identifier (Register) or Literal",
                 got: self.current_token_string(),
             }),
         }
@@ -704,19 +708,20 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
 impl<W: ProcasmWord> InnerParser<'_, W, Data> {
     fn parse_next_token(&mut self) {
         match &self.tokens[self.idx] {
-            Token::Label(label) => {
-                if let Some(old_data_idx) = self.data_labels.insert(&self.input[label], self.data.len()) {
+            Token::Identifier(range) => {
+                if let Some(old_data_idx) = self.data_labels.insert(&self.input[range], self.data.len()) {
                     self.add_error(ParserError::DuplicateLabel {
                         idx: self.instructions.len(),
                         old_idx: old_data_idx,
                     });
                 }
+                self.idx += 1; // Skip colon after label
             }
             Token::Directive(directive) => self.parse_directive(&self.input[directive]),
             Token::End => self.end_parsing = true,
             token => self.add_error(ParserError::InvalidToken {
                 idx: self.idx,
-                expected: "Label or Directive",
+                expected: "Identifier (Label), Directive, or End Token",
                 got: format!("{token:?}"),
             }),
         }
@@ -789,19 +794,20 @@ impl<W: ProcasmWord> InnerParser<'_, W, Data> {
 impl<W: ProcasmWord> InnerParser<'_, W, Bss> {
     fn parse_next_token(&mut self) {
         match &self.tokens[self.idx] {
-            Token::Label(label) => {
-                if let Some(old_bss_idx) = self.bss_labels.insert(&self.input[label], self.bss) {
+            Token::Identifier(range) => {
+                if let Some(old_bss_idx) = self.bss_labels.insert(&self.input[range], self.bss) {
                     self.add_error(ParserError::DuplicateLabel {
                         idx: self.instructions.len(),
                         old_idx: old_bss_idx,
                     });
                 }
+                self.idx += 1; // Skip colon after label
             }
             Token::Directive(section) => self.parse_directive(&self.input[section]),
             Token::End => self.end_parsing = true,
             token => self.add_error(ParserError::InvalidToken {
                 idx: self.idx,
-                expected: "Label or Directive",
+                expected: "Identifier (Label), Directive, or End Token",
                 got: format!("{token:?}"),
             }),
         }
@@ -870,7 +876,6 @@ impl<W: ProcasmWord> InnerParser<'_, W, Bss> {
                     err,
                 })
             }
-            ImmediateLiteral::Boolean(b) => Ok(usize::from(b)),
             ImmediateLiteral::Char(c) => Ok(usize::from(c)),
         }
     }

@@ -77,8 +77,6 @@ fn parse_various_literals() {
             mov R1, 0b101010
             mov R2, 0x2A
             mov R3, 0o52
-            mov R4, true
-            mov R5, false
             mov R6, 'A'
         ",
     );
@@ -87,7 +85,7 @@ fn parse_various_literals() {
         Err(err) => panic!("{}", FmtSlice(&err)),
     };
 
-    assert_eq!(program.code().len(), 7);
+    assert_eq!(program.code().len(), 5);
     assert_eq!(
         program,
         Program::new(
@@ -110,15 +108,7 @@ fn parse_various_literals() {
                 Instruction::Mov {
                     to: Register::R3,
                     from: Operand::Value(42.into())
-                },
-                Instruction::Mov {
-                    to: Register::R4,
-                    from: Operand::Value(1.into())
-                },
-                Instruction::Mov {
-                    to: Register::R5,
-                    from: Operand::Value(0.into())
-                },
+                },            
                 Instruction::Mov {
                     to: Register::R6,
                     from: Operand::Value(65.into())
