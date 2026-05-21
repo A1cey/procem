@@ -12,7 +12,7 @@ pub enum Operand<W> {
 impl<W: Word> Operand<W> {
     /// Resolve the operand to a value.
     #[inline]
-    pub(crate) fn resolve<const MEM_SIZE: usize, Insts, Words>(
+    pub fn resolve<const MEM_SIZE: usize, Insts, Words>(
         self,
         processor: &Processor<MEM_SIZE, Instruction<W>, Insts, W, Words>,
     ) -> W {
