@@ -927,16 +927,18 @@ pub enum ParserError {
 
 #[cfg(test)]
 mod test {
-    use procem::word::I32;
+    use procem::{register::Register, word::I32};
 
     use crate::{
+        instruction::{Instruction, memory_location::MemoryLocation, operand::Operand},
         parser::{Parser, ParserError},
         tokenizer::Tokenizer,
+        word::ProcasmWord,
     };
 
     #[test]
     fn parse_section() {
-        let input = "
+        let input = b"
             .code
             .bss
             .data
@@ -944,8 +946,8 @@ mod test {
             .CODE
             .Invalid
             ";
-        let tokens = Tokenizer::tokenize(input.as_bytes()).unwrap();
-        let mut p = Parser::<I32>::new(&tokens, input.as_bytes());
+        let tokens = Tokenizer::tokenize(input).unwrap();
+        let mut p = Parser::<I32>::new(&tokens, input);
 
         macro_rules! check {
             ($variant:ident, $p:expr) => {
@@ -985,15 +987,15 @@ mod test {
 
     #[test]
     fn parse_bss() {
-        let input = "
+        let input = b"
             .bss
                 a:
                 .space 5
                 .space 10
                 b: .space 5, 0xA
             ";
-        let tokens = Tokenizer::tokenize(input.as_bytes()).unwrap();
-        let parsed = Parser::<I32>::parse(&tokens, input.as_bytes()).unwrap();
+        let tokens = Tokenizer::tokenize(input).unwrap();
+        let parsed = Parser::<I32>::parse(&tokens, input).unwrap();
 
         assert_eq!(parsed.instructions.len(), 0);
         assert_eq!(parsed.instruction_labels().len(), 0);
@@ -1009,7 +1011,7 @@ mod test {
 
     #[test]
     fn parse_data() {
-        let input = "
+        let input = b"
             .data
                 a:
                     .word 5
@@ -1019,8 +1021,8 @@ mod test {
                 c:
                     .word 5, 0xA
             ";
-        let tokens = Tokenizer::tokenize(input.as_bytes()).unwrap();
-        let parsed = Parser::<I32>::parse(&tokens, input.as_bytes()).unwrap();
+        let tokens = Tokenizer::tokenize(input).unwrap();
+        let parsed = Parser::<I32>::parse(&tokens, input).unwrap();
 
         assert_eq!(parsed.instructions.len(), 0);
         assert_eq!(parsed.instruction_labels().len(), 0);
@@ -1037,7 +1039,7 @@ mod test {
 
     #[test]
     fn parse_all_sections() {
-        let input = "
+        let input = b"
             .code
             a:
                 mov R1, 0
@@ -1068,8 +1070,8 @@ mod test {
                 add R1, 0o1
                 jmp c
             ";
-        let tokens = Tokenizer::tokenize(input.as_bytes()).unwrap();
-        let parsed = Parser::<I32>::parse(&tokens, input.as_bytes()).unwrap();
+        let tokens = Tokenizer::tokenize(input).unwrap();
+        let parsed = Parser::<I32>::parse(&tokens, input).unwrap();
 
         assert_eq!(parsed.instructions.len(), 6);
         assert_eq!(parsed.instruction_labels().len(), 3);
@@ -1084,5 +1086,193 @@ mod test {
         assert_eq!(parsed.data_labels()[b"d".as_slice()], 0);
         assert_eq!(parsed.data_labels()[b"e".as_slice()], 1);
         assert_eq!(parsed.bss_labels()[b"b".as_slice()], 0);
+    }
+
+    #[test]
+    fn parse_str_instr() {
+        let input = b"
+            str r0, [r1]
+            str r0, [r1, r2]
+            str r0, [r1, 5]
+            str r0, [r1, -1]
+            str r0, [r1, 0xa]
+            str r0, data
+            ";
+
+        let tokens = Tokenizer::tokenize(input).unwrap();
+        let parsed = Parser::<I32>::parse(&tokens, input).unwrap();
+
+        assert_eq!(parsed.instructions.len(), 6);
+        assert_eq!(parsed.instruction_labels().len(), 1);
+        assert_eq!(parsed.instruction_labels().keys().next().unwrap(), b"data");
+
+        let mut insts = parsed.instructions.iter();
+
+        match insts.next().unwrap() {
+            Instruction::Str { from, to } => {
+                assert_eq!(*from, Register::R0);
+                assert_eq!(
+                    *to,
+                    MemoryLocation::Offset {
+                        base: Register::R1,
+                        offset: Operand::Value(0.into())
+                    }
+                );
+            }
+            i => unreachable!("Expected Str instruction, got {i:?}"),
+        }
+        match insts.next().unwrap() {
+            Instruction::Str { from, to } => {
+                assert_eq!(*from, Register::R0);
+                assert_eq!(
+                    *to,
+                    MemoryLocation::Offset {
+                        base: Register::R1,
+                        offset: Operand::Register(Register::R2)
+                    }
+                );
+            }
+            i => unreachable!("Expected Str instruction, got {i:?}"),
+        }
+        match insts.next().unwrap() {
+            Instruction::Str { from, to } => {
+                assert_eq!(*from, Register::R0);
+                assert_eq!(
+                    *to,
+                    MemoryLocation::Offset {
+                        base: Register::R1,
+                        offset: Operand::Value(5.into())
+                    }
+                );
+            }
+            i => unreachable!("Expected Str instruction, got {i:?}"),
+        }
+        match insts.next().unwrap() {
+            Instruction::Str { from, to } => {
+                assert_eq!(*from, Register::R0);
+                assert_eq!(
+                    *to,
+                    MemoryLocation::Offset {
+                        base: Register::R1,
+                        offset: Operand::Value((-1).into())
+                    }
+                );
+            }
+            i => unreachable!("Expected Str instruction, got {i:?}"),
+        }
+        match insts.next().unwrap() {
+            Instruction::Str { from, to } => {
+                assert_eq!(*from, Register::R0);
+                assert_eq!(
+                    *to,
+                    MemoryLocation::Offset {
+                        base: Register::R1,
+                        offset: Operand::Value(10.into())
+                    }
+                );
+            }
+            i => unreachable!("Expected Str instruction, got {i:?}"),
+        }
+        match insts.next().unwrap() {
+            Instruction::Str { from, to } => {
+                assert_eq!(*from, Register::R0);
+                assert_eq!(*to, MemoryLocation::Labeled(<I32 as ProcasmWord>::max()));
+            }
+            i => unreachable!("Expected Str instruction, got {i:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_ldr_instr() {
+        let input = b"
+            ldr r0, [r1]
+            ldr r0, [r1, r2]
+            ldr r0, [r1, 5]
+            ldr r0, [r1, -1]
+            ldr r0, [r1, 0xa]
+            ldr r0, data
+            ";
+
+        let tokens = Tokenizer::tokenize(input).unwrap();
+        let parsed = Parser::<I32>::parse(&tokens, input).unwrap();
+
+        assert_eq!(parsed.instructions.len(), 6);
+        assert_eq!(parsed.instruction_labels().len(), 1);
+        assert_eq!(parsed.instruction_labels().keys().next().unwrap(), b"data");
+
+        let mut insts = parsed.instructions.iter();
+
+        match insts.next().unwrap() {
+            Instruction::Ldr { to, from } => {
+                assert_eq!(*to, Register::R0);
+                assert_eq!(
+                    *from,
+                    MemoryLocation::Offset {
+                        base: Register::R1,
+                        offset: Operand::Value(0.into())
+                    }
+                );
+            }
+            i => unreachable!("Expected Ldr instruction, got {i:?}"),
+        }
+        match insts.next().unwrap() {
+            Instruction::Ldr { to, from } => {
+                assert_eq!(*to, Register::R0);
+                assert_eq!(
+                    *from,
+                    MemoryLocation::Offset {
+                        base: Register::R1,
+                        offset: Operand::Register(Register::R2)
+                    }
+                );
+            }
+            i => unreachable!("Expected Ldr instruction, got {i:?}"),
+        }
+        match insts.next().unwrap() {
+            Instruction::Ldr { to, from } => {
+                assert_eq!(*to, Register::R0);
+                assert_eq!(
+                    *from,
+                    MemoryLocation::Offset {
+                        base: Register::R1,
+                        offset: Operand::Value(5.into())
+                    }
+                );
+            }
+            i => unreachable!("Expected Ldr instruction, got {i:?}"),
+        }
+        match insts.next().unwrap() {
+            Instruction::Ldr { to, from } => {
+                assert_eq!(*to, Register::R0);
+                assert_eq!(
+                    *from,
+                    MemoryLocation::Offset {
+                        base: Register::R1,
+                        offset: Operand::Value((-1).into())
+                    }
+                );
+            }
+            i => unreachable!("Expected Ldr instruction, got {i:?}"),
+        }
+        match insts.next().unwrap() {
+            Instruction::Ldr { to, from } => {
+                assert_eq!(*to, Register::R0);
+                assert_eq!(
+                    *from,
+                    MemoryLocation::Offset {
+                        base: Register::R1,
+                        offset: Operand::Value(10.into())
+                    }
+                );
+            }
+            i => unreachable!("Expected Ldr instruction, got {i:?}"),
+        }
+        match insts.next().unwrap() {
+            Instruction::Ldr { to, from } => {
+                assert_eq!(*to, Register::R0);
+                assert_eq!(*from, MemoryLocation::Labeled(<I32 as ProcasmWord>::max()));
+            }
+            i => unreachable!("Expected Ldr instruction, got {i:?}"),
+        }
     }
 }

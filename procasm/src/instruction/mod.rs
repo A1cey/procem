@@ -651,7 +651,7 @@ mod test {
             let _ = IS::execute(
                 Instruction::Str {
                     from: Register::R0,
-                    to: MemoryLocation::Direct(0i8.into()),
+                    to: MemoryLocation::Labeled(0i8.into()),
                 },
                 &mut processor,
             );
@@ -669,7 +669,7 @@ mod test {
             let _ = IS::execute(
                 Instruction::Str {
                     from: Register::R0,
-                    to: MemoryLocation::Indirect {
+                    to: MemoryLocation::Offset {
                         base: Register::R1,
                         offset: Operand::Value(0i8.into()),
                     },
@@ -682,7 +682,7 @@ mod test {
             let _ = IS::execute(
                 Instruction::Str {
                     from: Register::R0,
-                    to: MemoryLocation::Indirect {
+                    to: MemoryLocation::Offset {
                         base: Register::R1,
                         offset: Operand::Value((-1i8).into()),
                     },
@@ -695,7 +695,7 @@ mod test {
             let _ = IS::execute(
                 Instruction::Str {
                     from: Register::R0,
-                    to: MemoryLocation::Indirect {
+                    to: MemoryLocation::Offset {
                         base: Register::R1,
                         offset: Operand::Register(Register::R1),
                     },
@@ -713,7 +713,7 @@ mod test {
             let _ = IS::execute(
                 Instruction::Str {
                     from: Register::R0,
-                    to: MemoryLocation::Direct((MEM_SIZE as i8).into()),
+                    to: MemoryLocation::Labeled((MEM_SIZE as i8).into()),
                 },
                 &mut processor,
             );
@@ -729,7 +729,7 @@ mod test {
             let _ = IS::execute(
                 Instruction::Ldr {
                     to: Register::R0,
-                    from: MemoryLocation::Direct(0i8.into()),
+                    from: MemoryLocation::Labeled(0i8.into()),
                 },
                 &mut processor,
             );
@@ -749,7 +749,7 @@ mod test {
             let _ = IS::execute(
                 Instruction::Ldr {
                     to: Register::R0,
-                    from: MemoryLocation::Indirect {
+                    from: MemoryLocation::Offset {
                         base: Register::R1,
                         offset: Operand::Value(0i8.into()),
                     },
@@ -762,7 +762,7 @@ mod test {
             let _ = IS::execute(
                 Instruction::Ldr {
                     to: Register::R0,
-                    from: MemoryLocation::Indirect {
+                    from: MemoryLocation::Offset {
                         base: Register::R1,
                         offset: Operand::Value((-1i8).into()),
                     },
@@ -775,7 +775,7 @@ mod test {
             let _ = IS::execute(
                 Instruction::Ldr {
                     to: Register::R0,
-                    from: MemoryLocation::Indirect {
+                    from: MemoryLocation::Offset {
                         base: Register::R1,
                         offset: Operand::Register(Register::R1),
                     },
@@ -792,7 +792,7 @@ mod test {
 
             let _ = IS::execute(
                 Instruction::Ldr {
-                    from: MemoryLocation::Direct((MEM_SIZE as i8).into()),
+                    from: MemoryLocation::Labeled((MEM_SIZE as i8).into()),
                     to: Register::R0,
                 },
                 &mut processor,

@@ -7,8 +7,8 @@ use crate::{
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MemoryLocation<W> {
-    Direct(W),
-    Indirect { base: Register, offset: Operand<W> },
+    Labeled(W),
+    Offset { base: Register, offset: Operand<W> },
 }
 
 impl<W: ProcasmWord> MemoryLocation<W> {
@@ -19,8 +19,8 @@ impl<W: ProcasmWord> MemoryLocation<W> {
         processor: &Processor<MEM_SIZE, Instruction<W>, Insts, W, Words>,
     ) -> W {
         match self {
-            Self::Direct(addr) => addr,
-            Self::Indirect { base, offset } => processor.registers.get_reg(base) + offset.resolve(processor),
+            Self::Labeled(addr) => addr,
+            Self::Offset { base, offset } => processor.registers.get_reg(base) + offset.resolve(processor),
         }
     }
 }
