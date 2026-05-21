@@ -2,7 +2,7 @@
 
 use ars::fmt::slice::FmtSlice;
 use core::fmt::{Debug, Display, Formatter};
-use core::ops::{Deref, DerefMut, Index, IndexMut};
+use core::ops::{Index, IndexMut, Range};
 
 use crate::processor::ProcessorError;
 use crate::word::Word;
@@ -43,20 +43,6 @@ use crate::word::Word;
 #[repr(transparent)]
 pub struct Memory<const MEM_SIZE: usize, W>([W; MEM_SIZE]);
 
-impl<const MEM_SIZE: usize, W: Word> Deref for Memory<MEM_SIZE, W> {
-    type Target = [W; MEM_SIZE];
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<const MEM_SIZE: usize, W: Word> DerefMut for Memory<MEM_SIZE, W> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
 impl<const MEM_SIZE: usize, W: Word> Default for Memory<MEM_SIZE, W> {
     fn default() -> Self {
         Self::new()
@@ -65,7 +51,7 @@ impl<const MEM_SIZE: usize, W: Word> Default for Memory<MEM_SIZE, W> {
 
 impl<const MEM_SIZE: usize, W: Word> Display for Memory<MEM_SIZE, W> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
-        write!(f, "{}", FmtSlice(self.deref().as_slice()))
+        write!(f, "{}", FmtSlice(self.0.as_slice()))
     }
 }
 
@@ -77,7 +63,7 @@ impl<const MEM_SIZE: usize, W: Word> Index<usize> for Memory<MEM_SIZE, W> {
     /// # Panics
     /// Panics if the address is out of bounds.
     fn index(&self, addr: usize) -> &Self::Output {
-        self.get(addr).unwrap_or_else(|| {
+        self.0.get(addr).unwrap_or_else(|| {
             panic!(
                 "{}",
                 ProcessorError::OutOfBoundsMemoryAccess {
@@ -95,12 +81,50 @@ impl<const MEM_SIZE: usize, W: Word> IndexMut<usize> for Memory<MEM_SIZE, W> {
     /// # Panics
     /// Panics if the address is out of bounds.
     fn index_mut(&mut self, addr: usize) -> &mut Self::Output {
-        self.get_mut(addr).unwrap_or_else(|| {
+        self.0.get_mut(addr).unwrap_or_else(|| {
             panic!(
                 "{}",
                 ProcessorError::OutOfBoundsMemoryAccess {
                     mem_size: MEM_SIZE,
                     addr,
+                }
+            )
+        })
+    }
+}
+
+impl<const MEM_SIZE: usize, W: Word> Index<Range<usize>> for Memory<MEM_SIZE, W> {
+    type Output = [W];
+
+    /// Get a reference to the slice of memory at the provided address range.
+    ///
+    /// # Panics
+    /// Panics if the address range is out of bounds.
+    fn index(&self, addr_range: Range<usize>) -> &Self::Output {
+        self.0.get(addr_range.clone()).unwrap_or_else(|| {
+            panic!(
+                "{}",
+                ProcessorError::OutOfBoundsRangeMemoryAccess {
+                    mem_size: MEM_SIZE,
+                    addr_range,
+                }
+            )
+        })
+    }
+}
+
+impl<const MEM_SIZE: usize, W: Word> IndexMut<Range<usize>> for Memory<MEM_SIZE, W> {
+    /// Get a mutable reference to the slice of memory at the provided address range.
+    ///
+    /// # Panics
+    /// Panics if the address range is out of bounds.
+    fn index_mut(&mut self, addr_range: Range<usize>) -> &mut Self::Output {
+        self.0.get_mut(addr_range.clone()).unwrap_or_else(|| {
+            panic!(
+                "{}",
+                ProcessorError::OutOfBoundsRangeMemoryAccess {
+                    mem_size: MEM_SIZE,
+                    addr_range,
                 }
             )
         })
@@ -131,10 +155,13 @@ impl<const MEM_SIZE: usize, W: Word> Memory<MEM_SIZE, W> {
     pub fn try_read(&self, addr: W) -> Result<W, ProcessorError> {
         let addr: usize = addr.into();
 
-        self.get(addr).copied().ok_or(ProcessorError::OutOfBoundsMemoryAccess {
-            mem_size: MEM_SIZE,
-            addr,
-        })
+        self.0
+            .get(addr)
+            .copied()
+            .ok_or(ProcessorError::OutOfBoundsMemoryAccess {
+                mem_size: MEM_SIZE,
+                addr,
+            })
     }
 
     /// Read a value from the memory at the given address, without doing bounds checking.
@@ -145,7 +172,7 @@ impl<const MEM_SIZE: usize, W: Word> Memory<MEM_SIZE, W> {
     /// Calling this method with an out-of-bounds address value is undefined behavior.
     pub unsafe fn read_unchecked(&self, addr: W) -> W {
         // SAFETY: The caller must uphold safety and provide an in-bounds address value.
-        *unsafe { self.get_unchecked(addr.into()) }
+        *unsafe { self.0.get_unchecked(addr.into()) }
     }
 
     /// Write a value to memory at the given address.
@@ -165,7 +192,7 @@ impl<const MEM_SIZE: usize, W: Word> Memory<MEM_SIZE, W> {
     pub fn try_write(&mut self, addr: W, value: W) -> Result<(), ProcessorError> {
         let addr: usize = addr.into();
 
-        *self.get_mut(addr).ok_or(ProcessorError::OutOfBoundsMemoryAccess {
+        *self.0.get_mut(addr).ok_or(ProcessorError::OutOfBoundsMemoryAccess {
             mem_size: MEM_SIZE,
             addr,
         })? = value;
@@ -181,6 +208,6 @@ impl<const MEM_SIZE: usize, W: Word> Memory<MEM_SIZE, W> {
     /// Calling this method with an out-of-bounds address value is undefined behavior.
     pub unsafe fn write_unchecked(&mut self, addr: W, value: W) {
         // SAFETY: The caller must uphold safety and provide an in-bounds address value.
-        *unsafe { self.get_unchecked_mut(addr.into()) } = value;
+        *unsafe { self.0.get_unchecked_mut(addr.into()) } = value;
     }
 }

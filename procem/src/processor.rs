@@ -1,6 +1,6 @@
 //! The [`Processor`] and [`ProcessorBuilder`] structs.
 use core::fmt::{Display, Formatter};
-use core::ops::Deref;
+use core::ops::{Deref, Range};
 
 use thiserror::Error;
 
@@ -81,7 +81,7 @@ where
             Some(program) => {
                 let base_addr = program.data().base_addr().into();
                 let data = program.data().data();
-                self.mem.as_mut_slice()[base_addr..data.len()].clone_from_slice(data);
+                self.mem[base_addr..data.len()].clone_from_slice(data);
             }
             None => unreachable!("This function is only called after program is loaded into processor."),
         }
@@ -93,7 +93,7 @@ where
             Some(program) => {
                 let base_addr = program.bss().base_addr().into();
                 let end_addr = program.bss().end_addr().into();
-                self.mem.as_mut_slice()[base_addr..end_addr + 1].fill(W::from(0));
+                self.mem[base_addr..end_addr + 1].fill(W::from(0));
             }
             None => unreachable!("This function is only called after program is loaded into processor."),
         }
@@ -223,4 +223,6 @@ pub enum ProcessorError {
     NoProgramLoaded,
     #[error("Out of bounds memory access. Memory size: {mem_size}, Accessed address: {addr}")]
     OutOfBoundsMemoryAccess { mem_size: usize, addr: usize },
+    #[error("Out of bounds memory access. Memory size: {mem_size}, Accessed addresses: {addr_range:?}")]
+    OutOfBoundsRangeMemoryAccess { mem_size: usize, addr_range: Range<usize> },
 }
