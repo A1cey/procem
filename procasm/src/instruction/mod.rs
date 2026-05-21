@@ -4,6 +4,7 @@ pub mod operand;
 pub mod unlinked;
 
 use core::cmp::Ordering;
+use std::mem::offset_of;
 // TODO: Stack grows down not up
 use procem::{
     instruction::Instruction as InstructionTrait,
@@ -23,6 +24,26 @@ use crate::{
     word::ProcasmWord,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum MemoryLocation<W> {
+    Direct(W),
+    Indirect { base: Register, offset: Operand<W> },
+}
+
+impl<W: ProcasmWord> MemoryLocation<W> {
+    /// Resolve the memory location to a value.
+    #[inline]
+    pub(crate) fn resolve<const MEM_SIZE: usize, Insts, Words>(
+        self,
+        processor: &Processor<MEM_SIZE, Instruction<W>, Insts, W, Words>,
+    ) -> W {
+        match self {
+            Self::Direct(addr) => addr,
+            Self::Indirect { base, offset } => processor.registers.get_reg(base) + offset.resolve(processor),
+        }
+    }
+}
+
 /// A default instruction set implementation, that can be used for the [procem](../../procem/index.html) crate.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Hash)]
 pub enum Instruction<W> {
@@ -31,9 +52,9 @@ pub enum Instruction<W> {
     /// Copy a value from the operand to the register. (MOV)
     Mov { to: Register, from: Operand<W> },
     /// Store a value from a register to a memory location. (STR)
-    Str { from: Register, to: W },
+    Str { from: Register, to: MemoryLocation<W> },
     /// Load a value from a memory location into a register. (LDR)
-    Ldr { from: W, to: Register },
+    Ldr { to: Register, from: MemoryLocation<W> },
     /// Push a value from the operand to the stack. (PUSH)
     Push { from: Operand<W> },
     /// Pop a value from the stack to the register. (POP)
@@ -114,7 +135,7 @@ impl<W: ProcasmWord> InstructionTrait<W> for Instruction<W> {
             Self::Nop => (),
             Self::Mov { to, from } => Self::mov(to, from, processor),
             Self::Str { from, to } => Self::str(from, to, processor),
-            Self::Ldr { from, to } => Self::ldr(from, to, processor),
+            Self::Ldr { to, from } => Self::ldr(to, from, processor),
             Self::Push { from } => Self::push(from, processor),
             Self::Pop { to } => Self::pop(to, processor),
             Self::Call { addr } => Self::call(addr, processor),
@@ -251,21 +272,23 @@ impl<W: ProcasmWord> Instruction<W> {
     #[inline]
     fn str<const MEM_SIZE: usize, Insts, Words>(
         from: Register,
-        to: W,
+        to: MemoryLocation<W>,
         processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
     ) {
+        let to_addr = to.resolve(processor);
         let val = processor.registers.get_reg(from);
-        processor.mem.write(to, val);
+        processor.mem.write(to_addr, val);
     }
 
     /// Load a value from a memory location into a register.
     #[inline]
     fn ldr<const MEM_SIZE: usize, Insts, Words>(
-        from: W,
         to: Register,
+        from: MemoryLocation<W>,
         processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
     ) {
-        let val = processor.mem.read(from);
+        let from_addr = from.resolve(processor);
+        let val = processor.mem.read(from_addr);
         processor.registers.set_reg(to, val);
     }
 
@@ -640,19 +663,65 @@ mod test {
         use super::*;
 
         #[test]
-        fn test_str() {
+        fn test_str_direct_mem_location() {
             let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
             processor.registers.set_reg(Register::R0, 42i8.into());
 
             let _ = IS::execute(
                 Instruction::Str {
                     from: Register::R0,
-                    to: 0i8.into(),
+                    to: MemoryLocation::Direct(0i8.into()),
                 },
                 &mut processor,
             );
 
             assert_eq!(processor.mem.read(0i8.into()), I8::from(42i8));
+        }
+
+        #[test]
+        fn test_str_indirect_mem_location() {
+            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
+            processor.registers.set_reg(Register::R0, 42i8.into());
+            processor.registers.set_reg(Register::R1, 1i8.into());
+
+            // Positive value offset
+            let _ = IS::execute(
+                Instruction::Str {
+                    from: Register::R0,
+                    to: MemoryLocation::Indirect {
+                        base: Register::R1,
+                        offset: Operand::Value(0i8.into()),
+                    },
+                },
+                &mut processor,
+            );
+            assert_eq!(processor.mem.read(1i8.into()), I8::from(42i8));
+
+            // Negative value offset
+            let _ = IS::execute(
+                Instruction::Str {
+                    from: Register::R0,
+                    to: MemoryLocation::Indirect {
+                        base: Register::R1,
+                        offset: Operand::Value((-1i8).into()),
+                    },
+                },
+                &mut processor,
+            );
+            assert_eq!(processor.mem.read(0i8.into()), I8::from(42i8));
+
+            // Register offset
+            let _ = IS::execute(
+                Instruction::Str {
+                    from: Register::R0,
+                    to: MemoryLocation::Indirect {
+                        base: Register::R1,
+                        offset: Operand::Register(Register::R1),
+                    },
+                },
+                &mut processor,
+            );
+            assert_eq!(processor.mem.read(2i8.into()), I8::from(42i8));
         }
 
         #[test]
@@ -663,7 +732,7 @@ mod test {
             let _ = IS::execute(
                 Instruction::Str {
                     from: Register::R0,
-                    to: (MEM_SIZE as i8).into(),
+                    to: MemoryLocation::Direct((MEM_SIZE as i8).into()),
                 },
                 &mut processor,
             );
@@ -672,19 +741,67 @@ mod test {
         }
 
         #[test]
-        fn test_ldr() {
+        fn test_ldr_direct_mem_location() {
             let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
             processor.mem.write(0i8.into(), 42i8.into());
 
             let _ = IS::execute(
                 Instruction::Ldr {
-                    from: 0i8.into(),
                     to: Register::R0,
+                    from: MemoryLocation::Direct(0i8.into()),
                 },
                 &mut processor,
             );
 
             assert_eq!(processor.registers.get_reg(Register::R0), I8::from(42i8));
+        }
+
+        #[test]
+        fn test_ldr_indirect_mem_location() {
+            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
+            processor.registers.set_reg(Register::R1, 1i8.into());
+            processor.mem.write(0i8.into(), 42i8.into());
+            processor.mem.write(1i8.into(), 43i8.into());
+            processor.mem.write(2i8.into(), 44i8.into());
+
+            // Positive value offset
+            let _ = IS::execute(
+                Instruction::Ldr {
+                    to: Register::R0,
+                    from: MemoryLocation::Indirect {
+                        base: Register::R1,
+                        offset: Operand::Value(0i8.into()),
+                    },
+                },
+                &mut processor,
+            );
+            assert_eq!(processor.registers.get_reg(Register::R0), I8::from(43i8));
+
+            // Negative value offset
+            let _ = IS::execute(
+                Instruction::Ldr {
+                    to: Register::R0,
+                    from: MemoryLocation::Indirect {
+                        base: Register::R1,
+                        offset: Operand::Value((-1i8).into()),
+                    },
+                },
+                &mut processor,
+            );
+            assert_eq!(processor.registers.get_reg(Register::R0), I8::from(42i8));
+
+            // Register offset
+            let _ = IS::execute(
+                Instruction::Ldr {
+                    to: Register::R0,
+                    from: MemoryLocation::Indirect {
+                        base: Register::R1,
+                        offset: Operand::Register(Register::R1),
+                    },
+                },
+                &mut processor,
+            );
+            assert_eq!(processor.registers.get_reg(Register::R0), I8::from(44i8));
         }
 
         #[test]
@@ -694,7 +811,7 @@ mod test {
 
             let _ = IS::execute(
                 Instruction::Ldr {
-                    from: (MEM_SIZE as i8).into(),
+                    from: MemoryLocation::Direct((MEM_SIZE as i8).into()),
                     to: Register::R0,
                 },
                 &mut processor,
