@@ -164,6 +164,13 @@ Jump to the label if the zero flag (Z) is set.
 
 `JZ` `<LABEL>`
 
+#### **LDR**
+
+Load a value from a memory location into a register.
+The memory location can either be a label or the value inside of a register + an optional offset (register or immediate literal).
+
+`LDR` `<REG>` `,` (`<LABEL>` | `[` `<REG>` \[`,` `<OP>`\] `]`)
+
 #### **MOV**
 
 Copy a value from the operand to the register.
@@ -235,6 +242,13 @@ Shift the value in the register left by the specified number of bits. Only use v
 Shift the value in the register right by the specified number of bits. Only use values between 1 and the number of bits of the Word size minus 1.
 
 `SHR` `<REG>` `,` `<LIT>`
+
+#### **STR**
+
+Store a value from a register into a memory location.
+The memory location can either be a label or the value inside of a register + an optional offset (register or immediate literal).
+
+`STR` `<REG>` `,` (`<LABEL>` | `[` `<REG>` \[`,` `<OP>`\] `]`)
 
 #### **SUB**
 
