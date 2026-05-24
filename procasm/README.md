@@ -6,9 +6,9 @@
 
 ### Syntax
 
-All assembly is interpreted as ASCII. 
-All instructions can be written in mixed case.
-All operations that can be suffixed with an 'S', set the flag registers depending on the operation.
+All assembly is interpreted as ASCII.
+All instructions, registers and immediate values can be written in mixed case.
+All operations that can be suffixed with an 'S' set the flag registers depending on the operation.
 
 - *Labels* (**\<LABEL>**) are used to mark specific locations in the program. They are denoted by a string of alphanumeric or underscore ('_') or dash ('-') characters followed by a colon (':') (e.g., 'label:'). Labels are case-sensitive.
 - *Registers* (**\<REG>**) must be a valid register name (e.g., 'R0', 'r1', 'R2', 'PC', 'sp').
@@ -43,7 +43,7 @@ All operations that can be suffixed with an 'S', set the flag registers dependin
 
 Use *.word* or *.ascii* followed by a *Literal* to declare data in the *.data* section. To declare an array of data multiple literals divided by spaces can be used.
 
-Example: 
+Example:
 ```
 .data
   .word 10, 20, 30, 40, 50
@@ -56,40 +56,201 @@ Use *.space* followed by a numeric *Literal* (Decimal, Octal, Hexadecimal, Binar
 
 ### Operations
 
-- **NOP**: No operation.
-- **MOV \<REG>, \<OP>**: Copy a value from the operand to the register.
-- **PUSH \<OP>**: Push a value from the operand to the stack.
-- **POP \<REG>**: Pop a value from the stack to the register.
-- **CALL \<OP>**: Call a subroutine at the program address specified by the operand. Pushes the current program counter onto the stack and sets the program counter to the address of the subroutine.
-- **RET**: Return from a subroutine. Pops the return address from the stack and sets the program counter to the popped value.
-- **ADD\[S] \<REG>, \<OP>**: Add the value of the operand to the register. The result is stored in the register.
-- **SUB\[S] \<REG>, \<OP>**: Subtract the value of the operand from the register. The result is stored in the register.
-- **MUL\[S] \<REG>, \<OP>**: Multiply the value of the operand with the value of the register. The result is stored in the register.
-- **DIV\[S] \<REG>, \<OP>**: Divide the value of the register by the value of the operand. The result is stored in the register.
-- **INC\[S] \<REG>**: Increment the value in a register by one.
-- **DEC\[S] \<REG>**: Decrement the value in a register by one.
-- **JMP \<LABEL>**: Set program counter to the address of the label (first instruction after the label), effectively jumping to the instruction at this point in the program.
-- **JZ \<LABEL>**: Jump to the label if the zero flag (Z) is set.
-- **JNZ \<LABEL>**: Jump to the label if the zero flag (Z) is not set.
-- **JC \<LABEL>**: Jump to the label if the carry flag (C) is set.
-- **JNC \<LABEL>**: Jump to the label if the carry flag (C) is not set.
-- **JS \<LABEL>**: Jump to the label if the signed flag (S) is set.
-- **JNS \<LABEL>**: Jump to the label if the signed flag (S) is not set.
-- **JG \<LABEL>**: Jump to the label if the zero flag (Z) and signed flag (S) are not set.
-- **JGE \<LABEL>**: Jump to the label if the zero flag (Z) is set or signed flag (S) is not set.
-- **JL \<LABEL>**: Jump to the label if the zero flag (Z) is not set and the signed flag (S) is set.
-- **JLE \<LABEL>**: Jump to the label if the zero flag (Z) or signed flag (S) is set.
-- **CMP \<OP>, \<OP>**: Compare the values of two operands and set the flags accordingly. This is the same as `SUBS` but disregards the result of the subtraction.
-- **XOR \<REG>, \<OP>**: Perform a bitwise xor operation on the value in the register with the value of the operand.
-- **AND \<REG>, \<OP>**: Perform a bitwise and operation on the value in the register with the value of the operand.
-- **OR \<REG>, \<OP>**: Perform a bitwise or operation on the value in the register with the value of the operand.
-- **NOT \<REG>**: Perform a bitwise not operation on the value in the register.
-- **SHL \<REG>, \<LIT>**: Shift the value in the register left by the specified number of bits. Only use values between 1 and the number of bits of the Word size minus 1.
-- **SHR \<REG>, \<LIT>**: Shift the value in the register right by the specified number of bits. Only use values between 1 and the number of bits of the Word size minus 1.
-- **ROL \<REG>, \<LIT>**: Rotate the value in the register left by the specified number of bits. Only use values between 1 and the number of bits of the Word size minus 1.
-- **ROR \<REG>, \<LIT>**: Rotate the value in the register right by the specified number of bits. Only use values between 1 and the number of bits of the Word size minus 1.
+#### **ADD**
 
-### Usage
+Add the value of the operand to the register. The result is stored in the register.
+
+`ADD`\[`S`\] `<REG>` `,` `<OP>`
+
+#### **AND**
+
+Perform a bitwise and operation on the value in the register with the value of the operand.
+
+`AND` `<REG>` `,` `<OP>`
+
+#### **CALL**
+
+Call a subroutine at the program address specified by the operand. Pushes the current program counter onto the stack and sets the program counter to the address of the subroutine.
+
+`CALL` `<OP>`
+
+#### **CMP**
+
+Compare the values of two operands and set the flags accordingly. This is the same as [SUBS](#sub) but disregards the result of the subtraction.
+
+`CMP` `<OP>` `,` `<OP>`
+
+#### **DEC**
+
+Decrement the value in a register by one.
+
+`DEC`\[`S`\] `<REG>`
+
+#### **DIV**
+
+Divide the value of the register by the value of the operand. The result is stored in the register.
+
+`DIV`\[`S`\] `<REG>` `,` `<OP>`
+
+#### **INC**
+
+Increment the value in a register by one.
+
+`INC`\[`S`\] `<REG>`
+
+#### **JC**
+
+Jump to the label if the carry flag (C) is set.
+
+`JC` `<LABEL>`
+
+#### **JG**
+
+Jump to the label if the zero flag (Z) and signed flag (S) are not set.
+
+`JG` `<LABEL>`
+
+#### **JGE**
+
+Jump to the label if the zero flag (Z) is set or signed flag (S) is not set.
+
+`JGE` `<LABEL>`
+
+#### **JL**
+
+Jump to the label if the zero flag (Z) is not set and the signed flag (S) is set.
+
+`JL` `<LABEL>`
+
+#### **JLE**
+
+Jump to the label if the zero flag (Z) or signed flag (S) is set.
+
+`JLE` `<LABEL>`
+
+#### **JMP**
+
+Set program counter to the address of the label (first instruction after the label), effectively jumping to the instruction at this point in the program.
+
+`JMP` `<LABEL>`
+
+#### **JNC**
+
+Jump to the label if the carry flag (C) is not set.
+
+`JNC` `<LABEL>`
+
+#### **JNS**
+
+Jump to the label if the signed flag (S) is not set.
+
+`JN` `<LABEL>`
+
+#### **JNZ**
+
+Jump to the label if the zero flag (Z) is not set.
+
+`JNZ` `<LABEL>`
+
+#### **JS**
+
+Jump to the label if the signed flag (S) is set.
+
+`JS` `<LABEL>`
+
+#### **JZ**
+
+Jump to the label if the zero flag (Z) is set.
+
+`JZ` `<LABEL>`
+
+#### **MOV**
+
+Copy a value from the operand to the register.
+
+`MOV` `<REG>` `,` `<OP>`
+
+#### **MUL**
+
+Multiply the value of the operand with the value of the register. The result is stored in the register.
+
+`MUL`\[`S`\] `<REG>` `,` `<OP>`
+
+#### **NOP**
+
+No operation.
+
+`NOP`
+
+#### **NOT**
+
+Perform a bitwise not operation on the value in the register.
+
+`NOT` `<REG>`
+
+#### **OR**
+
+Perform a bitwise or operation on the value in the register with the value of the operand.
+
+`OR` `<REG>` `,` `<OP>`
+
+#### **POP**
+
+Pop a value from the stack to the register.
+
+`POP` `<REG>`
+
+#### **PUSH**
+
+Push a value from the operand to the stack.
+
+`PUSH` `<OP>`
+
+#### **RET**
+
+Return from a subroutine. Pops the return address from the stack and sets the program counter to the popped value.
+
+`RET`
+
+#### **ROL**
+
+Rotate the value in the register left by the specified number of bits. Only use values between 1 and the number of bits of the Word size minus 1.
+
+`ROL` `<REG>` `,` `<LIT>`
+
+#### **ROR**
+
+Rotate the value in the register right by the specified number of bits. Only use values between 1 and the number of bits of the Word size minus 1.
+
+`ROR` `<REG>` `,` `<LIT>`
+
+#### **SHL**
+
+Shift the value in the register left by the specified number of bits. Only use values between 1 and the number of bits of the Word size minus 1.
+
+`SHL` `<REG>` `,` `<LIT>`
+
+#### **SHR**
+
+Shift the value in the register right by the specified number of bits. Only use values between 1 and the number of bits of the Word size minus 1.
+
+`SHR` `<REG>` `,` `<LIT>`
+
+#### **SUB**
+
+Subtract the value of the operand from the register. The result is stored in the register.
+
+`SUB`\[`S`\] `<REG>` `,` `<OP>`
+
+#### **XOR**
+
+Perform a bitwise xor operation on the value in the register with the value of the operand.
+
+`XOR` `<REG>` `,` `<OP>`
+
+
+## Usage
+
 To assemble a program from assembly code use the **assemble** function.
 
 ### Example
@@ -123,7 +284,3 @@ let _ = processor.run_program();
 assert_eq!(processor.registers.get_reg(Register::R0), 6.into());
 ```
 
-## TODO
-
-- stack direction + stack start + initial sp value definition
-- initial pc value definition (_start label requirement)
