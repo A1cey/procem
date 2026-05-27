@@ -68,6 +68,12 @@ pub enum ASMTwoOperandInstruction {
     Cmp,
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
+pub enum ASMLoadOrStoreInstruction {
+    Ldr,
+    Str,
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Hash)]
 pub enum ASMInstruction {
     Jump(ASMJumpInstruction),
@@ -78,6 +84,7 @@ pub enum ASMInstruction {
     SingleOperand(ASMSingleOperandInstruction),
     SingleReg(ASMSingleRegInstruction),
     TwoOperand(ASMTwoOperandInstruction),
+    LoadOrStore(ASMLoadOrStoreInstruction),
 }
 
 impl TryFrom<&[u8]> for ASMInstruction {

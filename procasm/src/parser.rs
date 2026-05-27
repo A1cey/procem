@@ -1,9 +1,10 @@
 use core::num::ParseIntError;
 use std::{collections::HashMap, marker::PhantomData, num::TryFromIntError};
 
-use procem::register::{Register, RegisterError};
+use procem::register::{self, Register, RegisterError};
 use thiserror::Error;
 
+use crate::instruction::asm_instruction::ASMLoadOrStoreInstruction;
 use crate::instruction::operand::Operand;
 use crate::instruction::{Instruction, asm_instruction::ASMNoArgInstruction};
 use crate::instruction::{
@@ -520,6 +521,7 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
                 ASMInstruction::SingleReg(inst) => self.expect_single_reg_instruction(inst),
                 ASMInstruction::Rotate(inst) => self.expect_rotate_instruction(inst),
                 ASMInstruction::Shift(inst) => self.expect_shift_instruction(inst),
+                ASMInstruction::LoadOrStore(inst) => self.expect_load_or_store_instruction(inst),
             },
             Err(()) => self.add_error(ParserError::UnknownInstruction {
                 idx: self.idx,
@@ -702,6 +704,33 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
 
         self.instructions
             .push(Instruction::from_rotate_instruction(instr, register, literal));
+    }
+
+    fn expect_load_or_store_instruction(&mut self, instr: ASMLoadOrStoreInstruction) {
+        let register = match self.expect_register() {
+            Ok(reg) => reg,
+            Err(err) => return self.add_error(err),
+        };
+
+        if let Err(err) = self.expect_immediate_literal() {
+            return self.add_error(err);
+        }
+
+        match self.get_next() {
+            Some(token) => match token {
+                Token::Identifier(range) => todo!("this is a label"),
+                Token::OpenBracket => todo!("expect [reg, offset]"),
+                _ => {
+                    return self.add_error(ParserError::InvalidToken {
+                        idx: self.idx,
+                        expected: "Label or Memory Location",
+                        got: self.current_token_string(),
+                    });
+                }
+            },
+
+            None => return self.add_error(ParserError::TokenNotFound { idx: self.idx }),
+        }
     }
 }
 

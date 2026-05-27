@@ -5,7 +5,6 @@ pub mod operand;
 pub mod unlinked;
 
 use core::cmp::Ordering;
-// TODO: Stack grows down not up
 use procem::{
     instruction::Instruction as InstructionTrait,
     processor::Processor,
@@ -15,8 +14,8 @@ use procem::{
 use crate::{
     instruction::{
         asm_instruction::{
-            ASMJumpInstruction, ASMRegOperandInstruction, ASMRotateInstruction, ASMShiftInstruction,
-            ASMSingleOperandInstruction, ASMSingleRegInstruction, ASMTwoOperandInstruction,
+            ASMJumpInstruction, ASMLoadOrStoreInstruction, ASMRegOperandInstruction, ASMRotateInstruction,
+            ASMShiftInstruction, ASMSingleOperandInstruction, ASMSingleRegInstruction, ASMTwoOperandInstruction,
         },
         jump_condition::JumpCondition,
         memory_location::MemoryLocation,
@@ -239,6 +238,24 @@ impl<W: ProcasmWord> Instruction<W> {
         Self::Jump { to: dest, condition }
     }
 
+    pub(crate) const fn from_load_or_store_instruction(
+        instr: ASMLoadOrStoreInstruction,
+        reg: Register,
+        mem_location: MemoryLocation<W>,
+    ) -> Self {
+        use ASMLoadOrStoreInstruction::{Ldr, Str};
+
+        match instr {
+            Ldr => Self::Ldr {
+                to: reg,
+                from: mem_location,
+            },
+            Str => Self::Str {
+                from: reg,
+                to: mem_location,
+            },
+        }
+    }
     /// Copy a value from an operand to a register.
     #[inline]
     fn mov<const MEM_SIZE: usize, Insts, Words>(

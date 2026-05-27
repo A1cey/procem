@@ -1,12 +1,13 @@
 use ars::fmt::slice::FmtSlice;
-use procem::{
-    processor::Processor,
-    program::{Bss, Code, Data, Header, Program},
-    register::Register, word::I32,
-};
 use procasm::{
     AssembledProgram, assemble,
     instruction::{Instruction, jump_condition::JumpCondition, operand::Operand},
+};
+use procem::{
+    processor::Processor,
+    program::{Bss, Code, Data, Header, Program},
+    register::Register,
+    word::I32,
 };
 
 #[test]
@@ -108,7 +109,7 @@ fn parse_various_literals() {
                 Instruction::Mov {
                     to: Register::R3,
                     from: Operand::Value(42.into())
-                },            
+                },
                 Instruction::Mov {
                     to: Register::R6,
                     from: Operand::Value(65.into())
@@ -216,9 +217,7 @@ fn factorial_program() {
         Err(err) => panic!("{}", FmtSlice(&err)),
     };
 
-    let mut processor = Processor::builder()
-        .with_program(&program)
-        .build();
+    let mut processor = Processor::builder().with_program(&program).build();
 
     let _ = processor.run_program();
     assert_eq!(processor.registers.get_reg(Register::R1), 120.into());
