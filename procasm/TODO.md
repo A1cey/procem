@@ -1,5 +1,5 @@
 - Load/store values:
-  - ldr/str <Register> [<Register>(, <Register>|<ImmediateValue>)]|<Label>
+  - ldr/str <Register>, [<Register>(, <Register>|<ImmediateValue>)]|<Label>
   - immediate value in register-^ interpreted as address (+ offset from value behind comma)
   - label location is stored  
   - to load data from label first store label in register, then use this register in str/ldr

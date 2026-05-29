@@ -5,6 +5,7 @@ use procem::register::{self, Register, RegisterError};
 use thiserror::Error;
 
 use crate::instruction::asm_instruction::ASMLoadOrStoreInstruction;
+use crate::instruction::memory_location::{self, MemoryLocation};
 use crate::instruction::operand::Operand;
 use crate::instruction::{Instruction, asm_instruction::ASMNoArgInstruction};
 use crate::instruction::{
@@ -30,6 +31,7 @@ pub(crate) struct Parsed<'input, W> {
 }
 
 impl<W> Parsed<'_, W> {
+    // Returns vec because linker uses size attribute
     #[inline]
     #[must_use]
     pub(crate) const fn mut_instructions(&mut self) -> &mut Vec<Instruction<W>> {
@@ -42,10 +44,17 @@ impl<W> Parsed<'_, W> {
         &self.instruction_labels
     }
 
+    // Returns vec because linker uses the size attribute
     #[inline]
     #[must_use]
     pub(crate) const fn mut_unlinked_instructions(&mut self) -> &mut Vec<UnlinkedInstruction> {
         &mut self.unlinked_instructions
+    }
+
+    #[inline]
+    #[must_use]
+    pub(crate) fn unlinked_instructions(&self) -> &[UnlinkedInstruction] {
+        &self.unlinked_instructions
     }
 
     #[inline]
@@ -712,14 +721,17 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
             Err(err) => return self.add_error(err),
         };
 
-        if let Err(err) = self.expect_immediate_literal() {
+        if let Err(err) = self.expect_comma() {
             return self.add_error(err);
         }
 
-        match self.get_next() {
-            Some(token) => match token {
-                Token::Identifier(range) => todo!("this is a label"),
-                Token::OpenBracket => todo!("expect [reg, offset]"),
+        let mem_location = match self.get_next() {
+            Some(token) => match token.clone() {
+                Token::Identifier(range) => self.expect_label_mem_location(range),
+                Token::OpenBracket => match self.expect_direct_mem_location() {
+                    Ok(memory_location) => memory_location,
+                    Err(err) => return self.add_error(err),
+                },
                 _ => {
                     return self.add_error(ParserError::InvalidToken {
                         idx: self.idx,
@@ -730,6 +742,48 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
             },
 
             None => return self.add_error(ParserError::TokenNotFound { idx: self.idx }),
+        };
+
+        let instr = match instr {
+            ASMLoadOrStoreInstruction::Ldr => Instruction::Ldr {
+                to: register,
+                from: mem_location,
+            },
+            ASMLoadOrStoreInstruction::Str => Instruction::Str {
+                from: register,
+                to: mem_location,
+            },
+        };
+
+        self.instructions.push(instr);
+    }
+
+    fn expect_label_mem_location(&mut self, range: Range) -> MemoryLocation<W> {
+        self.unlinked_instructions
+            .push(UnlinkedInstruction::new(self.instructions.len(), range));
+        MemoryLocation::Labeled(<W as ProcasmWord>::max())
+    }
+
+    fn expect_direct_mem_location(&mut self) -> Result<MemoryLocation<W>, ParserError> {
+        let base = self.expect_register()?;
+
+        let offset = if let Some(Token::Comma) = self.peak_token() {
+            self.idx += 1; // skip comma
+            self.expect_operand()?
+        } else {
+            Operand::Value(W::from(0))
+        };
+
+        match self.get_next() {
+            Some(token) => match token {
+                Token::ClosedBracket => Ok(MemoryLocation::Offset { base, offset }),
+                _ => Err(ParserError::InvalidToken {
+                    idx: self.idx,
+                    expected: "Closed Bracket",
+                    got: self.current_token_string(),
+                }),
+            },
+            None => Err(ParserError::TokenNotFound { idx: self.idx }),
         }
     }
 }
@@ -1054,7 +1108,7 @@ mod test {
         let parsed = Parser::<I32>::parse(&tokens, input).unwrap();
 
         assert_eq!(parsed.instructions.len(), 0);
-        assert_eq!(parsed.instruction_labels().len(), 0);
+        assert_eq!(parsed.unlinked_instructions().len(), 0);
         assert_eq!(parsed.bss(), 0);
         assert_eq!(parsed.bss_labels().len(), 0);
 
@@ -1120,6 +1174,7 @@ mod test {
     #[test]
     fn parse_str_instr() {
         let input = b"
+            .code
             str r0, [r1]
             str r0, [r1, r2]
             str r0, [r1, 5]
@@ -1132,8 +1187,8 @@ mod test {
         let parsed = Parser::<I32>::parse(&tokens, input).unwrap();
 
         assert_eq!(parsed.instructions.len(), 6);
-        assert_eq!(parsed.instruction_labels().len(), 1);
-        assert_eq!(parsed.instruction_labels().keys().next().unwrap(), b"data");
+        assert_eq!(parsed.unlinked_instructions().len(), 1);
+        assert_eq!(&input[parsed.unlinked_instructions()[0].label()], b"data".as_slice());
 
         let mut insts = parsed.instructions.iter();
 
@@ -1214,6 +1269,7 @@ mod test {
     #[test]
     fn parse_ldr_instr() {
         let input = b"
+            .code
             ldr r0, [r1]
             ldr r0, [r1, r2]
             ldr r0, [r1, 5]
@@ -1226,8 +1282,8 @@ mod test {
         let parsed = Parser::<I32>::parse(&tokens, input).unwrap();
 
         assert_eq!(parsed.instructions.len(), 6);
-        assert_eq!(parsed.instruction_labels().len(), 1);
-        assert_eq!(parsed.instruction_labels().keys().next().unwrap(), b"data");
+        assert_eq!(parsed.unlinked_instructions().len(), 1);
+        assert_eq!(&input[parsed.unlinked_instructions()[0].label()], b"data".as_slice());
 
         let mut insts = parsed.instructions.iter();
 
