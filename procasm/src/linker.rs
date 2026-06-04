@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use crate::{
     AssembledProgram,
-    instruction::{Instruction, unlinked::UnlinkedInstruction},
+    instruction::{Instruction, memory_location::MemoryLocation, unlinked::UnlinkedInstruction},
     parser::Parsed,
     word::ProcasmWord,
 };
@@ -55,8 +55,8 @@ impl<'input, const MEM_SIZE: usize, W: ProcasmWord> Linker<'input, MEM_SIZE, W> 
     fn link_instruction(&mut self, unlinked_instruction: UnlinkedInstruction) {
         let label = &self.input[unlinked_instruction.label()];
 
-        let destination = match self.parsed.instruction_labels().get(label) {
-            Some(destination) => *destination,
+        let addr = match self.parsed.labels().get(label) {
+            Some(addr) => *addr,
             None => {
                 return self.errors.push(LinkerError::LabelNotFound {
                     idx: unlinked_instruction.instr_idx(),
@@ -65,7 +65,7 @@ impl<'input, const MEM_SIZE: usize, W: ProcasmWord> Linker<'input, MEM_SIZE, W> 
             }
         };
 
-        let Ok(destination) = destination.try_into() else {
+        let Ok(addr) = addr.try_into() else {
             return self.errors.push(LinkerError::LabelIndexToWordConversionFailed {
                 idx: unlinked_instruction.instr_idx(),
                 label: String::from_utf8_lossy(label).to_string(),
@@ -78,12 +78,27 @@ impl<'input, const MEM_SIZE: usize, W: ProcasmWord> Linker<'input, MEM_SIZE, W> 
             .get_mut(unlinked_instruction.instr_idx())
             .expect("The instruction index is always in range of the instructions.");
 
-        let linked_instruction = match instruction {
+        let linked_instruction: Instruction<W> = match instruction {
             Instruction::Jump { to: _, condition } => Instruction::Jump {
-                to: destination,
+                to: addr,
                 condition: *condition,
             },
-            instruction => unreachable!("Only jump instructions have to be linked, not {instruction:?} instructions."),
+            Instruction::Adr { reg, addr: _ } => Instruction::Adr { reg: *reg, addr },
+            Instruction::Str {
+                from,
+                to: MemoryLocation::Labeled(_),
+            } => Instruction::Str {
+                from: *from,
+                to: MemoryLocation::Labeled(addr),
+            },
+            Instruction::Ldr {
+                to,
+                from: MemoryLocation::Labeled(_),
+            } => Instruction::Ldr {
+                to: *to,
+                from: MemoryLocation::Labeled(addr),
+            },
+            instruction => unreachable!("This instruction cannot be linked: {instruction:?}."),
         };
 
         *instruction = linked_instruction;
@@ -104,7 +119,7 @@ impl<'input, const MEM_SIZE: usize, W: ProcasmWord> Linker<'input, MEM_SIZE, W> 
     fn get_init_pc(&mut self) -> Option<W> {
         const START_LABEL: &[u8] = b"_start";
 
-        let idx = self.parsed.instruction_labels().get(START_LABEL);
+        let idx = self.parsed.labels().get(START_LABEL);
 
         let init_pc = match idx {
             None => {

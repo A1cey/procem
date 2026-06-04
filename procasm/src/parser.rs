@@ -22,12 +22,10 @@ use ars::range::Range;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Parsed<'input, W> {
     instructions: Vec<Instruction<W>>,
-    instruction_labels: HashMap<&'input [u8], usize>,
+    labels: HashMap<&'input [u8], usize>,
     unlinked_instructions: Vec<UnlinkedInstruction>,
     data: Vec<W>,
-    data_labels: HashMap<&'input [u8], usize>,
     bss: usize,
-    bss_labels: HashMap<&'input [u8], usize>,
 }
 
 impl<W> Parsed<'_, W> {
@@ -40,8 +38,8 @@ impl<W> Parsed<'_, W> {
 
     #[inline]
     #[must_use]
-    pub(crate) const fn instruction_labels(&self) -> &HashMap<&[u8], usize> {
-        &self.instruction_labels
+    pub(crate) const fn labels(&self) -> &HashMap<&[u8], usize> {
+        &self.labels
     }
 
     // Returns vec because linker uses the size attribute
@@ -71,20 +69,8 @@ impl<W> Parsed<'_, W> {
 
     #[inline]
     #[must_use]
-    pub(crate) const fn data_labels(&self) -> &HashMap<&[u8], usize> {
-        &self.data_labels
-    }
-
-    #[inline]
-    #[must_use]
     pub(crate) const fn bss(&self) -> usize {
         self.bss
-    }
-
-    #[inline]
-    #[must_use]
-    pub(crate) const fn bss_labels(&self) -> &HashMap<&[u8], usize> {
-        &self.bss_labels
     }
 }
 
@@ -92,12 +78,10 @@ impl<'input, W, Section> From<InnerParser<'input, W, Section>> for Parsed<'input
     fn from(p: InnerParser<'input, W, Section>) -> Self {
         Self {
             instructions: p.instructions,
-            instruction_labels: p.instruction_labels,
+            labels: p.labels,
             unlinked_instructions: p.unlinked_instructions,
             data: p.data,
-            data_labels: p.data_labels,
             bss: p.bss,
-            bss_labels: p.bss_labels,
         }
     }
 }
@@ -133,12 +117,10 @@ impl<'input, W: ProcasmWord> Parser<'input, W> {
         Self::Undefined(InnerParser {
             tokens,
             instructions: Vec::with_capacity(tokens.len() / 3), // instructions most often are 4 tokens long, to balance out shorter ones 3 is used,
-            instruction_labels: HashMap::default(),
+            labels: HashMap::default(),
             unlinked_instructions: Vec::default(),
             data: Vec::default(),
-            data_labels: HashMap::default(),
             bss: 0,
-            bss_labels: HashMap::default(),
             errors: None,
             idx: 0,
             input,
@@ -329,12 +311,10 @@ impl<'input, W: ProcasmWord> Parser<'input, W> {
 pub struct InnerParser<'input, W, Section = Undefined> {
     tokens: &'input [Token],
     instructions: Vec<Instruction<W>>,
-    instruction_labels: HashMap<&'input [u8], usize>,
+    labels: HashMap<&'input [u8], usize>,
     unlinked_instructions: Vec<UnlinkedInstruction>,
     data: Vec<W>,
-    data_labels: HashMap<&'input [u8], usize>,
     bss: usize,
-    bss_labels: HashMap<&'input [u8], usize>,
     errors: Option<Vec<ParserError>>,
     idx: usize,
     input: &'input [u8],
@@ -349,12 +329,10 @@ impl<'input, W: ProcasmWord, Section> InnerParser<'input, W, Section> {
         InnerParser {
             tokens: self.tokens,
             instructions: self.instructions,
-            instruction_labels: self.instruction_labels,
+            labels: self.labels,
             unlinked_instructions: self.unlinked_instructions,
             data: self.data,
-            data_labels: self.data_labels,
             bss: self.bss,
-            bss_labels: self.bss_labels,
             errors: self.errors,
             idx: self.idx,
             input: self.input,
@@ -369,12 +347,10 @@ impl<'input, W: ProcasmWord, Section> InnerParser<'input, W, Section> {
         InnerParser {
             tokens: self.tokens,
             instructions: self.instructions,
-            instruction_labels: self.instruction_labels,
+            labels: self.labels,
             unlinked_instructions: self.unlinked_instructions,
             data: self.data,
-            data_labels: self.data_labels,
             bss: self.bss,
-            bss_labels: self.bss_labels,
             errors: self.errors,
             idx: self.idx,
             input: self.input,
@@ -389,12 +365,10 @@ impl<'input, W: ProcasmWord, Section> InnerParser<'input, W, Section> {
         InnerParser {
             tokens: self.tokens,
             instructions: self.instructions,
-            instruction_labels: self.instruction_labels,
+            labels: self.labels,
             unlinked_instructions: self.unlinked_instructions,
             data: self.data,
-            data_labels: self.data_labels,
             bss: self.bss,
-            bss_labels: self.bss_labels,
             errors: self.errors,
             idx: self.idx,
             input: self.input,
@@ -504,10 +478,7 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
     }
 
     fn parse_label(&mut self, range: Range) {
-        if let Some(old_instruction_idx) = self
-            .instruction_labels
-            .insert(&self.input[range], self.instructions.len())
-        {
+        if let Some(old_instruction_idx) = self.labels.insert(&self.input[range], self.instructions.len()) {
             self.add_error(ParserError::DuplicateLabel {
                 idx: self.instructions.len(),
                 old_idx: old_instruction_idx,
@@ -822,7 +793,7 @@ impl<W: ProcasmWord> InnerParser<'_, W, Data> {
     fn parse_next_token(&mut self) {
         match &self.tokens[self.idx] {
             Token::Identifier(range) => {
-                if let Some(old_data_idx) = self.data_labels.insert(&self.input[range], self.data.len()) {
+                if let Some(old_data_idx) = self.labels.insert(&self.input[range], self.data.len()) {
                     self.add_error(ParserError::DuplicateLabel {
                         idx: self.instructions.len(),
                         old_idx: old_data_idx,
@@ -908,7 +879,7 @@ impl<W: ProcasmWord> InnerParser<'_, W, Bss> {
     fn parse_next_token(&mut self) {
         match &self.tokens[self.idx] {
             Token::Identifier(range) => {
-                if let Some(old_bss_idx) = self.bss_labels.insert(&self.input[range], self.bss) {
+                if let Some(old_bss_idx) = self.labels.insert(&self.input[range], self.bss) {
                     self.add_error(ParserError::DuplicateLabel {
                         idx: self.instructions.len(),
                         old_idx: old_bss_idx,
@@ -1111,15 +1082,11 @@ mod test {
         let parsed = Parser::<I32>::parse(&tokens, input).unwrap();
 
         assert_eq!(parsed.instructions.len(), 0);
-        assert_eq!(parsed.instruction_labels().len(), 0);
+        assert_eq!(parsed.labels().len(), 2);
         assert_eq!(parsed.data().len(), 0);
-        assert_eq!(parsed.data_labels().len(), 0);
-
         assert_eq!(parsed.bss, 5 + 10 + 5 + 10);
-        let labels = parsed.bss_labels();
-        assert_eq!(labels.len(), 2);
-        assert_eq!(labels[b"a".as_slice()], 0);
-        assert_eq!(labels[b"b".as_slice()], 5 + 10);
+        assert_eq!(parsed.labels[b"a".as_slice()], 0);
+        assert_eq!(parsed.labels[b"b".as_slice()], 5 + 10);
     }
 
     #[test]
@@ -1140,14 +1107,14 @@ mod test {
         assert_eq!(parsed.instructions.len(), 0);
         assert_eq!(parsed.unlinked_instructions().len(), 0);
         assert_eq!(parsed.bss(), 0);
-        assert_eq!(parsed.bss_labels().len(), 0);
-
         assert_eq!(parsed.data.len(), 1 + 1 + b"Hello World!".len() + b"\0".len() + 1 + 1);
-        let labels = parsed.data_labels();
-        assert_eq!(labels.len(), 3);
-        assert_eq!(labels[b"a".as_slice()], 0);
-        assert_eq!(labels[b"b".as_slice()], 1 + 1);
-        assert_eq!(labels[b"c".as_slice()], 1 + 1 + b"Hello World!".len() + b"\0".len());
+        assert_eq!(parsed.labels.len(), 3);
+        assert_eq!(parsed.labels[b"a".as_slice()], 0);
+        assert_eq!(parsed.labels[b"b".as_slice()], 1 + 1);
+        assert_eq!(
+            parsed.labels[b"c".as_slice()],
+            1 + 1 + b"Hello World!".len() + b"\0".len()
+        );
     }
 
     #[test]
@@ -1187,18 +1154,16 @@ mod test {
         let parsed = Parser::<I32>::parse(&tokens, input).unwrap();
 
         assert_eq!(parsed.instructions.len(), 6);
-        assert_eq!(parsed.instruction_labels().len(), 3);
+        assert_eq!(parsed.labels().len(), 6);
         assert_eq!(parsed.data().len(), 1 + 1);
-        assert_eq!(parsed.data_labels().len(), 1 + 1);
         assert_eq!(parsed.bss(), 5 + 10 + 5);
-        assert_eq!(parsed.bss_labels().len(), 1);
 
-        assert_eq!(parsed.instruction_labels()[b"a".as_slice()], 0);
-        assert_eq!(parsed.instruction_labels()[b"c".as_slice()], 2);
-        assert_eq!(parsed.instruction_labels()[b"g".as_slice()], 4);
-        assert_eq!(parsed.data_labels()[b"d".as_slice()], 0);
-        assert_eq!(parsed.data_labels()[b"e".as_slice()], 1);
-        assert_eq!(parsed.bss_labels()[b"b".as_slice()], 0);
+        assert_eq!(parsed.labels()[b"a".as_slice()], 0);
+        assert_eq!(parsed.labels()[b"c".as_slice()], 2);
+        assert_eq!(parsed.labels()[b"g".as_slice()], 4);
+        assert_eq!(parsed.labels()[b"d".as_slice()], 0);
+        assert_eq!(parsed.labels()[b"e".as_slice()], 1);
+        assert_eq!(parsed.labels()[b"b".as_slice()], 0);
     }
 
     #[test]

@@ -91,6 +91,10 @@ where
     fn load_bss(&mut self) {
         match self.program {
             Some(program) => {
+                if program.bss().size() == W::from(0) {
+                    return;
+                }
+
                 let base_addr = program.bss().base_addr().into();
                 let end_addr = program.bss().end_addr().into();
                 self.mem[base_addr..end_addr + 1].fill(W::from(0));
@@ -168,6 +172,11 @@ pub struct ProcessorBuilder<'program, const MEM_SIZE: usize, Inst, Insts, W, Wor
 
 impl<'program, const MEM_SIZE: usize, Inst, Insts, W: Word, Words>
     ProcessorBuilder<'program, MEM_SIZE, Inst, Insts, W, Words>
+where
+    Inst: Instruction<W>,
+    Insts: Deref<Target = [Inst]>,
+    W: Word,
+    Words: Deref<Target = [W]>,
 {
     /// Creates a new `ProcessorBuilder` with registers, memory and program set to `None`.
     #[inline]
@@ -207,11 +216,16 @@ impl<'program, const MEM_SIZE: usize, Inst, Insts, W: Word, Words>
     #[must_use]
     #[inline]
     pub fn build(self) -> Processor<'program, MEM_SIZE, Inst, Insts, W, Words> {
-        Processor {
+        let mut processor = Processor {
             registers: self.registers.unwrap_or_default(),
             mem: self.mem.unwrap_or_default(),
-            program: self.program,
+            program: None,
+        };
+        if let Some(program) = self.program {
+            processor.load_program(program);
         }
+
+        processor
     }
 }
 
@@ -225,4 +239,72 @@ pub enum ProcessorError {
     OutOfBoundsMemoryAccess { mem_size: usize, addr: usize },
     #[error("Out of bounds memory access. Memory size: {mem_size}, Accessed addresses: {addr_range:?}")]
     OutOfBoundsRangeMemoryAccess { mem_size: usize, addr_range: Range<usize> },
+}
+
+#[cfg(test)]
+mod test {
+    use alloc::{vec, vec::Vec};
+
+    use crate::{
+        instruction::Instruction,
+        program::{Bss, Code, Data, Header},
+        word::I32,
+    };
+
+    use super::*;
+
+    extern crate alloc;
+
+    #[derive(Debug, Clone, Copy)]
+    struct Inst {}
+
+    impl Instruction<I32> for Inst {
+        fn execute<const MEM_SIZE: usize, Insts, Words>(
+            _instruction: Self,
+            _processor: &mut Processor<MEM_SIZE, Self, Insts, I32, Words>,
+        ) {
+        }
+    }
+
+    #[test]
+    fn load_data() {
+        let data_base_addr = I32::from(0);
+
+        let mut processor = Processor::new();
+        let program = Program::<32, Inst, Vec<_>, I32, Vec<_>>::new(
+            Header::new(0.into(), 31.into()),
+            Data::new(data_base_addr, vec![1.into(), 2.into(), 3.into(), 4.into(), 5.into()]),
+            Bss::new(0.into(), 0.into()),
+            Code::new(vec![]),
+        );
+
+        processor.program = Some(&program);
+
+        processor.load_data();
+
+        for offset in 0..5 {
+            assert_eq!(processor.mem.read(data_base_addr + offset.into()), (offset + 1).into());
+        }
+    }
+
+    #[test]
+    fn load_program_only_data() {
+        let data_base_addr = I32::from(0);
+
+        let mut processor = Processor::new();
+        let program = Program::<32, Inst, Vec<_>, I32, Vec<_>>::new(
+            Header::new(0.into(), 31.into()),
+            Data::new(data_base_addr, vec![1.into(), 2.into(), 3.into(), 4.into(), 5.into()]),
+            Bss::new(0.into(), 0.into()),
+            Code::new(vec![]),
+        );
+
+        processor.load_program(&program);
+
+        for offset in 0..5 {
+            assert_eq!(processor.mem.read(data_base_addr + offset.into()), (offset + 1).into());
+        }
+    }
+
+    // TODO: Implement similar test for other parts
 }

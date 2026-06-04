@@ -1,3 +1,5 @@
+use core::panic;
+
 use ars::fmt::slice::FmtSlice;
 use procasm::{
     AssembledProgram, assemble,
@@ -221,4 +223,41 @@ fn factorial_program() {
 
     let _ = processor.run_program();
     assert_eq!(processor.registers.get_reg(Register::R1), 120.into());
+}
+
+#[test]
+fn swap_static_mem() {
+    const MEM_SIZE: usize = 32;
+    let program = assemble::<MEM_SIZE, I32>(
+        "
+        .data
+        foo:
+            .word 42, 43
+        .code
+        _start:
+            adr r0, foo
+            ldr r1, foo
+            ldr r2, [r0, 1]
+            str r2, foo
+            str r1, [r0, 1]
+        ",
+    )
+    .map_err(|err| panic!("{}", FmtSlice(&err)))
+    .unwrap();
+
+    let mut processor = Processor::builder().with_program(&program).build();
+
+    assert_eq!(processor.registers.get_reg(Register::R0), 0.into());
+    assert_eq!(processor.registers.get_reg(Register::R1), 0.into());
+    assert_eq!(processor.mem.read(program.data().base_addr()), 42.into());
+    assert_eq!(processor.mem.read(program.data().base_addr() + 1.into()), 43.into());
+    assert_eq!(program.code().len(), 5);
+
+    let _ = processor.run_program();
+
+    assert_eq!(processor.registers.get_reg(Register::R0), 0.into());
+    assert_eq!(processor.registers.get_reg(Register::R1), 42.into());
+    assert_eq!(processor.registers.get_reg(Register::R2), 43.into());
+    assert_eq!(processor.mem.read(program.data().base_addr()), 43.into());
+    assert_eq!(processor.mem.read(program.data().base_addr() + 1.into()), 42.into());
 }
