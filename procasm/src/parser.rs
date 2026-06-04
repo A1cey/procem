@@ -1,11 +1,11 @@
 use core::num::ParseIntError;
 use std::{collections::HashMap, marker::PhantomData, num::TryFromIntError};
 
-use procem::register::{self, Register, RegisterError};
+use procem::register::{Register, RegisterError};
 use thiserror::Error;
 
-use crate::instruction::asm_instruction::ASMLoadOrStoreInstruction;
-use crate::instruction::memory_location::{self, MemoryLocation};
+use crate::instruction::asm_instruction::{ASMLoadOrStoreInstruction, ASMRegLabelInstruction};
+use crate::instruction::memory_location::MemoryLocation;
 use crate::instruction::operand::Operand;
 use crate::instruction::{Instruction, asm_instruction::ASMNoArgInstruction};
 use crate::instruction::{
@@ -523,6 +523,7 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
                     ASMNoArgInstruction::Nop => Instruction::Nop,
                     ASMNoArgInstruction::Ret => Instruction::Ret,
                 }),
+                ASMInstruction::RegLabel(inst) => self.expect_reg_label_instruction(inst),
                 ASMInstruction::RegOperand(inst) => self.expect_reg_operand_instruction(inst),
                 ASMInstruction::Jump(inst) => self.expect_destination(inst),
                 ASMInstruction::TwoOperand(inst) => self.expect_two_operand_instruction(inst),
@@ -601,6 +602,35 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
         self.tokens
             .get(self.idx)
             .map_or_else(|| "End".to_string(), |token| format!("{token:?}"))
+    }
+
+    // _isntr may be used in future if there are other instructions like adr
+    fn expect_reg_label_instruction(&mut self, _instr: ASMRegLabelInstruction) {
+        let reg = match self.expect_register() {
+            Ok(reg) => reg,
+            Err(err) => return self.add_error(err),
+        };
+
+        if let Err(err) = self.expect_comma() {
+            return self.add_error(err);
+        }
+
+        self.idx += 1;
+
+        if let Some(Token::Identifier(range)) = self.tokens.get(self.idx) {
+            self.unlinked_instructions
+                .push(UnlinkedInstruction::new(self.instructions.len(), *range));
+            self.instructions.push(Instruction::Adr {
+                reg: reg,
+                addr: <W as ProcasmWord>::max(),
+            });
+        } else {
+            self.add_error(ParserError::InvalidToken {
+                idx: self.idx,
+                expected: "Identifier (Label)",
+                got: self.current_token_string(),
+            });
+        }
     }
 
     fn expect_reg_operand_instruction(&mut self, instr: ASMRegOperandInstruction) {
@@ -1359,5 +1389,26 @@ mod test {
             }
             i => unreachable!("Expected Ldr instruction, got {i:?}"),
         }
+    }
+
+    #[test]
+    fn parse_adr_instruction() {
+        let input = b"
+            .code
+            adr r0, data
+            ";
+
+        let tokens = Tokenizer::tokenize(input).unwrap();
+        let parsed = Parser::parse(&tokens, input).unwrap();
+
+        assert_eq!(parsed.instructions.len(), 1);
+        assert_eq!(parsed.unlinked_instructions.len(), 1);
+        assert_eq!(
+            parsed.instructions[0],
+            Instruction::Adr {
+                reg: Register::R0,
+                addr: <I32 as ProcasmWord>::max()
+            }
+        );
     }
 }

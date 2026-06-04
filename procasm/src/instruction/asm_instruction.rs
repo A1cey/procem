@@ -20,6 +20,11 @@ pub enum ASMNoArgInstruction {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Hash)]
+pub enum ASMRegLabelInstruction {
+    Adr,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Hash)]
 pub enum ASMRegOperandInstruction {
     Add,
     AddS,
@@ -78,6 +83,7 @@ pub enum ASMLoadOrStoreInstruction {
 pub enum ASMInstruction {
     Jump(ASMJumpInstruction),
     NoArg(ASMNoArgInstruction),
+    RegLabel(ASMRegLabelInstruction),
     RegOperand(ASMRegOperandInstruction),
     Rotate(ASMRotateInstruction),
     Shift(ASMShiftInstruction),
@@ -94,6 +100,7 @@ impl TryFrom<&[u8]> for ASMInstruction {
         let inst = match value {
             inst if inst.eq_ignore_ascii_case(b"ADD") => Self::RegOperand(ASMRegOperandInstruction::Add),
             inst if inst.eq_ignore_ascii_case(b"ADDS") => Self::RegOperand(ASMRegOperandInstruction::AddS),
+            inst if inst.eq_ignore_ascii_case(b"ADR") => Self::RegLabel(ASMRegLabelInstruction::Adr),
             inst if inst.eq_ignore_ascii_case(b"AND") => Self::RegOperand(ASMRegOperandInstruction::And),
             inst if inst.eq_ignore_ascii_case(b"CALL") => Self::SingleOperand(ASMSingleOperandInstruction::Call),
             inst if inst.eq_ignore_ascii_case(b"CMP") => Self::TwoOperand(ASMTwoOperandInstruction::Cmp),

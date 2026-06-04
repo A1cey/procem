@@ -62,6 +62,13 @@ Add the value of the operand to the register. The result is stored in the regist
 
 `ADD`\[`S`\] `<REG>` `,` `<OP>`
 
+#### **ADR**
+
+Store the memory location of the label in the register.
+
+`ADR` `<REG>` `,` `<LABEL>`
+
+
 #### **AND**
 
 Perform a bitwise and operation on the value in the register with the value of the operand.

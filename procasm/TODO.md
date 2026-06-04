@@ -4,5 +4,7 @@
   - label location is stored  
   - to load data from label first store label in register, then use this register in str/ldr
   - labels must be addresses into .data or .bss
+  - test linker for ldr/str
+  - how to offset from label? -> + offset | mov r0, label
 - Add Comment syntax //,# ??
 - allow labels that start with r(0), f(alse) and t(rue) -> this should be possible bs looking at the location where the identifier is used

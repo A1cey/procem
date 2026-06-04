@@ -14,8 +14,8 @@ use procem::{
 use crate::{
     instruction::{
         asm_instruction::{
-            ASMJumpInstruction, ASMLoadOrStoreInstruction, ASMRegOperandInstruction, ASMRotateInstruction,
-            ASMShiftInstruction, ASMSingleOperandInstruction, ASMSingleRegInstruction, ASMTwoOperandInstruction,
+            ASMJumpInstruction, ASMRegOperandInstruction, ASMRotateInstruction, ASMShiftInstruction,
+            ASMSingleOperandInstruction, ASMSingleRegInstruction, ASMTwoOperandInstruction,
         },
         jump_condition::JumpCondition,
         memory_location::MemoryLocation,
@@ -29,6 +29,8 @@ use crate::{
 pub enum Instruction<W> {
     /// No operation. (NOP)
     Nop,
+    /// Store the memory location of a label in a register. (ADR)
+    Adr { reg: Register, addr: W },
     /// Copy a value from the operand to the register. (MOV)
     Mov { to: Register, from: Operand<W> },
     /// Store a value from a register to a memory location. (STR)
@@ -113,6 +115,7 @@ impl<W: ProcasmWord> InstructionTrait<W> for Instruction<W> {
     ) {
         match instruction {
             Self::Nop => (),
+            Self::Adr { reg, addr } => Self::adr(reg, addr, processor),
             Self::Mov { to, from } => Self::mov(to, from, processor),
             Self::Str { from, to } => Self::str(from, to, processor),
             Self::Ldr { to, from } => Self::ldr(to, from, processor),
@@ -238,24 +241,16 @@ impl<W: ProcasmWord> Instruction<W> {
         Self::Jump { to: dest, condition }
     }
 
-    pub(crate) const fn from_load_or_store_instruction(
-        instr: ASMLoadOrStoreInstruction,
+    /// Move a memory address into a register.
+    #[inline]
+    fn adr<const MEM_SIZE: usize, Insts, Words>(
         reg: Register,
-        mem_location: MemoryLocation<W>,
-    ) -> Self {
-        use ASMLoadOrStoreInstruction::{Ldr, Str};
-
-        match instr {
-            Ldr => Self::Ldr {
-                to: reg,
-                from: mem_location,
-            },
-            Str => Self::Str {
-                from: reg,
-                to: mem_location,
-            },
-        }
+        addr: W,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+    ) {
+        processor.registers.set_reg(reg, addr);
     }
+
     /// Copy a value from an operand to a register.
     #[inline]
     fn mov<const MEM_SIZE: usize, Insts, Words>(
