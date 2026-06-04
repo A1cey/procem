@@ -1,8 +1,11 @@
 //! The processor's [`Memory`].
 
 use ars::fmt::slice::FmtSlice;
+use ars::range::Range;
 use core::fmt::{Debug, Display, Formatter};
-use core::ops::{Index, IndexMut, Range};
+use core::ops::{Index, IndexMut, RangeFull};
+
+use core::range::RangeInclusive;
 
 use crate::processor::ProcessorError;
 use crate::word::Word;
@@ -93,38 +96,92 @@ impl<const MEM_SIZE: usize, W: Word> IndexMut<usize> for Memory<MEM_SIZE, W> {
     }
 }
 
-impl<const MEM_SIZE: usize, W: Word> Index<Range<usize>> for Memory<MEM_SIZE, W> {
+impl<const MEM_SIZE: usize, W: Word> Index<core::ops::Range<usize>> for Memory<MEM_SIZE, W> {
     type Output = [W];
 
     /// Get a reference to the slice of memory at the provided address range.
     ///
     /// # Panics
     /// Panics if the address range is out of bounds.
-    fn index(&self, addr_range: Range<usize>) -> &Self::Output {
+    fn index(&self, addr_range: core::ops::Range<usize>) -> &Self::Output {
         self.0.get(addr_range.clone()).unwrap_or_else(|| {
             panic!(
                 "{}",
                 ProcessorError::OutOfBoundsRangeMemoryAccess {
                     mem_size: MEM_SIZE,
-                    addr_range,
+                    addr_range: Range::from(addr_range),
                 }
             )
         })
     }
 }
 
-impl<const MEM_SIZE: usize, W: Word> IndexMut<Range<usize>> for Memory<MEM_SIZE, W> {
+impl<const MEM_SIZE: usize, W: Word> IndexMut<core::ops::Range<usize>> for Memory<MEM_SIZE, W> {
     /// Get a mutable reference to the slice of memory at the provided address range.
     ///
     /// # Panics
     /// Panics if the address range is out of bounds.
-    fn index_mut(&mut self, addr_range: Range<usize>) -> &mut Self::Output {
+    fn index_mut(&mut self, addr_range: core::ops::Range<usize>) -> &mut Self::Output {
         self.0.get_mut(addr_range.clone()).unwrap_or_else(|| {
             panic!(
                 "{}",
                 ProcessorError::OutOfBoundsRangeMemoryAccess {
                     mem_size: MEM_SIZE,
-                    addr_range,
+                    addr_range: Range::from(addr_range),
+                }
+            )
+        })
+    }
+}
+
+impl<const MEM_SIZE: usize, W: Word> Index<RangeFull> for Memory<MEM_SIZE, W> {
+    type Output = [W];
+
+    /// Get a reference to the entire slice of memory.
+    fn index(&self, index: RangeFull) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl<const MEM_SIZE: usize, W: Word> IndexMut<RangeFull> for Memory<MEM_SIZE, W> {
+    /// Get a mutable reference to the entire slice of memory.
+    fn index_mut(&mut self, index: RangeFull) -> &mut Self::Output {
+        &mut self.0[index]
+    }
+}
+
+impl<const MEM_SIZE: usize, W: Word> Index<RangeInclusive<usize>> for Memory<MEM_SIZE, W> {
+    type Output = [W];
+
+    /// Get a reference to the slice of memory at the provided address range.
+    ///
+    /// # Panics
+    /// Panics if the address range is out of bounds.
+    fn index(&self, addr_range: RangeInclusive<usize>) -> &Self::Output {
+        self.0.get(addr_range.clone()).unwrap_or_else(|| {
+            panic!(
+                "{}",
+                ProcessorError::OutOfBoundsRangeMemoryAccess {
+                    mem_size: MEM_SIZE,
+                    addr_range: Range::from(addr_range),
+                }
+            )
+        })
+    }
+}
+
+impl<const MEM_SIZE: usize, W: Word> IndexMut<RangeInclusive<usize>> for Memory<MEM_SIZE, W> {
+    /// Get a mutable reference to the slice of memory at the provided address range.
+    ///
+    /// # Panics
+    /// Panics if the address range is out of bounds.
+    fn index_mut(&mut self, addr_range: RangeInclusive<usize>) -> &mut Self::Output {
+        self.0.get_mut(addr_range.clone()).unwrap_or_else(|| {
+            panic!(
+                "{}",
+                ProcessorError::OutOfBoundsRangeMemoryAccess {
+                    mem_size: MEM_SIZE,
+                    addr_range: addr_range.into(),
                 }
             )
         })
@@ -136,6 +193,12 @@ impl<const MEM_SIZE: usize, W: Word> Memory<MEM_SIZE, W> {
     #[must_use]
     pub fn new() -> Self {
         Self([W::default(); MEM_SIZE])
+    }
+
+    /// Get the size of the memory
+    #[must_use]
+    pub const fn size(&self) -> usize {
+        MEM_SIZE
     }
 
     /// Read a value from memory at the provided address.

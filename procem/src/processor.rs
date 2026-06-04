@@ -1,7 +1,7 @@
 //! The [`Processor`] and [`ProcessorBuilder`] structs.
+use ars::range::Range;
 use core::fmt::{Display, Formatter};
-use core::ops::{Deref, Range};
-
+use core::ops::Deref;
 use thiserror::Error;
 
 use crate::instruction::Instruction;
@@ -91,13 +91,9 @@ where
     fn load_bss(&mut self) {
         match self.program {
             Some(program) => {
-                if program.bss().size() == W::from(0) {
-                    return;
-                }
-
                 let base_addr = program.bss().base_addr().into();
                 let end_addr = program.bss().end_addr().into();
-                self.mem[base_addr..end_addr + 1].fill(W::from(0));
+                self.mem[base_addr..end_addr].fill(W::from(0));
             }
             None => unreachable!("This function is only called after program is loaded into processor."),
         }
@@ -238,7 +234,7 @@ pub enum ProcessorError {
     #[error("Out of bounds memory access. Memory size: {mem_size}, Accessed address: {addr}")]
     OutOfBoundsMemoryAccess { mem_size: usize, addr: usize },
     #[error("Out of bounds memory access. Memory size: {mem_size}, Accessed addresses: {addr_range:?}")]
-    OutOfBoundsRangeMemoryAccess { mem_size: usize, addr_range: Range<usize> },
+    OutOfBoundsRangeMemoryAccess { mem_size: usize, addr_range: Range },
 }
 
 #[cfg(test)]
@@ -303,6 +299,69 @@ mod test {
 
         for offset in 0..5 {
             assert_eq!(processor.mem.read(data_base_addr + offset.into()), (offset + 1).into());
+        }
+    }
+
+    #[test]
+    fn load_bss() {
+        let bss_size = I32::from(10);
+
+        let mut processor = Processor::new();
+        let program = Program::<32, Inst, Vec<_>, I32, Vec<_>>::new(
+            Header::new(0.into(), 31.into()),
+            Data::new(0.into(), vec![]),
+            Bss::new(0.into(), bss_size),
+            Code::new(vec![]),
+        );
+
+        processor.program = Some(&program);
+        processor.mem[..].fill(1.into()); // Set memory to non-zero value
+        processor.load_bss(); // Set memory to zero
+
+        for offset in 0..bss_size.into() {
+            assert_eq!(processor.mem.read(offset.into()), I32::from(0));
+        }
+
+        // check that not too many values where set to 0
+        for addr in bss_size.into()..processor.mem.size() as i32 {
+            assert_eq!(
+                processor.mem.read(I32::from(addr)),
+                I32::from(1),
+                "Address {addr} was set to 0, even though bss has a size of {bss_size} ranging from address {} to address {}.",
+                program.bss().base_addr(),
+                program.bss().end_addr()
+            );
+        }
+    }
+
+    #[test]
+    fn load_programm_only_bss() {
+        let bss_size = I32::from(10);
+
+        let mut processor = Processor::new();
+        let program = Program::<32, Inst, Vec<_>, I32, Vec<_>>::new(
+            Header::new(0.into(), 31.into()),
+            Data::new(0.into(), vec![]),
+            Bss::new(0.into(), bss_size),
+            Code::new(vec![]),
+        );
+
+        processor.mem[..].fill(1.into()); // Set memory to non-zero value
+        processor.load_program(&program); // Set memory to zero
+
+        for offset in 0..bss_size.into() {
+            assert_eq!(processor.mem.read(offset.into()), I32::from(0));
+        }
+
+        // check that not too many values where set to 0
+        for addr in bss_size.into()..processor.mem.size() as i32 {
+            assert_eq!(
+                processor.mem.read(I32::from(addr)),
+                I32::from(1),
+                "Address {addr} was set to 0, even though bss has a size of {bss_size} ranging from address {} to address {}.",
+                program.bss().base_addr(),
+                program.bss().end_addr()
+            );
         }
     }
 
