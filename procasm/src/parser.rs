@@ -51,12 +51,6 @@ impl<W> Parsed<'_, W> {
 
     #[inline]
     #[must_use]
-    pub(crate) fn unlinked_instructions(&self) -> &[UnlinkedInstruction] {
-        &self.unlinked_instructions
-    }
-
-    #[inline]
-    #[must_use]
     pub(crate) fn data(&self) -> &[W] {
         &self.data
     }
@@ -158,7 +152,7 @@ impl<'input, W: ProcasmWord> Parser<'input, W> {
                     p.add_error(ParserError::InvalidToken {
                         idx: p.idx,
                         expected: "Section Directive",
-                        got: t.to_string(),
+                        got: t,
                     });
                     p.idx += 1;
                     Self::Undefined(p)
@@ -240,10 +234,9 @@ impl<'input, W: ProcasmWord> Parser<'input, W> {
 
         macro_rules! error_and_advance {
             ($parser:expr, $variant:ident, $got: expr) => {{
-                $parser.add_error(ParserError::InvalidToken {
+                $parser.add_error(ParserError::InvalidSection {
                     idx: $parser.idx,
-                    expected: "Section Directive (code, data, bss)",
-                    got: $got,
+                    identifier: $got,
                 });
                 $parser.idx += 1;
                 Self::$variant($parser)
@@ -303,10 +296,6 @@ impl<'input, W: ProcasmWord> Parser<'input, W> {
     }
 }
 
-// Add labels for bss and bss length to store at this label
-// Add labels for data and data to store at this label
-// Change labels in instructions to be marked for linking
-// Add linker to link labels in instructions to be linked to labels in code, data and bss -> jmp may only be mapped to code labels, reading data instructions can only read from data and bss labels
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InnerParser<'input, W, Section = Undefined> {
     tokens: &'input [Token],
@@ -390,12 +379,6 @@ impl<'input, W: ProcasmWord, Section> InnerParser<'input, W, Section> {
     }
 
     #[inline]
-    fn get_next(&mut self) -> Option<&'_ Token> {
-        self.idx += 1;
-        self.tokens.get(self.idx)
-    }
-
-    #[inline]
     fn add_error(&mut self, err: ParserError) {
         self.errors.get_or_insert_default().push(err);
     }
@@ -442,7 +425,7 @@ impl<'input, W: ProcasmWord, Section> InnerParser<'input, W, Section> {
                 token => Err(ParserError::InvalidToken {
                     idx: self.idx,
                     expected: "ImmediateLiteral",
-                    got: token.to_string(),
+                    got: *token,
                 }),
             },
             None => Err(ParserError::TokenNotFound { idx: self.idx }),
@@ -470,7 +453,7 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
                 token => self.add_error(ParserError::InvalidToken {
                     idx: self.idx,
                     expected: "Label, Instruction or End",
-                    got: format!("{token:?}"),
+                    got: **token,
                 }),
             },
             None => unreachable!("self.tokens is never indexed with an invalid idx."),
@@ -514,17 +497,19 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
     fn expect_destination(&mut self, instr: ASMJumpInstruction) {
         self.idx += 1;
 
-        if let Some(Token::Identifier(range)) = self.tokens.get(self.idx) {
-            self.unlinked_instructions
-                .push(UnlinkedInstruction::new(self.instructions.len(), *range));
-            self.instructions
-                .push(Instruction::from_jump_instruction(instr, <W as ProcasmWord>::max()));
-        } else {
-            self.add_error(ParserError::InvalidToken {
+        match self.tokens.get(self.idx) {
+            Some(Token::Identifier(range)) => {
+                self.unlinked_instructions
+                    .push(UnlinkedInstruction::new(self.instructions.len(), *range));
+                self.instructions
+                    .push(Instruction::from_jump_instruction(instr, <W as ProcasmWord>::max()));
+            }
+            Some(token) => self.add_error(ParserError::InvalidToken {
                 idx: self.idx,
                 expected: "Identifier (Label)",
-                got: self.current_token_string(),
-            });
+                got: *token,
+            }),
+            None => self.add_error(ParserError::TokenNotFound { idx: self.idx }),
         }
     }
 
@@ -534,22 +519,26 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
             Some(Token::Identifier(range)) => {
                 Register::try_from(&self.input[range]).map_err(|err| ParserError::RegisterParsing { err })
             }
-            _ => Err(ParserError::InvalidToken {
+            Some(token) => Err(ParserError::InvalidToken {
                 idx: self.idx,
                 expected: "Register",
-                got: self.current_token_string(),
+                got: *token,
             }),
+            None => Err(ParserError::TokenNotFound { idx: self.idx }),
         }
     }
 
     fn expect_comma(&mut self) -> Result<(), ParserError> {
-        match self.get_next() {
+        self.idx += 1;
+
+        match self.tokens.get(self.idx) {
             Some(Token::Comma) => Ok(()),
-            _ => Err(ParserError::InvalidToken {
+            Some(token) => Err(ParserError::InvalidToken {
                 idx: self.idx,
                 expected: "Comma",
-                got: self.current_token_string(),
+                got: *token,
             }),
+            None => Err(ParserError::TokenNotFound { idx: self.idx }),
         }
     }
 
@@ -560,19 +549,13 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
                 Register::try_from(&self.input[range]).map_err(|err| ParserError::RegisterParsing { err })?,
             )),
             Some(Token::ImmediateLiteral(lit)) => Ok(Operand::Value(self.convert_lit_to_word(*lit)?)),
-            _ => Err(ParserError::InvalidToken {
+            Some(token) => Err(ParserError::InvalidToken {
                 idx: self.idx,
                 expected: "Identifier (Register) or Literal",
-                got: self.current_token_string(),
+                got: *token,
             }),
+            None => Err(ParserError::TokenNotFound { idx: self.idx }),
         }
-    }
-
-    #[inline]
-    fn current_token_string(&self) -> String {
-        self.tokens
-            .get(self.idx)
-            .map_or_else(|| "End".to_string(), |token| format!("{token:?}"))
     }
 
     // _isntr may be used in future if there are other instructions like adr
@@ -588,19 +571,21 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
 
         self.idx += 1;
 
-        if let Some(Token::Identifier(range)) = self.tokens.get(self.idx) {
-            self.unlinked_instructions
-                .push(UnlinkedInstruction::new(self.instructions.len(), *range));
-            self.instructions.push(Instruction::Adr {
-                reg: reg,
-                addr: <W as ProcasmWord>::max(),
-            });
-        } else {
-            self.add_error(ParserError::InvalidToken {
+        match self.tokens.get(self.idx) {
+            Some(Token::Identifier(range)) => {
+                self.unlinked_instructions
+                    .push(UnlinkedInstruction::new(self.instructions.len(), *range));
+                self.instructions.push(Instruction::Adr {
+                    reg,
+                    addr: <W as ProcasmWord>::max(),
+                });
+            }
+            Some(token) => self.add_error(ParserError::InvalidToken {
                 idx: self.idx,
                 expected: "Identifier (Label)",
-                got: self.current_token_string(),
-            });
+                got: *token,
+            }),
+            None => self.add_error(ParserError::TokenNotFound { idx: self.idx }),
         }
     }
 
@@ -726,18 +711,20 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
             return self.add_error(err);
         }
 
-        let mem_location = match self.get_next() {
-            Some(token) => match token.clone() {
+        self.idx += 1;
+
+        let mem_location = match self.tokens.get(self.idx) {
+            Some(token) => match *token {
                 Token::Identifier(range) => self.expect_label_mem_location(range),
                 Token::OpenBracket => match self.expect_direct_mem_location() {
                     Ok(memory_location) => memory_location,
                     Err(err) => return self.add_error(err),
                 },
-                _ => {
+                token => {
                     return self.add_error(ParserError::InvalidToken {
                         idx: self.idx,
                         expected: "Label or Memory Location",
-                        got: self.current_token_string(),
+                        got: token,
                     });
                 }
             },
@@ -775,13 +762,14 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
             Operand::Value(W::from(0))
         };
 
-        match self.get_next() {
+        self.idx += 1;
+        match self.tokens.get(self.idx) {
             Some(token) => match token {
                 Token::ClosedBracket => Ok(MemoryLocation::Offset { base, offset }),
-                _ => Err(ParserError::InvalidToken {
+                token => Err(ParserError::InvalidToken {
                     idx: self.idx,
                     expected: "Closed Bracket",
-                    got: self.current_token_string(),
+                    got: *token,
                 }),
             },
             None => Err(ParserError::TokenNotFound { idx: self.idx }),
@@ -806,7 +794,7 @@ impl<W: ProcasmWord> InnerParser<'_, W, Data> {
             token => self.add_error(ParserError::InvalidToken {
                 idx: self.idx,
                 expected: "Identifier (Label), Directive, or End Token",
-                got: format!("{token:?}"),
+                got: *token,
             }),
         }
     }
@@ -867,7 +855,7 @@ impl<W: ProcasmWord> InnerParser<'_, W, Data> {
                 token => self.add_error(ParserError::InvalidToken {
                     idx: self.idx,
                     expected: "ImmediateLiteral",
-                    got: token.to_string(),
+                    got: *token,
                 }),
             },
             None => self.add_error(ParserError::TokenNotFound { idx: self.idx }),
@@ -892,7 +880,7 @@ impl<W: ProcasmWord> InnerParser<'_, W, Bss> {
             token => self.add_error(ParserError::InvalidToken {
                 idx: self.idx,
                 expected: "Identifier (Label), Directive, or End Token",
-                got: format!("{token:?}"),
+                got: *token,
             }),
         }
     }
@@ -979,7 +967,7 @@ pub enum ParserError {
     InvalidToken {
         idx: usize,
         expected: &'static str,
-        got: String,
+        got: Token,
     },
     #[error("Duplicate lable: First occurrence: {old_idx}, second occurrence {idx}")]
     DuplicateLabel { idx: usize, old_idx: usize },
@@ -997,8 +985,8 @@ pub enum ParserError {
     #[error("Cannot convert literal {literal} to u32. This is likely due to the literal being too large.\n{err}")]
     CannotConvertLiteralToU32 { literal: usize, err: TryFromIntError },
 
-    #[error("Invalid section name: {section} at {idx}.")]
-    InvalidSectionName { idx: usize, section: String },
+    #[error("Invalid section identifier: {identifier} at {idx}.")]
+    InvalidSection { idx: usize, identifier: String },
     #[error("Invalid directive {directive} at {idx}: {expected}.")]
     InvalidDirective {
         idx: usize,
@@ -1059,10 +1047,9 @@ mod test {
         match p {
             Parser::Code(p) => assert_eq!(
                 p.errors.unwrap()[0],
-                ParserError::InvalidToken {
+                ParserError::InvalidSection {
                     idx: 5,
-                    expected: "Section Directive (code, data, bss)",
-                    got: "Invalid".to_string()
+                    identifier: "Invalid".to_string()
                 }
             ),
             _ => unreachable!("check! before ensures, that Code is the Variant"),
@@ -1105,7 +1092,7 @@ mod test {
         let parsed = Parser::<I32>::parse(&tokens, input).unwrap();
 
         assert_eq!(parsed.instructions.len(), 0);
-        assert_eq!(parsed.unlinked_instructions().len(), 0);
+        assert_eq!(parsed.unlinked_instructions.len(), 0);
         assert_eq!(parsed.bss(), 0);
         assert_eq!(parsed.data.len(), 1 + 1 + b"Hello World!".len() + b"\0".len() + 1 + 1);
         assert_eq!(parsed.labels.len(), 3);
@@ -1182,8 +1169,8 @@ mod test {
         let parsed = Parser::<I32>::parse(&tokens, input).unwrap();
 
         assert_eq!(parsed.instructions.len(), 6);
-        assert_eq!(parsed.unlinked_instructions().len(), 1);
-        assert_eq!(&input[parsed.unlinked_instructions()[0].label()], b"data".as_slice());
+        assert_eq!(parsed.unlinked_instructions.len(), 1);
+        assert_eq!(&input[parsed.unlinked_instructions[0].label()], b"data".as_slice());
 
         let mut insts = parsed.instructions.iter();
 
@@ -1277,8 +1264,8 @@ mod test {
         let parsed = Parser::<I32>::parse(&tokens, input).unwrap();
 
         assert_eq!(parsed.instructions.len(), 6);
-        assert_eq!(parsed.unlinked_instructions().len(), 1);
-        assert_eq!(&input[parsed.unlinked_instructions()[0].label()], b"data".as_slice());
+        assert_eq!(parsed.unlinked_instructions.len(), 1);
+        assert_eq!(&input[parsed.unlinked_instructions[0].label()], b"data".as_slice());
 
         let mut insts = parsed.instructions.iter();
 

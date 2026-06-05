@@ -158,7 +158,7 @@ impl<const MEM_SIZE: usize, W: Word> Index<RangeInclusive<usize>> for Memory<MEM
     /// # Panics
     /// Panics if the address range is out of bounds.
     fn index(&self, addr_range: RangeInclusive<usize>) -> &Self::Output {
-        self.0.get(addr_range.clone()).unwrap_or_else(|| {
+        self.0.get(addr_range).unwrap_or_else(|| {
             panic!(
                 "{}",
                 ProcessorError::OutOfBoundsRangeMemoryAccess {
@@ -176,7 +176,7 @@ impl<const MEM_SIZE: usize, W: Word> IndexMut<RangeInclusive<usize>> for Memory<
     /// # Panics
     /// Panics if the address range is out of bounds.
     fn index_mut(&mut self, addr_range: RangeInclusive<usize>) -> &mut Self::Output {
-        self.0.get_mut(addr_range.clone()).unwrap_or_else(|| {
+        self.0.get_mut(addr_range).unwrap_or_else(|| {
             panic!(
                 "{}",
                 ProcessorError::OutOfBoundsRangeMemoryAccess {

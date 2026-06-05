@@ -21,61 +21,24 @@ You can implement your own instruction set by implementing the `Instruction` tra
 use procem::{processor::Processor, register::Register, word::I32};
 use procasm::assemble;
 
-// Assemble a program from asm
-let program = assemble::<I32>(
+// Assemble program from asm
+const MEM_SIZE: usize = 1024;
+let program = assemble::<MEM_SIZE, I32>(
     "
-    mov R0, #10
-    mov R1, #5
-    add R0, R1
-    sub R0, #3
-    mul R0, #2
-    div R0, #4
-    "
+    .code
+    _start:
+        mov R0, 10
+        mov R1, 5
+        add R0, R1
+        sub R0, 3
+        mul R0, 2
+        div R0, 4
+    ",
 ).unwrap();
 
-// Create a processor and run the program
-const MEM_SIZE: usize = 1024;
-
-let mut processor = Processor::<MEM_SIZE, _, _, _>::builder()
-    .with_program(&program)
-    .build();
+let mut processor = Processor::builder().with_program(&program).build();
 
 let _ = processor.run_program();
 
-// Inspect register values
-assert_eq!(processor.registers.get_reg(Register::R0), 6.into());
-```
-
-### Example: Custom Instruction Set
-
-```rust
-use procem::{instruction::Instruction,processor::Processor, program::Program, register::Register,  word::Word};
-
-// Define your own word type
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-struct MyWord(i64);
-
-impl Word for MyWord {
-    // Implement required methods...
-}
-
-// Define your own instruction set
-enum MyInstruction {
-    Mov { to: Register, from: MyWord },
-    // Add more instructions...
-}
-
-impl Instruction<MyWord> for MyInstruction {
-    // Implement required methods...
-}
-
-// Create a program and processor using your custom types
-let program = Program::new(vec![
-    MyInstruction::Mov { to: Register::R0, from: MyWord(42) },
-    // Add more instructions...
-]);
-
-let mut processor = Processor::<128, _, _, _>::builder()
-    .with_program(&program)
-    .build();
+assert_eq!(processor.registers.get_reg(Register::R0), I32::from(6));
 ```

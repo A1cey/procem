@@ -21,12 +21,10 @@ All operations that can be suffixed with an 'S' set the flag registers depending
   - Character values are enclosed in single quotes, e.g., 'a', 'B', '5'.
 - *Operands* (**\<OP>**) can be a register name or a literal.
 - Compiler *directives* are special instructions that the assembler uses to control the assembly process. They start with a '.' followed by a string of alphanumeric or underscore ('_') or dash ('-') characters.
-  - There can be three *Sections* in a program: 
-    - *.code*: This section is mandatory and contains executable instructions.
-    - *.data*: This section is optional and contains data declarations.
-    - *.bss*: This section is optional and contains uninitialized data declarations.
-    Sections can be in any order and occur multiple times. 
-    A valid program must have at least one *.code* section.
+  - There can be three *Sections* in a program. Sections can be in any order and occur multiple times. A valid program must have at least one *.code* section.
+     - *.code*: This section is mandatory and contains executable instructions.
+     - *.data*: This section is optional and contains data declarations.
+     - *.bss*: This section is optional and contains uninitialized data declarations.
 
 'END' marks the end of the program. It is only used as a guide for the assembler and not part of the assembled program.
 
@@ -280,8 +278,10 @@ To assemble a program from assembly code use the **assemble** function.
 use procem::{processor::Processor, register::Register, word::I32};
 use procasm::assemble;
 
+const MEM_SIZE: usize = 1024;
+
 // Assemble a program from asm
-let program = assemble::<I32>(
+let program = assemble::<MEM_SIZE, I32>(
     "
     mov R0, #10
     mov R1, #5
@@ -293,15 +293,13 @@ let program = assemble::<I32>(
 ).unwrap();
 
 // Create a processor and run the program
-const MEM_SIZE: usize = 1024;
-
-let mut processor = Processor::<MEM_SIZE, _, _, _>::builder()
+let mut processor = Processor::builder()
     .with_program(&program)
     .build();
 
 let _ = processor.run_program();
 
 // Inspect register values
-assert_eq!(processor.registers.get_reg(Register::R0), 6.into());
+assert_eq!(processor.registers.get_reg(Register::R0), I32::from(6));
 ```
 
