@@ -4,8 +4,6 @@ use core::fmt::Debug;
 use core::str::FromStr;
 use thiserror::Error;
 
-use crate::word::Word;
-
 #[cfg(feature = "alloc")]
 use alloc::string::{String, ToString};
 
@@ -29,57 +27,57 @@ pub const GENERAL_REGISTER_COUNT: usize = 16;
 ///
 /// There are two convenience methods for incrementing and decrementing registers: [`inc`](Registers::inc) and [`dec`](Registers::dec).
 #[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, Ord, Default)]
-pub struct Registers<W> {
+pub struct Registers {
     // General purpose registers, program counter (pc) and stack pointer (sp).
-    registers: [W; GENERAL_REGISTER_COUNT + 2],
+    registers: [usize; GENERAL_REGISTER_COUNT + 2],
     // Flags: carry flag (C), signed flag (S), overflow flag (V), zero condition flag (Z).
     flags: [bool; 4],
 }
 
-impl<W: Word> Registers<W> {
+impl Registers {
     /// Create a new set of registers with all values initialized to the default value.
     #[must_use]
     pub fn new() -> Self {
         Self {
-            registers: [W::default(); GENERAL_REGISTER_COUNT + 2],
+            registers: [usize::default(); GENERAL_REGISTER_COUNT + 2],
             flags: [false; 4],
         }
     }
 
     /// Get the value of a register.
     #[inline]
-    pub fn get_reg(&self, reg: Register) -> W {
+    pub fn get_reg(&self, reg: Register) -> usize {
         self.registers[usize::from(reg)]
     }
 
     /// Get the value of the program counter register.
     #[inline]
-    pub fn pc(&self) -> W {
+    pub fn pc(&self) -> usize {
         self.registers[usize::from(Register::PC)]
     }
 
     /// Get the value of the stack pointer register.
     #[inline]
-    pub fn sp(&self) -> W {
+    pub fn sp(&self) -> usize {
         self.registers[usize::from(Register::SP)]
     }
 
     /// Set the value of a register.
     #[inline]
-    pub fn set_reg(&mut self, reg: Register, val: W) {
+    pub fn set_reg(&mut self, reg: Register, val: usize) {
         self.registers[usize::from(reg)] = val;
     }
 
     /// Increment the value in a register by one.
     #[inline]
     pub fn inc(&mut self, reg: Register) {
-        self.registers[usize::from(reg)] += 1.into();
+        self.registers[usize::from(reg)] += 1;
     }
 
     /// Decrement the value in a register by one.
     #[inline]
     pub fn dec(&mut self, reg: Register) {
-        self.registers[usize::from(reg)] -= 1.into();
+        self.registers[usize::from(reg)] -= 1;
     }
 
     /// Get the value of a flag.
@@ -95,7 +93,7 @@ impl<W: Word> Registers<W> {
     }
 }
 
-impl<W: Word> core::fmt::Display for Registers<W> {
+impl core::fmt::Display for Registers {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
         write!(f, "general:\t")?;
         writeln!(f, "{}", FmtSlice(self.registers.as_slice()))?;

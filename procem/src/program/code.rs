@@ -3,19 +3,18 @@ use core::{
     ops::{Deref, Index},
 };
 
-use crate::{instruction::Instruction, word::Word};
+use crate::instruction::Instruction;
 
 /// `Code` represents executable instructions within a [`Program`](crate::program::Program).
 ///
 /// This generic container can wrap any type that dereferences to a slice of [`Instruction`]s.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct Code<Inst, Insts, W>(Insts, PhantomData<(Inst, W)>);
+pub struct Code<Inst, Insts>(Insts, PhantomData<Inst>);
 
-impl<Inst, Insts, W> Code<Inst, Insts, W>
+impl<Inst, Insts> Code<Inst, Insts>
 where
-    Inst: Instruction<W>,
+    Inst: Instruction,
     Insts: Deref<Target = [Inst]>,
-    W: Word,
 {
     /// Create a new code section from a container of instructions.
     #[inline]
@@ -32,11 +31,10 @@ where
     }
 }
 
-impl<Inst, Insts, W> Deref for Code<Inst, Insts, W>
+impl<Inst, Insts> Deref for Code<Inst, Insts>
 where
-    Inst: Instruction<W>,
+    Inst: Instruction,
     Insts: Deref<Target = [Inst]>,
-    W: Word,
 {
     type Target = [Inst];
 
@@ -45,22 +43,20 @@ where
     }
 }
 
-impl<Inst, Insts, W> From<Insts> for Code<Inst, Insts, W>
+impl<Inst, Insts> From<Insts> for Code<Inst, Insts>
 where
-    Inst: Instruction<W>,
+    Inst: Instruction,
     Insts: Deref<Target = [Inst]>,
-    W: Word,
 {
     fn from(instructions: Insts) -> Self {
         Self(instructions, PhantomData)
     }
 }
 
-impl<Inst, Insts, W> Index<usize> for Code<Inst, Insts, W>
+impl<Inst, Insts> Index<usize> for Code<Inst, Insts>
 where
-    Inst: Instruction<W>,
+    Inst: Instruction,
     Insts: Deref<Target = [Inst]>,
-    W: Word,
 {
     type Output = Inst;
 

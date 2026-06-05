@@ -1,41 +1,37 @@
-use crate::word::Word;
-
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct Bss<W> {
-    base_addr: W,
-    size: W,
+pub struct Bss {
+    base_addr: usize,
+    size: usize,
 }
 
-impl<W: Word> Bss<W> {
+impl Bss {
     /// Create a new BSS section.
     ///
-    /// `base_addr` is the start address; `size` is the number of words in this memory region.
+    /// `base_addr` is the start address; `size` is the number of bytes in this memory region.
     #[inline]
     #[must_use]
-    pub const fn new(base_addr: W, size: W) -> Self {
+    pub const fn new(base_addr: usize, size: usize) -> Self {
         Self { base_addr, size }
     }
 
     /// Get the base address of the BSS section.
     #[inline]
     #[must_use]
-    pub const fn base_addr(&self) -> W {
+    pub const fn base_addr(&self) -> usize {
         self.base_addr
     }
 
     /// Get the size of the BSS section.
     #[inline]
     #[must_use]
-    pub const fn size(&self) -> W {
+    pub const fn size(&self) -> usize {
         self.size
     }
 
     /// Compute the end address of the BSS region (exclusive) by adding `base_addr` and `size`.
-    ///
-    /// Note: Wrapping behaviour is defined on the [`Word`] implementation.
     #[must_use]
     #[inline]
-    pub fn end_addr(&self) -> W {
+    pub fn end_addr(&self) -> usize {
         self.base_addr + self.size
     }
 
@@ -43,6 +39,6 @@ impl<W: Word> Bss<W> {
     #[must_use]
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.size == W::from(0)
+        self.size == 0
     }
 }

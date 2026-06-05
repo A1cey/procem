@@ -7,8 +7,6 @@
 //! The instruction set in use must implement the [`Instruction`](instruction::Instruction) trait.
 //! A default instruction set is available in the [`procasm`](../procasm/index.html) crate.
 //!
-//! The [`Registers`](register::Registers) and [`Memory`](memory::Memory) use [`Word`](word::Word) as their data type.
-//!
 //! The processor’s [`Registers`](register::Registers), [`Flags`](register::Flag) and [`Memory`](memory::Memory)
 //! are directly accessible and modifiable through the [`Processor`](processor::Processor) structure.
 //!
@@ -16,29 +14,28 @@
 //! # use procem::register::{Flag, Register};
 //! # use procem::processor::Processor;
 //! # use procem::instruction::Instruction;
-//! # use procem::word::{I32, Word};
 //! # use core::marker::PhantomData;
 //! # use core::ops::Deref;
 //! #
 //! # #[derive(Debug, PartialEq, Eq, Clone, Copy, Ord, PartialOrd, Hash)]
-//! # struct Inst<W: Word> (PhantomData<W>);
+//! # struct Inst;
 //! #
-//! # impl<W: Word> Instruction<W> for Inst<W> {
-//! #     fn execute<const MEM_SIZE: usize, Insts, Words>(
+//! # impl Instruction for Inst {
+//! #     fn execute<const MEM_SIZE: usize, Insts, Bytes>(
 //! #         instruction: Self,
-//! #         processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>
+//! #         processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>
 //! #     ) {}
 //! # }
 //! #
-//! # let mut processor = Processor::<2048, _, Vec<Inst<I32>>, _, Vec<I32>>::new();
+//! # let mut processor = Processor::<2048, _, Vec<Inst>, Vec<_>>::new();
 //! let r0 = processor.registers.get_reg(Register::R0);
 //! processor.registers.set_reg(Register::R1, r0);
 //!
 //! let overflow = processor.registers.get_flag(Flag::V);
 //!
-//! processor.mem.write(processor.registers.get_reg(Register::SP), 10.into());
+//! processor.mem.write(processor.registers.get_reg(Register::SP), 10);
 //! let val = processor.mem.read(processor.registers.get_reg(Register::SP));
-//! assert_eq!(val, 10.into());
+//! assert_eq!(val, 10);
 //! ```
 
 #![no_std]
@@ -51,4 +48,3 @@ pub mod memory;
 pub mod processor;
 pub mod program;
 pub mod register;
-pub mod word;

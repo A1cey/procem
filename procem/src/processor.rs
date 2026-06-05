@@ -8,7 +8,6 @@ use crate::instruction::Instruction;
 use crate::memory::Memory;
 use crate::program::Program;
 use crate::register::{Register, Registers};
-use crate::word::Word;
 
 /// The [`Processor`] is the main component of the emulator. It represents a simplified real world processor with memory, registers and flags.
 ///
@@ -29,27 +28,25 @@ use crate::word::Word;
 /// - To run only the next instruction use [`execute_next_instruction()`](Processor::execute_next_instruction()).
 ///
 /// # Generic Type Parameters
-/// - `Inst`: The instruction type; must implement [`Instruction<W>`](crate::instruction::Instruction)
+/// - `Inst`: The instruction type; must implement [`Instruction`](crate::instruction::Instruction)
 /// - `Insts`: A container of instructions dereferencing to `[Inst]` (allows `Vec`, arrays, slices, etc.)
-/// - `W`: The word type; must implement [`Word`]
-/// - `Words`: A container of words dereferencing to `[W]`
+/// - `Bytes`: A container of bytes dereferencing to `[u8]`
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct Processor<'program, const MEM_SIZE: usize, Inst, Insts, W: Word, Words> {
-    pub registers: Registers<W>,
-    pub mem: Memory<MEM_SIZE, W>,
-    program: Option<&'program Program<MEM_SIZE, Inst, Insts, W, Words>>,
+pub struct Processor<'program, const MEM_SIZE: usize, Inst, Insts, Bytes> {
+    pub registers: Registers,
+    pub mem: Memory<MEM_SIZE>,
+    program: Option<&'program Program<MEM_SIZE, Inst, Insts, Bytes>>,
 }
 
-impl<'program, const MEM_SIZE: usize, Inst, Insts, W, Words> Processor<'program, MEM_SIZE, Inst, Insts, W, Words>
+impl<'program, const MEM_SIZE: usize, Inst, Insts, Bytes> Processor<'program, MEM_SIZE, Inst, Insts, Bytes>
 where
-    Inst: Instruction<W>,
+    Inst: Instruction,
     Insts: Deref<Target = [Inst]>,
-    W: Word,
-    Words: Deref<Target = [W]>,
+    Bytes: Deref<Target = [u8]>,
 {
     #[must_use]
     #[inline]
-    pub const fn builder() -> ProcessorBuilder<'program, MEM_SIZE, Inst, Insts, W, Words> {
+    pub const fn builder() -> ProcessorBuilder<'program, MEM_SIZE, Inst, Insts, Bytes> {
         ProcessorBuilder::new()
     }
 
@@ -68,7 +65,7 @@ where
     ///
     /// The program cannot be changed after being loaded. You cannot mutate the program through the processor; replace it with a different [`Program`] to change behavior
     #[inline]
-    pub fn load_program(&mut self, program: &'program Program<MEM_SIZE, Inst, Insts, W, Words>) {
+    pub fn load_program(&mut self, program: &'program Program<MEM_SIZE, Inst, Insts, Bytes>) {
         self.program = Some(program);
         self.load_header();
         self.load_data();
@@ -79,7 +76,7 @@ where
     fn load_data(&mut self) {
         match self.program {
             Some(program) => {
-                let base_addr = program.data().base_addr().into();
+                let base_addr = program.data().base_addr();
                 let data = program.data().data();
                 self.mem[base_addr..data.len()].clone_from_slice(data);
             }
@@ -91,9 +88,9 @@ where
     fn load_bss(&mut self) {
         match self.program {
             Some(program) => {
-                let base_addr = program.bss().base_addr().into();
-                let end_addr = program.bss().end_addr().into();
-                self.mem[base_addr..end_addr].fill(W::from(0));
+                let base_addr = program.bss().base_addr();
+                let end_addr = program.bss().end_addr();
+                self.mem[base_addr..end_addr].fill(0);
             }
             None => unreachable!("This function is only called after program is loaded into processor."),
         }
@@ -146,12 +143,11 @@ where
     }
 }
 
-impl<const MEM_SIZE: usize, Inst, Insts, W, Words> Display for Processor<'_, MEM_SIZE, Inst, Insts, W, Words>
+impl<const MEM_SIZE: usize, Inst, Insts, Bytes> Display for Processor<'_, MEM_SIZE, Inst, Insts, Bytes>
 where
-    Inst: Instruction<W>,
+    Inst: Instruction,
     Insts: Deref<Target = [Inst]>,
-    W: Word,
-    Words: Deref<Target = [W]>,
+    Bytes: Deref<Target = [u8]>,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
         write!(f, "Registers: \n{}\nMemory: \t\t{}", self.registers, self.mem)
@@ -160,19 +156,17 @@ where
 
 /// The [`ProcessorBuilder`] is used to create a [`Processor`].
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Default)]
-pub struct ProcessorBuilder<'program, const MEM_SIZE: usize, Inst, Insts, W, Words> {
-    registers: Option<Registers<W>>,
-    mem: Option<Memory<MEM_SIZE, W>>,
-    program: Option<&'program Program<MEM_SIZE, Inst, Insts, W, Words>>,
+pub struct ProcessorBuilder<'program, const MEM_SIZE: usize, Inst, Insts, Bytes> {
+    registers: Option<Registers>,
+    mem: Option<Memory<MEM_SIZE>>,
+    program: Option<&'program Program<MEM_SIZE, Inst, Insts, Bytes>>,
 }
 
-impl<'program, const MEM_SIZE: usize, Inst, Insts, W: Word, Words>
-    ProcessorBuilder<'program, MEM_SIZE, Inst, Insts, W, Words>
+impl<'program, const MEM_SIZE: usize, Inst, Insts, Bytes> ProcessorBuilder<'program, MEM_SIZE, Inst, Insts, Bytes>
 where
-    Inst: Instruction<W>,
+    Inst: Instruction,
     Insts: Deref<Target = [Inst]>,
-    W: Word,
-    Words: Deref<Target = [W]>,
+    Bytes: Deref<Target = [u8]>,
 {
     /// Creates a new `ProcessorBuilder` with registers, memory and program set to `None`.
     #[inline]
@@ -187,7 +181,7 @@ where
     /// Sets the registers for the `ProcessorBuilder`.
     #[must_use]
     #[inline]
-    pub const fn with_registers(mut self, registers: Registers<W>) -> Self {
+    pub const fn with_registers(mut self, registers: Registers) -> Self {
         self.registers = Some(registers);
         self
     }
@@ -195,7 +189,7 @@ where
     /// Sets the memory for the `ProcessorBuilder`.
     #[must_use]
     #[inline]
-    pub const fn with_memory(mut self, mem: Memory<MEM_SIZE, W>) -> Self {
+    pub const fn with_memory(mut self, mem: Memory<MEM_SIZE>) -> Self {
         self.mem = Some(mem);
         self
     }
@@ -203,7 +197,7 @@ where
     /// Sets the program for the `ProcessorBuilder`.
     #[must_use]
     #[inline]
-    pub const fn with_program(mut self, program: &'program Program<MEM_SIZE, Inst, Insts, W, Words>) -> Self {
+    pub const fn with_program(mut self, program: &'program Program<MEM_SIZE, Inst, Insts, Bytes>) -> Self {
         self.program = Some(program);
         self
     }
@@ -211,7 +205,7 @@ where
     /// Builds the `Processor` with the given registers, memory and program.
     #[must_use]
     #[inline]
-    pub fn build(self) -> Processor<'program, MEM_SIZE, Inst, Insts, W, Words> {
+    pub fn build(self) -> Processor<'program, MEM_SIZE, Inst, Insts, Bytes> {
         let mut processor = Processor {
             registers: self.registers.unwrap_or_default(),
             mem: self.mem.unwrap_or_default(),
@@ -244,7 +238,6 @@ mod test {
     use crate::{
         instruction::Instruction,
         program::{Bss, Code, Data, Header},
-        word::I32,
     };
 
     use super::*;
@@ -254,23 +247,23 @@ mod test {
     #[derive(Debug, Clone, Copy)]
     struct Inst {}
 
-    impl Instruction<I32> for Inst {
-        fn execute<const MEM_SIZE: usize, Insts, Words>(
+    impl Instruction for Inst {
+        fn execute<const MEM_SIZE: usize, Insts, Bytes>(
             _instruction: Self,
-            _processor: &mut Processor<MEM_SIZE, Self, Insts, I32, Words>,
+            _processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
         ) {
         }
     }
 
     #[test]
     fn load_data() {
-        let data_base_addr = I32::from(0);
+        const DATA_BASE_ADDR: usize = 0;
 
         let mut processor = Processor::new();
-        let program = Program::<32, Inst, Vec<_>, I32, Vec<_>>::new(
-            Header::new(0.into(), 31.into()),
-            Data::new(data_base_addr, vec![1.into(), 2.into(), 3.into(), 4.into(), 5.into()]),
-            Bss::new(0.into(), 0.into()),
+        let program = Program::<32, Inst, Vec<_>, Vec<_>>::new(
+            Header::new(0, 31),
+            Data::new(DATA_BASE_ADDR, vec![1, 2, 3, 4, 5]),
+            Bss::new(0, 0),
             Code::new(vec![]),
         );
 
@@ -279,55 +272,55 @@ mod test {
         processor.load_data();
 
         for offset in 0..5 {
-            assert_eq!(processor.mem.read(data_base_addr + offset.into()), (offset + 1).into());
+            assert_eq!(processor.mem.read(DATA_BASE_ADDR + offset), offset as u8 + 1);
         }
     }
 
     #[test]
     fn load_program_only_data() {
-        let data_base_addr = I32::from(0);
+        const DATA_BASE_ADDR: usize = 0;
 
         let mut processor = Processor::new();
-        let program = Program::<32, Inst, Vec<_>, I32, Vec<_>>::new(
-            Header::new(0.into(), 31.into()),
-            Data::new(data_base_addr, vec![1.into(), 2.into(), 3.into(), 4.into(), 5.into()]),
-            Bss::new(0.into(), 0.into()),
+        let program = Program::<32, Inst, Vec<_>, Vec<_>>::new(
+            Header::new(0, 31),
+            Data::new(DATA_BASE_ADDR, vec![1, 2, 3, 4, 5]),
+            Bss::new(0, 0),
             Code::new(vec![]),
         );
 
         processor.load_program(&program);
 
         for offset in 0..5 {
-            assert_eq!(processor.mem.read(data_base_addr + offset.into()), (offset + 1).into());
+            assert_eq!(processor.mem.read(DATA_BASE_ADDR + offset), offset as u8 + 1);
         }
     }
 
     #[test]
     fn load_bss() {
-        let bss_size = I32::from(10);
+        const BSS_SIZE: usize = 10;
 
         let mut processor = Processor::new();
-        let program = Program::<32, Inst, Vec<_>, I32, Vec<_>>::new(
-            Header::new(0.into(), 31.into()),
-            Data::new(0.into(), vec![]),
-            Bss::new(0.into(), bss_size),
+        let program = Program::<32, Inst, Vec<_>, Vec<_>>::new(
+            Header::new(0, 31),
+            Data::new(0, vec![]),
+            Bss::new(0, BSS_SIZE),
             Code::new(vec![]),
         );
 
         processor.program = Some(&program);
-        processor.mem[..].fill(1.into()); // Set memory to non-zero value
+        processor.mem[..].fill(1); // Set memory to non-zero value
         processor.load_bss(); // Set memory to zero
 
-        for offset in 0..bss_size.into() {
-            assert_eq!(processor.mem.read(offset.into()), I32::from(0));
+        for offset in 0..BSS_SIZE {
+            assert_eq!(processor.mem.read(offset), 0);
         }
 
         // check that not too many values where set to 0
-        for addr in bss_size.into()..processor.mem.size() as i32 {
+        for addr in BSS_SIZE..processor.mem.size() {
             assert_eq!(
-                processor.mem.read(I32::from(addr)),
-                I32::from(1),
-                "Address {addr} was set to 0, even though bss has a size of {bss_size} ranging from address {} to address {}.",
+                processor.mem.read(addr),
+                1,
+                "Address {addr} was set to 0, even though bss has a size of {BSS_SIZE} ranging from address {} to address {}.",
                 program.bss().base_addr(),
                 program.bss().end_addr()
             );
@@ -336,29 +329,29 @@ mod test {
 
     #[test]
     fn load_programm_only_bss() {
-        let bss_size = I32::from(10);
+        const BSS_SIZE: usize = 10;
 
         let mut processor = Processor::new();
-        let program = Program::<32, Inst, Vec<_>, I32, Vec<_>>::new(
-            Header::new(0.into(), 31.into()),
-            Data::new(0.into(), vec![]),
-            Bss::new(0.into(), bss_size),
+        let program = Program::<32, Inst, Vec<_>, Vec<_>>::new(
+            Header::new(0, 31),
+            Data::new(0, vec![]),
+            Bss::new(0, BSS_SIZE),
             Code::new(vec![]),
         );
 
-        processor.mem[..].fill(1.into()); // Set memory to non-zero value
+        processor.mem[..].fill(1); // Set memory to non-zero value
         processor.load_program(&program); // Set memory to zero
 
-        for offset in 0..bss_size.into() {
-            assert_eq!(processor.mem.read(offset.into()), I32::from(0));
+        for offset in 0..BSS_SIZE {
+            assert_eq!(processor.mem.read(offset), 0);
         }
 
         // check that not too many values where set to 0
-        for addr in bss_size.into()..processor.mem.size() as i32 {
+        for addr in BSS_SIZE..processor.mem.size() {
             assert_eq!(
-                processor.mem.read(I32::from(addr)),
-                I32::from(1),
-                "Address {addr} was set to 0, even though bss has a size of {bss_size} ranging from address {} to address {}.",
+                processor.mem.read(addr),
+                1,
+                "Address {addr} was set to 0, even though bss has a size of {BSS_SIZE} ranging from address {} to address {}.",
                 program.bss().base_addr(),
                 program.bss().end_addr()
             );

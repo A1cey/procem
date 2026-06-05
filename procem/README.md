@@ -9,21 +9,20 @@
 - [`Instruction`](src/instruction.rs): Trait for defining custom instruction sets. A default instruction set is implemented in the procasm crate.
 - [`Registers`](src/register.rs): General-purpose registers, program counter, stack pointer, and flags.
 - [`Memory`](src/memory.rs): Fixed-size memory for processor operations.
-- [`Word`](src/word.rs): Trait for word-size types. Word is already implemented for all signed integer types.
 
 ## Customization
 
-You can implement your own instruction set by implementing the `Instruction` trait, and support custom word types by implementing the `Word` trait. Alternatively, you can use the default instruction set and word types.
+You can implement your own instruction set by implementing the `Instruction` trait. Alternatively, you can use the default instruction set and word types.
 
 ### Example: Using procasm
 
 ```rust
-use procem::{processor::Processor, register::Register, word::I32};
+use procem::{processor::Processor, register::Register};
 use procasm::assemble;
 
 // Assemble program from asm
 const MEM_SIZE: usize = 1024;
-let program = assemble::<MEM_SIZE, I32>(
+let program = assemble::<MEM_SIZE>(
     "
     .code
     _start:
@@ -40,5 +39,5 @@ let mut processor = Processor::builder().with_program(&program).build();
 
 let _ = processor.run_program();
 
-assert_eq!(processor.registers.get_reg(Register::R0), I32::from(6));
+assert_eq!(processor.registers.get_reg(Register::R0), 6);
 ```
