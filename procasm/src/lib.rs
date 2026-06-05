@@ -20,53 +20,18 @@
 //!
 //! 'END' marks the end of the program. It is only used as a guide for the assembler and not part of the assembled program.
 //!
-//! ### Operations
-//!
-//! - **NOP**: No operation.
-//! - **MOV \<REG>, \<OP>**: Copy a value from the operand to the register.
-//! - **PUSH \<OP>**: Push a value from the operand to the stack.
-//! - **POP \<REG>**: Pop a value from the stack to the register.
-//! - **CALL \<OP>**: Call a subroutine at the program address specified by the operand. Pushes the current program counter onto the stack and sets the program counter to the address of the subroutine.
-//! - **RET**: Return from a subroutine. Pops the return address from the stack and sets the program counter to the popped value.
-//! - **ADD\[S] \<REG>, \<OP>**: Add the value of the operand to the register. The result is stored in the register.
-//! - **SUB\[S] \<REG>, \<OP>**: Subtract the value of the operand from the register. The result is stored in the register.
-//! - **MUL\[S] \<REG>, \<OP>**: Multiply the value of the operand with the value of the register. The result is stored in the register.
-//! - **DIV\[S] \<REG>, \<OP>**: Divide the value of the register by the value of the operand. The result is stored in the register.
-//! - **INC\[S] \<REG>**: Increment the value in a register by one.
-//! - **DEC\[S] \<REG>**: Decrement the value in a register by one.
-//! - **JMP \<LABEL>**: Set program counter to the address of the label (first instruction after the label), effectively jumping to the instruction at this point in the program.
-//! - **JZ \<LABEL>**: Jump to the label if the zero flag (Z) is set.
-//! - **JNZ \<LABEL>**: Jump to the label if the zero flag (Z) is not set.
-//! - **JC \<LABEL>**: Jump to the label if the carry flag (C) is set.
-//! - **JNC \<LABEL>**: Jump to the label if the carry flag (C) is not set.
-//! - **JS \<LABEL>**: Jump to the label if the signed flag (S) is set.
-//! - **JNS \<LABEL>**: Jump to the label if the signed flag (S) is not set.
-//! - **JG \<LABEL>**: Jump to the label if the zero flag (Z) and signed flag (S) are not set.
-//! - **JGE \<LABEL>**: Jump to the label if the zero flag (Z) is set or signed flag (S) is not set.
-//! - **JL \<LABEL>**: Jump to the label if the zero flag (Z) is not set and the signed flag (S) is set.
-//! - **JLE \<LABEL>**: Jump to the label if the zero flag (Z) or signed flag (S) is set.
-//! - **CMP \<OP>, \<OP>**: Compare the values of two operands and set the flags accordingly. This is the same as `SUBS` but disregards the result of the subtraction.
-//! - **XOR \<REG>, \<OP>**: Perform a bitwise xor operation on the value in the register with the value of the operand.
-//! - **AND \<REG>, \<OP>**: Perform a bitwise and operation on the value in the register with the value of the operand.
-//! - **OR \<REG>, \<OP>**: Perform a bitwise or operation on the value in the register with the value of the operand.
-//! - **NOT \<REG>**: Perform a bitwise not operation on the value in the register.
-//! - **SHL \<REG>, \<LIT>**: Shift the value in the register left by the specified number of bits. Only use values between 1 and the number of bits of the Word size minus 1.
-//! - **SHR \<REG>, \<LIT>**: Shift the value in the register right by the specified number of bits. Only use values between 1 and the number of bits of the Word size minus 1.
-//! - **ROL \<REG>, \<LIT>**: Rotate the value in the register left by the specified number of bits. Only use values between 1 and the number of bits of the Word size minus 1.
-//! - **ROR \<REG>, \<LIT>**: Rotate the value in the register right by the specified number of bits. Only use values between 1 and the number of bits of the Word size minus 1.
-//!
 //! # Usage
 //! To assemble a [`Program`](../procem/program/struct.Program.html) from assembly code use the [`assemble`] function.
 //!
 //! # Example
 //! ```
-//! use procem::{processor::Processor, register::Register, word::I32};
+//! use procem::{processor::Processor, register::Register};
 //! use procasm::assemble;
 //!
 //! const MEM_SIZE: usize = 1024;
 //!
 //! // Assemble a program from asm
-//! let program = assemble::<MEM_SIZE, I32>(
+//! let program = assemble::<MEM_SIZE>(
 //!     "
 //!     .code
 //!     _start:
@@ -85,14 +50,13 @@
 //! let _ = processor.run_program();
 //!
 //! // Inspect register values
-//! assert_eq!(processor.registers.get_reg(Register::R0), 6.into());
+//! assert_eq!(processor.registers.get_reg(Register::R0), 6);
 //! ```
 //!
 use crate::instruction::Instruction;
 use crate::linker::{Linker, LinkerError};
 use crate::parser::{Parser, ParserError};
 use crate::tokenizer::{Tokenizer, TokenizerError};
-use crate::word::ProcasmWord;
 use procem::program::Program;
 use thiserror::Error;
 
@@ -100,9 +64,8 @@ pub mod instruction;
 mod linker;
 pub mod parser;
 pub mod tokenizer;
-pub mod word;
 
-pub type AssembledProgram<const MEM_SIZE: usize, W> = Program<MEM_SIZE, Instruction<W>, Vec<Instruction<W>>, W, Vec<W>>;
+pub type AssembledProgram<const MEM_SIZE: usize> = Program<MEM_SIZE, Instruction, Vec<Instruction>, Vec<u8>>;
 
 /// Assembles Program from assembly code.
 ///
@@ -111,12 +74,12 @@ pub type AssembledProgram<const MEM_SIZE: usize, W> = Program<MEM_SIZE, Instruct
 ///
 /// # Example
 /// ```
-/// use procem::{program::{Program, Code, Header, Bss, Data}, register::Register, word::I32};
+/// use procem::{program::{Program, Code, Header, Bss, Data}, register::Register};
 /// use procasm::{assemble, AssembledProgram, instruction::{Instruction, jump_condition::JumpCondition, operand::Operand}};
 ///
 /// const MEM_SIZE: usize = 1024;
 ///
-/// let program = assemble::<MEM_SIZE, I32>(
+/// let program = assemble::<MEM_SIZE>(
 ///     "
 ///     .code
 ///     _start:
@@ -129,15 +92,15 @@ pub type AssembledProgram<const MEM_SIZE: usize, W> = Program<MEM_SIZE, Instruct
 ///
 /// assert_eq!(
 ///     program,
-///     AssembledProgram::<MEM_SIZE, I32>::new(
-///         Header::new(I32::from(0), I32::from((MEM_SIZE - 1) as i32)),
+///     AssembledProgram::<MEM_SIZE>::new(
+///         Header::new(0, MEM_SIZE - 1),
 ///         Data::default(),
 ///         Bss::default(),
 ///         Code::from(
 ///             vec![
 ///                  Instruction::Mov {
 ///                      to: Register::R0,
-///                      from: Operand::Value(2.into())
+///                      from: Operand::Value(2)
 ///                  },
 ///                  Instruction::Add {
 ///                      acc: Register::R1,
@@ -145,7 +108,7 @@ pub type AssembledProgram<const MEM_SIZE: usize, W> = Program<MEM_SIZE, Instruct
 ///                      signed: false
 ///                  },
 ///                  Instruction::Jump {
-///                      to: 0.into(),
+///                      to: 0,
 ///                      condition: JumpCondition::Unconditional
 ///                  }
 ///             ]
@@ -153,18 +116,18 @@ pub type AssembledProgram<const MEM_SIZE: usize, W> = Program<MEM_SIZE, Instruct
 ///     )
 /// );
 /// ```
-pub fn assemble<const MEM_SIZE: usize, W: ProcasmWord>(
+pub fn assemble<const MEM_SIZE: usize>(
     input: impl AsRef<str>,
-) -> Result<AssembledProgram<MEM_SIZE, W>, Vec<AssemblerError>> {
+) -> Result<AssembledProgram<MEM_SIZE>, Vec<AssemblerError>> {
     let input = input.as_ref().as_bytes();
 
     let tokens =
         Tokenizer::tokenize(input).map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())?;
 
-    let parsed = Parser::<'_, W>::parse(&tokens, input)
+    let parsed = Parser::parse(&tokens, input)
         .map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())?;
 
-    Linker::<'_, MEM_SIZE, W>::link(input, parsed)
+    Linker::<'_, MEM_SIZE>::link(input, parsed)
         .map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())
 }
 

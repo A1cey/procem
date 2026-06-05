@@ -16,23 +16,22 @@ use crate::instruction::{
     unlinked::UnlinkedInstruction,
 };
 use crate::tokenizer::{ImmediateLiteral, Token};
-use crate::word::ProcasmWord;
 use ars::range::Range;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Parsed<'input, W> {
-    instructions: Vec<Instruction<W>>,
+pub(crate) struct Parsed<'input> {
+    instructions: Vec<Instruction>,
     labels: HashMap<&'input [u8], usize>,
     unlinked_instructions: Vec<UnlinkedInstruction>,
-    data: Vec<W>,
+    data: Vec<u8>,
     bss: usize,
 }
 
-impl<W> Parsed<'_, W> {
+impl Parsed<'_> {
     // Returns vec because linker uses size attribute
     #[inline]
     #[must_use]
-    pub(crate) const fn mut_instructions(&mut self) -> &mut Vec<Instruction<W>> {
+    pub(crate) const fn mut_instructions(&mut self) -> &mut Vec<Instruction> {
         &mut self.instructions
     }
 
@@ -51,13 +50,13 @@ impl<W> Parsed<'_, W> {
 
     #[inline]
     #[must_use]
-    pub(crate) fn data(&self) -> &[W] {
+    pub(crate) fn data(&self) -> &[u8] {
         &self.data
     }
 
     #[inline]
     #[must_use]
-    pub(crate) const fn mut_data(&mut self) -> &mut Vec<W> {
+    pub(crate) const fn mut_data(&mut self) -> &mut Vec<u8> {
         &mut self.data
     }
 
@@ -68,8 +67,8 @@ impl<W> Parsed<'_, W> {
     }
 }
 
-impl<'input, W, Section> From<InnerParser<'input, W, Section>> for Parsed<'input, W> {
-    fn from(p: InnerParser<'input, W, Section>) -> Self {
+impl<'input, Section> From<InnerParser<'input, Section>> for Parsed<'input> {
+    fn from(p: InnerParser<'input, Section>) -> Self {
         Self {
             instructions: p.instructions,
             labels: p.labels,
@@ -97,14 +96,14 @@ enum Section {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Parser<'input, W> {
-    Undefined(InnerParser<'input, W, Undefined>),
-    Code(InnerParser<'input, W, Code>),
-    Data(InnerParser<'input, W, Data>),
-    Bss(InnerParser<'input, W, Bss>),
+pub enum Parser<'input> {
+    Undefined(InnerParser<'input, Undefined>),
+    Code(InnerParser<'input, Code>),
+    Data(InnerParser<'input, Data>),
+    Bss(InnerParser<'input, Bss>),
 }
 
-impl<'input, W: ProcasmWord> Parser<'input, W> {
+impl<'input> Parser<'input> {
     #[inline]
     #[must_use]
     fn new(tokens: &'input [Token], input: &'input [u8]) -> Self {
@@ -127,7 +126,7 @@ impl<'input, W: ProcasmWord> Parser<'input, W> {
     ///
     /// # Errors
     /// Returns a list of errors that occurred during parsing.
-    pub(crate) fn parse(tokens: &'input [Token], input: &'input [u8]) -> Result<Parsed<'input, W>, Vec<ParserError>> {
+    pub(crate) fn parse(tokens: &'input [Token], input: &'input [u8]) -> Result<Parsed<'input>, Vec<ParserError>> {
         let mut parser = Self::new(tokens, input);
 
         while !parser.is_done() {
@@ -188,7 +187,7 @@ impl<'input, W: ProcasmWord> Parser<'input, W> {
     }
 
     #[inline]
-    fn finish(self) -> Result<Parsed<'input, W>, Vec<ParserError>> {
+    fn finish(self) -> Result<Parsed<'input>, Vec<ParserError>> {
         match self {
             Self::Undefined(p) => {
                 if let Some(errors) = p.errors {
@@ -286,7 +285,7 @@ impl<'input, W: ProcasmWord> Parser<'input, W> {
 
     #[inline]
     #[must_use]
-    fn parse_section_directive<S>(parser: &InnerParser<'_, W, S>, range: Range) -> Section {
+    fn parse_section_directive<S>(parser: &InnerParser<'_, S>, range: Range) -> Section {
         match &parser.input[range] {
             directive if directive.eq_ignore_ascii_case(b"code") => Section::Code,
             directive if directive.eq_ignore_ascii_case(b"data") => Section::Data,
@@ -297,12 +296,12 @@ impl<'input, W: ProcasmWord> Parser<'input, W> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InnerParser<'input, W, Section = Undefined> {
+pub struct InnerParser<'input, Section = Undefined> {
     tokens: &'input [Token],
-    instructions: Vec<Instruction<W>>,
+    instructions: Vec<Instruction>,
     labels: HashMap<&'input [u8], usize>,
     unlinked_instructions: Vec<UnlinkedInstruction>,
-    data: Vec<W>,
+    data: Vec<u8>,
     bss: usize,
     errors: Option<Vec<ParserError>>,
     idx: usize,
@@ -311,10 +310,10 @@ pub struct InnerParser<'input, W, Section = Undefined> {
     _current_section: PhantomData<Section>,
 }
 
-impl<'input, W: ProcasmWord, Section> InnerParser<'input, W, Section> {
+impl<'input, Section> InnerParser<'input, Section> {
     #[inline]
     #[must_use]
-    fn into_code(self) -> InnerParser<'input, W, Code> {
+    fn into_code(self) -> InnerParser<'input, Code> {
         InnerParser {
             tokens: self.tokens,
             instructions: self.instructions,
@@ -332,7 +331,7 @@ impl<'input, W: ProcasmWord, Section> InnerParser<'input, W, Section> {
 
     #[inline]
     #[must_use]
-    fn into_data(self) -> InnerParser<'input, W, Data> {
+    fn into_data(self) -> InnerParser<'input, Data> {
         InnerParser {
             tokens: self.tokens,
             instructions: self.instructions,
@@ -350,7 +349,7 @@ impl<'input, W: ProcasmWord, Section> InnerParser<'input, W, Section> {
 
     #[inline]
     #[must_use]
-    fn into_bss(self) -> InnerParser<'input, W, Bss> {
+    fn into_bss(self) -> InnerParser<'input, Bss> {
         InnerParser {
             tokens: self.tokens,
             instructions: self.instructions,
@@ -383,33 +382,33 @@ impl<'input, W: ProcasmWord, Section> InnerParser<'input, W, Section> {
         self.errors.get_or_insert_default().push(err);
     }
 
-    fn convert_lit_to_word(&self, lit: ImmediateLiteral) -> Result<W, ParserError> {
+    fn convert_lit_to_word(&self, lit: ImmediateLiteral) -> Result<usize, ParserError> {
         match lit {
-            ImmediateLiteral::Char(c) => Ok(W::from(isize::from(c))),
+            ImmediateLiteral::Char(c) => Ok(usize::from(c)),
             ImmediateLiteral::Binary(range) => {
                 let lit = String::from_utf8_lossy(&self.input[range]);
-                W::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
+                usize::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
                     lit: lit.to_string(),
                     err,
                 })
             }
             ImmediateLiteral::Decimal(range) => {
                 let lit = String::from_utf8_lossy(&self.input[range]);
-                W::from_str_radix(&lit, 10).map_err(|err| ParserError::LiteralParsing {
+                usize::from_str_radix(&lit, 10).map_err(|err| ParserError::LiteralParsing {
                     lit: lit.to_string(),
                     err,
                 })
             }
             ImmediateLiteral::Hexadecimal(range) => {
                 let lit = String::from_utf8_lossy(&self.input[range]);
-                W::from_str_radix(&lit, 16).map_err(|err| ParserError::LiteralParsing {
+                usize::from_str_radix(&lit, 16).map_err(|err| ParserError::LiteralParsing {
                     lit: lit.to_string(),
                     err,
                 })
             }
             ImmediateLiteral::Octal(range) => {
                 let lit = String::from_utf8_lossy(&self.input[range]);
-                W::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
+                usize::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
                     lit: lit.to_string(),
                     err,
                 })
@@ -433,9 +432,9 @@ impl<'input, W: ProcasmWord, Section> InnerParser<'input, W, Section> {
     }
 }
 
-impl<W: ProcasmWord> InnerParser<'_, W, Undefined> {}
+impl InnerParser<'_, Undefined> {}
 
-impl<W: ProcasmWord> InnerParser<'_, W, Code> {
+impl InnerParser<'_, Code> {
     fn parse_next_token(&mut self) {
         match &self.tokens.get(self.idx) {
             Some(t) => match t {
@@ -502,7 +501,7 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
                 self.unlinked_instructions
                     .push(UnlinkedInstruction::new(self.instructions.len(), *range));
                 self.instructions
-                    .push(Instruction::from_jump_instruction(instr, <W as ProcasmWord>::max()));
+                    .push(Instruction::from_jump_instruction(instr, usize::MAX));
             }
             Some(token) => self.add_error(ParserError::InvalidToken {
                 idx: self.idx,
@@ -542,7 +541,7 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
         }
     }
 
-    fn expect_operand(&mut self) -> Result<Operand<W>, ParserError> {
+    fn expect_operand(&mut self) -> Result<Operand, ParserError> {
         self.idx += 1; // manual, to enable borrow of self inside match
         match self.tokens.get(self.idx) {
             Some(Token::Identifier(range)) => Ok(Operand::Register(
@@ -575,10 +574,7 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
             Some(Token::Identifier(range)) => {
                 self.unlinked_instructions
                     .push(UnlinkedInstruction::new(self.instructions.len(), *range));
-                self.instructions.push(Instruction::Adr {
-                    reg,
-                    addr: <W as ProcasmWord>::max(),
-                });
+                self.instructions.push(Instruction::Adr { reg, addr: usize::MAX });
             }
             Some(token) => self.add_error(ParserError::InvalidToken {
                 idx: self.idx,
@@ -746,20 +742,20 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
         self.instructions.push(instr);
     }
 
-    fn expect_label_mem_location(&mut self, range: Range) -> MemoryLocation<W> {
+    fn expect_label_mem_location(&mut self, range: Range) -> MemoryLocation {
         self.unlinked_instructions
             .push(UnlinkedInstruction::new(self.instructions.len(), range));
-        MemoryLocation::Labeled(<W as ProcasmWord>::max())
+        MemoryLocation::Labeled(usize::MAX)
     }
 
-    fn expect_direct_mem_location(&mut self) -> Result<MemoryLocation<W>, ParserError> {
+    fn expect_direct_mem_location(&mut self) -> Result<MemoryLocation, ParserError> {
         let base = self.expect_register()?;
 
         let offset = if let Some(Token::Comma) = self.peak_token() {
             self.idx += 1; // skip comma
             self.expect_operand()?
         } else {
-            Operand::Value(W::from(0))
+            Operand::Value(0)
         };
 
         self.idx += 1;
@@ -777,7 +773,7 @@ impl<W: ProcasmWord> InnerParser<'_, W, Code> {
     }
 }
 
-impl<W: ProcasmWord> InnerParser<'_, W, Data> {
+impl InnerParser<'_, Data> {
     fn parse_next_token(&mut self) {
         match &self.tokens[self.idx] {
             Token::Identifier(range) => {
@@ -825,7 +821,7 @@ impl<W: ProcasmWord> InnerParser<'_, W, Data> {
     fn expect_word(&mut self) {
         match self.expect_immediate_literal() {
             Ok(lit) => match self.convert_lit_to_word(lit) {
-                Ok(word) => self.data.push(word),
+                Ok(word) => self.data.push(word as u8), // TODO: How to cast this
                 Err(err) => self.add_error(err),
             },
             Err(err) => self.add_error(err),
@@ -849,8 +845,7 @@ impl<W: ProcasmWord> InnerParser<'_, W, Data> {
         match token {
             Some(token) => match token {
                 Token::StringLiteral(lit) => {
-                    self.data
-                        .extend(self.input[lit].iter().map(|&byte| W::from(isize::from(byte))));
+                    self.data.extend(self.input[lit].iter().map(|&byte| byte));
                 }
                 token => self.add_error(ParserError::InvalidToken {
                     idx: self.idx,
@@ -863,7 +858,7 @@ impl<W: ProcasmWord> InnerParser<'_, W, Data> {
     }
 }
 
-impl<W: ProcasmWord> InnerParser<'_, W, Bss> {
+impl InnerParser<'_, Bss> {
     fn parse_next_token(&mut self) {
         match &self.tokens[self.idx] {
             Token::Identifier(range) => {
@@ -999,13 +994,12 @@ pub enum ParserError {
 
 #[cfg(test)]
 mod test {
-    use procem::{register::Register, word::I32};
+    use procem::register::Register;
 
     use crate::{
         instruction::{Instruction, memory_location::MemoryLocation, operand::Operand},
         parser::{Parser, ParserError},
         tokenizer::Tokenizer,
-        word::ProcasmWord,
     };
 
     #[test]
@@ -1019,7 +1013,7 @@ mod test {
             .Invalid
             ";
         let tokens = Tokenizer::tokenize(input).unwrap();
-        let mut p = Parser::<I32>::new(&tokens, input);
+        let mut p = Parser::new(&tokens, input);
 
         macro_rules! check {
             ($variant:ident, $p:expr) => {
@@ -1066,7 +1060,7 @@ mod test {
                 b: .space 5, 0xA
             ";
         let tokens = Tokenizer::tokenize(input).unwrap();
-        let parsed = Parser::<I32>::parse(&tokens, input).unwrap();
+        let parsed = Parser::parse(&tokens, input).unwrap();
 
         assert_eq!(parsed.instructions.len(), 0);
         assert_eq!(parsed.labels().len(), 2);
@@ -1089,7 +1083,7 @@ mod test {
                     .word 5, 0xA
             ";
         let tokens = Tokenizer::tokenize(input).unwrap();
-        let parsed = Parser::<I32>::parse(&tokens, input).unwrap();
+        let parsed = Parser::parse(&tokens, input).unwrap();
 
         assert_eq!(parsed.instructions.len(), 0);
         assert_eq!(parsed.unlinked_instructions.len(), 0);
@@ -1138,7 +1132,7 @@ mod test {
                 jmp c
             ";
         let tokens = Tokenizer::tokenize(input).unwrap();
-        let parsed = Parser::<I32>::parse(&tokens, input).unwrap();
+        let parsed = Parser::parse(&tokens, input).unwrap();
 
         assert_eq!(parsed.instructions.len(), 6);
         assert_eq!(parsed.labels().len(), 6);
@@ -1166,7 +1160,7 @@ mod test {
             ";
 
         let tokens = Tokenizer::tokenize(input).unwrap();
-        let parsed = Parser::<I32>::parse(&tokens, input).unwrap();
+        let parsed = Parser::parse(&tokens, input).unwrap();
 
         assert_eq!(parsed.instructions.len(), 6);
         assert_eq!(parsed.unlinked_instructions.len(), 1);
@@ -1181,7 +1175,7 @@ mod test {
                     *to,
                     MemoryLocation::Offset {
                         base: Register::R1,
-                        offset: Operand::Value(0.into())
+                        offset: Operand::Value(0)
                     }
                 );
             }
@@ -1207,7 +1201,7 @@ mod test {
                     *to,
                     MemoryLocation::Offset {
                         base: Register::R1,
-                        offset: Operand::Value(5.into())
+                        offset: Operand::Value(5)
                     }
                 );
             }
@@ -1220,7 +1214,7 @@ mod test {
                     *to,
                     MemoryLocation::Offset {
                         base: Register::R1,
-                        offset: Operand::Value((-1).into())
+                        offset: Operand::Value(-1isize as usize)
                     }
                 );
             }
@@ -1233,7 +1227,7 @@ mod test {
                     *to,
                     MemoryLocation::Offset {
                         base: Register::R1,
-                        offset: Operand::Value(10.into())
+                        offset: Operand::Value(10)
                     }
                 );
             }
@@ -1242,7 +1236,7 @@ mod test {
         match insts.next().unwrap() {
             Instruction::Str { from, to } => {
                 assert_eq!(*from, Register::R0);
-                assert_eq!(*to, MemoryLocation::Labeled(<I32 as ProcasmWord>::max()));
+                assert_eq!(*to, MemoryLocation::Labeled(usize::MAX));
             }
             i => unreachable!("Expected Str instruction, got {i:?}"),
         }
@@ -1261,7 +1255,7 @@ mod test {
             ";
 
         let tokens = Tokenizer::tokenize(input).unwrap();
-        let parsed = Parser::<I32>::parse(&tokens, input).unwrap();
+        let parsed = Parser::parse(&tokens, input).unwrap();
 
         assert_eq!(parsed.instructions.len(), 6);
         assert_eq!(parsed.unlinked_instructions.len(), 1);
@@ -1276,7 +1270,7 @@ mod test {
                     *from,
                     MemoryLocation::Offset {
                         base: Register::R1,
-                        offset: Operand::Value(0.into())
+                        offset: Operand::Value(0)
                     }
                 );
             }
@@ -1302,7 +1296,7 @@ mod test {
                     *from,
                     MemoryLocation::Offset {
                         base: Register::R1,
-                        offset: Operand::Value(5.into())
+                        offset: Operand::Value(5)
                     }
                 );
             }
@@ -1315,7 +1309,7 @@ mod test {
                     *from,
                     MemoryLocation::Offset {
                         base: Register::R1,
-                        offset: Operand::Value((-1).into())
+                        offset: Operand::Value(-1isize as usize)
                     }
                 );
             }
@@ -1328,7 +1322,7 @@ mod test {
                     *from,
                     MemoryLocation::Offset {
                         base: Register::R1,
-                        offset: Operand::Value(10.into())
+                        offset: Operand::Value(10)
                     }
                 );
             }
@@ -1337,7 +1331,7 @@ mod test {
         match insts.next().unwrap() {
             Instruction::Ldr { to, from } => {
                 assert_eq!(*to, Register::R0);
-                assert_eq!(*from, MemoryLocation::Labeled(<I32 as ProcasmWord>::max()));
+                assert_eq!(*from, MemoryLocation::Labeled(usize::MAX));
             }
             i => unreachable!("Expected Ldr instruction, got {i:?}"),
         }
@@ -1359,7 +1353,7 @@ mod test {
             parsed.instructions[0],
             Instruction::Adr {
                 reg: Register::R0,
-                addr: <I32 as ProcasmWord>::max()
+                addr: usize::MAX
             }
         );
     }

@@ -9,14 +9,13 @@ use procem::{
     processor::Processor,
     program::{Bss, Code, Data, Header, Program},
     register::Register,
-    word::I32,
 };
 
 #[test]
 fn simple_5x2_multiplication() {
     const MEM_SIZE: usize = 1024;
 
-    let program = assemble::<MEM_SIZE, I32>(
+    let program = assemble::<MEM_SIZE>(
         "
         .code
         _start:
@@ -32,14 +31,14 @@ fn simple_5x2_multiplication() {
 
     assert_eq!(
         program,
-        AssembledProgram::<MEM_SIZE, I32>::new(
-            Header::new(I32::from(0), I32::from((MEM_SIZE - 1) as i32)),
+        AssembledProgram::new(
+            Header::new(0, MEM_SIZE - 1),
             Data::default(),
             Bss::default(),
             Code::from(vec![
                 Instruction::Mov {
                     to: Register::R0,
-                    from: Operand::Value(2.into())
+                    from: Operand::Value(2)
                 },
                 Instruction::Add {
                     acc: Register::R1,
@@ -47,7 +46,7 @@ fn simple_5x2_multiplication() {
                     signed: false
                 },
                 Instruction::Jump {
-                    to: 0.into(),
+                    to: 0,
                     condition: JumpCondition::Unconditional
                 }
             ])
@@ -62,17 +61,17 @@ fn simple_5x2_multiplication() {
         assert!(processor.execute_next_instruction().is_ok());
     }
 
-    assert_eq!(processor.registers.get_reg(Register::R1), 10.into());
-    assert_eq!(processor.registers.pc(), 2.into());
+    assert_eq!(processor.registers.get_reg(Register::R1), 10);
+    assert_eq!(processor.registers.pc(), 2);
 
     assert!(processor.execute_next_instruction().is_ok());
-    assert_eq!(processor.registers.pc(), 0.into());
+    assert_eq!(processor.registers.pc(), 0);
 }
 
 #[test]
 fn parse_various_literals() {
     const MEM_SIZE: usize = 1024;
-    let program = assemble::<MEM_SIZE, I32>(
+    let program = assemble::<MEM_SIZE>(
         "
         .code
         _start:
@@ -92,29 +91,29 @@ fn parse_various_literals() {
     assert_eq!(
         program,
         Program::new(
-            Header::new(I32::from(0), I32::from((MEM_SIZE - 1) as i32)),
+            Header::new(0, MEM_SIZE - 1),
             Data::default(),
             Bss::default(),
             Code::from(vec![
                 Instruction::Mov {
                     to: Register::R0,
-                    from: Operand::Value(42.into())
+                    from: Operand::Value(42)
                 },
                 Instruction::Mov {
                     to: Register::R1,
-                    from: Operand::Value(42.into())
+                    from: Operand::Value(42),
                 },
                 Instruction::Mov {
                     to: Register::R2,
-                    from: Operand::Value(42.into())
+                    from: Operand::Value(42)
                 },
                 Instruction::Mov {
                     to: Register::R3,
-                    from: Operand::Value(42.into())
+                    from: Operand::Value(42)
                 },
                 Instruction::Mov {
                     to: Register::R6,
-                    from: Operand::Value(65.into())
+                    from: Operand::Value(65)
                 }
             ])
         )
@@ -124,7 +123,7 @@ fn parse_various_literals() {
 #[test]
 fn parse_and_execute_arithmetic() {
     const MEM_SIZE: usize = 1024;
-    let program = assemble::<MEM_SIZE, I32>(
+    let program = assemble::<MEM_SIZE>(
         "
         .code
         _start:
@@ -145,14 +144,14 @@ fn parse_and_execute_arithmetic() {
 
     let _ = processor.run_program();
 
-    assert_eq!(processor.registers.get_reg(Register::R0), 6.into());
+    assert_eq!(processor.registers.get_reg(Register::R0), 6);
 }
 
 #[test]
 fn control_flow_and_labels() {
     const MEM_SIZE: usize = 1024;
     // Loop should run 5 times, incrementing R0 from 0 to 5
-    let program = assemble::<MEM_SIZE, I32>(
+    let program = assemble::<MEM_SIZE>(
         "
 .code
 _start:
@@ -172,13 +171,13 @@ loop:
     let mut processor = Processor::builder().with_program(&program).build();
 
     let _ = processor.run_program();
-    assert_eq!(processor.registers.get_reg(Register::R0), 5.into());
+    assert_eq!(processor.registers.get_reg(Register::R0), 5);
 }
 
 #[test]
 fn test_overflow_and_flags() {
     const MEM_SIZE: usize = 1024;
-    let program = assemble::<MEM_SIZE, I32>(
+    let program = assemble::<MEM_SIZE>(
         "
         .code
         _start:
@@ -195,14 +194,14 @@ fn test_overflow_and_flags() {
     let mut processor = Processor::builder().with_program(&program).build();
 
     let _ = processor.run_program();
-    assert_eq!(processor.registers.get_reg(Register::R0), i32::MIN.into());
+    assert_eq!(processor.registers.get_reg(Register::R0), usize::MIN);
     assert_eq!(processor.registers.get_flag(procem::register::Flag::Z), true);
 }
 
 #[test]
 fn factorial_program() {
     const MEM_SIZE: usize = 1024;
-    let program = assemble::<MEM_SIZE, I32>(
+    let program = assemble::<MEM_SIZE>(
         "
         .code
         _start:
@@ -222,13 +221,13 @@ fn factorial_program() {
     let mut processor = Processor::builder().with_program(&program).build();
 
     let _ = processor.run_program();
-    assert_eq!(processor.registers.get_reg(Register::R1), 120.into());
+    assert_eq!(processor.registers.get_reg(Register::R1), 120);
 }
 
 #[test]
 fn swap_static_mem() {
     const MEM_SIZE: usize = 32;
-    let program = assemble::<MEM_SIZE, I32>(
+    let program = assemble::<MEM_SIZE>(
         "
         .data
         foo:
@@ -247,17 +246,17 @@ fn swap_static_mem() {
 
     let mut processor = Processor::builder().with_program(&program).build();
 
-    assert_eq!(processor.registers.get_reg(Register::R0), 0.into());
-    assert_eq!(processor.registers.get_reg(Register::R1), 0.into());
-    assert_eq!(processor.mem.read(program.data().base_addr()), 42.into());
-    assert_eq!(processor.mem.read(program.data().base_addr() + 1.into()), 43.into());
+    assert_eq!(processor.registers.get_reg(Register::R0), 0);
+    assert_eq!(processor.registers.get_reg(Register::R1), 0);
+    assert_eq!(processor.mem.read(program.data().base_addr()), 42);
+    assert_eq!(processor.mem.read(program.data().base_addr() + 1), 43);
     assert_eq!(program.code().len(), 5);
 
     let _ = processor.run_program();
 
-    assert_eq!(processor.registers.get_reg(Register::R0), 0.into());
-    assert_eq!(processor.registers.get_reg(Register::R1), 42.into());
-    assert_eq!(processor.registers.get_reg(Register::R2), 43.into());
-    assert_eq!(processor.mem.read(program.data().base_addr()), 43.into());
-    assert_eq!(processor.mem.read(program.data().base_addr() + 1.into()), 42.into());
+    assert_eq!(processor.registers.get_reg(Register::R0), 0);
+    assert_eq!(processor.registers.get_reg(Register::R1), 42);
+    assert_eq!(processor.registers.get_reg(Register::R2), 43);
+    assert_eq!(processor.mem.read(program.data().base_addr()), 43);
+    assert_eq!(processor.mem.read(program.data().base_addr() + 1), 42);
 }

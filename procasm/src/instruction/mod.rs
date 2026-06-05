@@ -11,70 +11,51 @@ use procem::{
     register::{Flag, Register},
 };
 
-use crate::{
-    instruction::{
-        asm_instruction::{
-            ASMJumpInstruction, ASMRegOperandInstruction, ASMRotateInstruction, ASMShiftInstruction,
-            ASMSingleOperandInstruction, ASMSingleRegInstruction, ASMTwoOperandInstruction,
-        },
-        jump_condition::JumpCondition,
-        memory_location::MemoryLocation,
-        operand::Operand,
+use crate::instruction::{
+    asm_instruction::{
+        ASMJumpInstruction, ASMRegOperandInstruction, ASMRotateInstruction, ASMShiftInstruction,
+        ASMSingleOperandInstruction, ASMSingleRegInstruction, ASMTwoOperandInstruction,
     },
-    word::ProcasmWord,
+    jump_condition::JumpCondition,
+    memory_location::MemoryLocation,
+    operand::Operand,
 };
 
 /// A default instruction set implementation, that can be used for the [procem](../../procem/index.html) crate.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Hash)]
-pub enum Instruction<W> {
+pub enum Instruction {
     /// No operation. (NOP)
     Nop,
     /// Store the memory location of a label in a register. (ADR)
-    Adr { reg: Register, addr: W },
+    Adr { reg: Register, addr: usize },
     /// Copy a value from the operand to the register. (MOV)
-    Mov { to: Register, from: Operand<W> },
+    Mov { to: Register, from: Operand },
     /// Store a value from a register to a memory location. (STR)
-    Str { from: Register, to: MemoryLocation<W> },
+    Str { from: Register, to: MemoryLocation },
     /// Load a value from a memory location into a register. (LDR)
-    Ldr { to: Register, from: MemoryLocation<W> },
+    Ldr { to: Register, from: MemoryLocation },
     /// Push a value from the operand to the stack. (PUSH)
-    Push { from: Operand<W> },
+    Push { from: Operand },
     /// Pop a value from the stack to the register. (POP)
     Pop { to: Register },
     /// Call a subroutine at the program address specified by the operand.
     /// Pushes the current program counter onto the stack and sets the program counter to the address of the subroutine. (CALL)
-    Call { addr: Operand<W> },
+    Call { addr: Operand },
     /// Return from a subroutine.
     /// Pops the return address from the stack and sets the program counter to the popped value. (RET)
     Ret,
     /// Add the value of the operand (rhs) to the register (acc).
     /// The result is stored in acc. (ADD\[S\])
-    Add {
-        acc: Register,
-        rhs: Operand<W>,
-        signed: bool,
-    },
+    Add { acc: Register, rhs: Operand, signed: bool },
     /// Subtract the value of the operand (rhs) from the register (acc).
     /// The result is stored in acc. (SUB\[S\])
-    Sub {
-        acc: Register,
-        rhs: Operand<W>,
-        signed: bool,
-    },
+    Sub { acc: Register, rhs: Operand, signed: bool },
     /// Multiply the value of the operand (rhs) with the value of the register (acc).
     /// The result is stored in acc. (MUL\[S\])
-    Mul {
-        acc: Register,
-        rhs: Operand<W>,
-        signed: bool,
-    },
+    Mul { acc: Register, rhs: Operand, signed: bool },
     /// Divide the value of the register (acc) by the value of the operand (rhs).
     /// The result is stored in acc. (DIV\[S\])
-    Div {
-        acc: Register,
-        rhs: Operand<W>,
-        signed: bool,
-    },
+    Div { acc: Register, rhs: Operand, signed: bool },
     /// Increment the value in a register by one. (INC\[S\])
     Inc { reg: Register, signed: bool },
     /// Decrement the value in a register by one. (DEC\[S\])
@@ -82,23 +63,23 @@ pub enum Instruction<W> {
     /// Set program counter to a value, effectively jumping to the instruction at this point in the program.
     /// The condition is checked before jumping and the jump is performed if the condition is met.
     /// See the assembly instruction at `JumpCondition`.
-    Jump { to: W, condition: JumpCondition },
+    Jump { to: usize, condition: JumpCondition },
     /// Compare the values of two operands and set the flags accordingly. This is the same as `SUBS` but disregards the result of the subtraction. (CMP)
-    Cmp { lhs: Operand<W>, rhs: Operand<W> },
+    Cmp { lhs: Operand, rhs: Operand },
     /// Perform an xor operation on the value in the register with the value of the operand. (XOR)
-    Xor { reg: Register, rhs: Operand<W> },
+    Xor { reg: Register, rhs: Operand },
     /// Perform an and operation on the value in the register with the value of the operand. (AND)
-    And { reg: Register, rhs: Operand<W> },
+    And { reg: Register, rhs: Operand },
     /// Perform an or operation on the value in the register with the value of the operand. (OR)
-    Or { reg: Register, rhs: Operand<W> },
+    Or { reg: Register, rhs: Operand },
     /// Perform a not operation on the value in the register. (NOT)
     Not { reg: Register },
     /// Shift the value in the register left by the specified number of bits.
     /// The assembler only accepts values between 1 and the number of bits of the Word size minus 1.
-    Shl { reg: Register, val: W },
+    Shl { reg: Register, val: usize },
     /// Shift the value in the register right by the specified number of bits.
     /// The assembler only accepts values between 1 and the number of bits of the Word size minus 1.
-    Shr { reg: Register, val: W },
+    Shr { reg: Register, val: usize },
     /// Rotate the value in the register left by the specified number of bits.
     /// The assembler only accepts values between 1 and the number of bits of the Word size minus 1.
     Rol { reg: Register, val: u32 },
@@ -107,11 +88,11 @@ pub enum Instruction<W> {
     Ror { reg: Register, val: u32 },
 }
 
-impl<W: ProcasmWord> InstructionTrait<W> for Instruction<W> {
+impl InstructionTrait for Instruction {
     /// Execute an instruction on a processor.
-    fn execute<const MEM_SIZE: usize, Insts, Words>(
+    fn execute<const MEM_SIZE: usize, Insts, Bytes>(
         instruction: Self,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         match instruction {
             Self::Nop => (),
@@ -143,13 +124,13 @@ impl<W: ProcasmWord> InstructionTrait<W> for Instruction<W> {
     }
 }
 
-impl<W: ProcasmWord> Instruction<W> {
+impl Instruction {
     // skips forrmatting the match
     #[rustfmt::skip]
     pub(crate) const fn from_reg_operand_instruction(
         instr: ASMRegOperandInstruction,
         lhs: Register,
-        rhs: Operand<W>
+        rhs: Operand
     ) -> Self {
         use ASMRegOperandInstruction::{Mov, Add, AddS, Sub, SubS, Mul, MulS, Div, DivS, Or, And, Xor};
         match instr {
@@ -180,10 +161,7 @@ impl<W: ProcasmWord> Instruction<W> {
         }
     }
 
-    pub(crate) const fn from_single_operand_instruction(
-        instr: ASMSingleOperandInstruction,
-        operand: Operand<W>,
-    ) -> Self {
+    pub(crate) const fn from_single_operand_instruction(instr: ASMSingleOperandInstruction, operand: Operand) -> Self {
         use ASMSingleOperandInstruction::{Call, Push};
 
         match instr {
@@ -194,8 +172,8 @@ impl<W: ProcasmWord> Instruction<W> {
 
     pub(crate) const fn from_two_operand_instruction(
         instr: ASMTwoOperandInstruction,
-        lhs: Operand<W>,
-        rhs: Operand<W>,
+        lhs: Operand,
+        rhs: Operand,
     ) -> Self {
         use ASMTwoOperandInstruction::Cmp;
 
@@ -204,7 +182,7 @@ impl<W: ProcasmWord> Instruction<W> {
         }
     }
 
-    pub(crate) const fn from_shift_instruction(instr: ASMShiftInstruction, reg: Register, val: W) -> Self {
+    pub(crate) const fn from_shift_instruction(instr: ASMShiftInstruction, reg: Register, val: usize) -> Self {
         use ASMShiftInstruction::{Shl, Shr};
 
         match instr {
@@ -222,7 +200,7 @@ impl<W: ProcasmWord> Instruction<W> {
         }
     }
 
-    pub(crate) const fn from_jump_instruction(instr: ASMJumpInstruction, dest: W) -> Self {
+    pub(crate) const fn from_jump_instruction(instr: ASMJumpInstruction, dest: usize) -> Self {
         use ASMJumpInstruction::{Jc, Jg, Jge, Jl, Jle, Jmp, Jnc, Jns, Jnz, Js, Jz};
         let condition = match instr {
             Jmp => JumpCondition::Unconditional,
@@ -243,79 +221,76 @@ impl<W: ProcasmWord> Instruction<W> {
 
     /// Move a memory address into a register.
     #[inline]
-    fn adr<const MEM_SIZE: usize, Insts, Words>(
+    fn adr<const MEM_SIZE: usize, Insts, Bytes>(
         reg: Register,
-        addr: W,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+        addr: usize,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         processor.registers.set_reg(reg, addr);
     }
 
     /// Copy a value from an operand to a register.
     #[inline]
-    fn mov<const MEM_SIZE: usize, Insts, Words>(
+    fn mov<const MEM_SIZE: usize, Insts, Bytes>(
         to: Register,
-        from: Operand<W>,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+        from: Operand,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         processor.registers.set_reg(to, from.resolve(processor));
     }
 
     /// Store a value from a register into a memory location.
     #[inline]
-    fn str<const MEM_SIZE: usize, Insts, Words>(
+    fn str<const MEM_SIZE: usize, Insts, Bytes>(
         from: Register,
-        to: MemoryLocation<W>,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+        to: MemoryLocation,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         let to_addr = to.resolve(processor);
         let val = processor.registers.get_reg(from);
-        processor.mem.write(to_addr, val);
+        processor.mem.write(to_addr, val as u8); // TODO: Writes from reg to memory how to handle? usize -> u8
     }
 
     /// Load a value from a memory location into a register.
     #[inline]
-    fn ldr<const MEM_SIZE: usize, Insts, Words>(
+    fn ldr<const MEM_SIZE: usize, Insts, Bytes>(
         to: Register,
-        from: MemoryLocation<W>,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+        from: MemoryLocation,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         let from_addr = from.resolve(processor);
         let val = processor.mem.read(from_addr);
-        processor.registers.set_reg(to, val);
+        processor.registers.set_reg(to, usize::from(val));
     }
 
     /// Push a value from the operand to the stack.
     #[inline]
-    fn push<const MEM_SIZE: usize, Insts, Words>(
-        from: Operand<W>,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+    fn push<const MEM_SIZE: usize, Insts, Bytes>(
+        from: Operand,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         processor.registers.dec(Register::SP);
         let sp = processor.registers.sp();
 
-        processor.mem.write(sp, from.resolve(processor));
+        processor.mem.write(sp, from.resolve(processor) as u8); // TODO: fix this conversion
     }
 
     /// Pop a value from the stack to the register.
     #[inline]
-    fn pop<const MEM_SIZE: usize, Insts, Words>(
-        to: Register,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
-    ) {
+    fn pop<const MEM_SIZE: usize, Insts, Bytes>(to: Register, processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>) {
         let sp = processor.registers.sp();
         let val = processor.mem.read(sp);
 
         processor.registers.inc(Register::SP);
-        processor.registers.set_reg(to, val);
+        processor.registers.set_reg(to, usize::from(val));
     }
 
     /// Call a subroutine at the program address specified by the operand.
     /// Pushes the current program counter onto the stack and sets the program counter to the address of the subroutine.
     #[inline]
-    fn call<const MEM_SIZE: usize, Insts, Words>(
-        addr: Operand<W>,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+    fn call<const MEM_SIZE: usize, Insts, Bytes>(
+        addr: Operand,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         Self::push(Operand::Value(processor.registers.pc()), processor);
         processor.registers.set_reg(Register::PC, addr.resolve(processor));
@@ -324,17 +299,17 @@ impl<W: ProcasmWord> Instruction<W> {
     /// Return from a subroutine.
     /// Pops the return address from the stack and sets the program counter to the popped value.
     #[inline]
-    fn ret<const MEM_SIZE: usize, Insts, Words>(processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>) {
+    fn ret<const MEM_SIZE: usize, Insts, Bytes>(processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>) {
         Self::pop(Register::PC, processor);
     }
 
     /// Set program pointer to value, effectively jumping to the instruction at this point in the program.
     /// The condition is checked before jumping and the jump is performed if the condition is met.
     #[inline]
-    fn jmp<const MEM_SIZE: usize, Insts, Words>(
-        to: W,
+    fn jmp<const MEM_SIZE: usize, Insts, Bytes>(
+        to: usize,
         condition: JumpCondition,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         if condition.check(processor) {
             processor.registers.set_reg(Register::PC, to);
@@ -343,18 +318,18 @@ impl<W: ProcasmWord> Instruction<W> {
 
     /// Add the value of an operand (rhs) to a register (acc).
     #[inline]
-    fn add<const MEM_SIZE: usize, Insts, Words>(
+    fn add<const MEM_SIZE: usize, Insts, Bytes>(
         acc: Register,
-        rhs: Operand<W>,
+        rhs: Operand,
         signed: bool,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         let a = processor.registers.get_reg(acc);
         let b = rhs.resolve(processor);
 
         if signed {
             let (result, overflow) = a.overflowing_add(b);
-            let carry = a.check_carry_add(b);
+            let carry = Self::check_carry_add(a, b); // TODO: Replace this function with equivalent
 
             processor.registers.set_reg(acc, result);
             processor.registers.set_flag(Flag::V, overflow);
@@ -368,18 +343,18 @@ impl<W: ProcasmWord> Instruction<W> {
 
     /// Subtract the value of an operand (rhs) from a register (acc).
     #[inline]
-    fn sub<const MEM_SIZE: usize, Insts, Words>(
+    fn sub<const MEM_SIZE: usize, Insts, Bytes>(
         acc: Register,
-        rhs: Operand<W>,
+        rhs: Operand,
         signed: bool,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         let a = processor.registers.get_reg(acc);
         let b = rhs.resolve(processor);
 
         if signed {
             let (result, overflow) = a.overflowing_sub(b);
-            let carry = a.check_carry_sub(b);
+            let carry = Self::check_carry_sub(a, b);
 
             processor.registers.set_reg(acc, result);
             processor.registers.set_flag(Flag::V, overflow);
@@ -394,18 +369,18 @@ impl<W: ProcasmWord> Instruction<W> {
     /// Multiply the value of an operand (acc) with the value of a register (rhs).
     /// The result is stored in acc.
     #[inline]
-    fn mul<const MEM_SIZE: usize, Insts, Words>(
+    fn mul<const MEM_SIZE: usize, Insts, Bytes>(
         acc: Register,
-        rhs: Operand<W>,
+        rhs: Operand,
         signed: bool,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         let a = processor.registers.get_reg(acc);
         let b = rhs.resolve(processor);
 
         if signed {
             let (result, overflow) = a.overflowing_mul(b);
-            let carry = a.check_carry_mul(b);
+            let carry = Self::check_carry_mul(a, b);
 
             processor.registers.set_reg(acc, result);
             processor.registers.set_flag(Flag::V, overflow);
@@ -420,11 +395,11 @@ impl<W: ProcasmWord> Instruction<W> {
     /// Divide the value of an operand (acc) by the value of a register (rhs).
     /// The result is stored in acc.
     #[inline]
-    fn div<const MEM_SIZE: usize, Insts, Words>(
+    fn div<const MEM_SIZE: usize, Insts, Bytes>(
         acc: Register,
-        rhs: Operand<W>,
+        rhs: Operand,
         signed: bool,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         let a = processor.registers.get_reg(acc);
         let b = rhs.resolve(processor);
@@ -445,13 +420,13 @@ impl<W: ProcasmWord> Instruction<W> {
 
     /// Increment the value in a register by one.
     #[inline]
-    fn inc<const MEM_SIZE: usize, Insts, Words>(
+    fn inc<const MEM_SIZE: usize, Insts, Bytes>(
         reg: Register,
         signed: bool,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         if signed {
-            Self::add(reg, Operand::Value(1.into()), true, processor);
+            Self::add(reg, Operand::Value(1), true, processor);
         } else {
             processor.registers.inc(reg);
         }
@@ -459,13 +434,13 @@ impl<W: ProcasmWord> Instruction<W> {
 
     /// Decrement the value in a register by one.
     #[inline]
-    fn dec<const MEM_SIZE: usize, Insts, Words>(
+    fn dec<const MEM_SIZE: usize, Insts, Bytes>(
         reg: Register,
         signed: bool,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         if signed {
-            Self::sub(reg, Operand::Value(1.into()), true, processor);
+            Self::sub(reg, Operand::Value(1), true, processor);
         } else {
             processor.registers.dec(reg);
         }
@@ -473,11 +448,11 @@ impl<W: ProcasmWord> Instruction<W> {
 
     /// Sets the signed and zero flags.
     #[inline]
-    fn set_signed_zero_flags<const MEM_SIZE: usize, Insts, Words>(
-        val: W,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+    fn set_signed_zero_flags<const MEM_SIZE: usize, Insts, Bytes>(
+        val: usize,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
-        match val.cmp(&(0.into())) {
+        match val.cmp(&0) {
             Ordering::Less => {
                 processor.registers.set_flag(Flag::S, true);
                 processor.registers.set_flag(Flag::Z, false);
@@ -493,18 +468,41 @@ impl<W: ProcasmWord> Instruction<W> {
         }
     }
 
+    //  TODO: lhs and rhs entirely depend on the word size, i think...
+    fn check_carry_add(lhs: usize, rhs: usize) -> bool {
+        let (lhs, rhs) = (lhs as u128, rhs as u128);
+        lhs + rhs > usize::MAX as u128 // TODO: usize here depends on the word size used: byte --> u8, word --> u32, dword --> u64
+    }
+
+    // TODO: see above
+    fn check_carry_sub(lhs: usize, rhs: usize) -> bool {
+        let (lhs, rhs) = (lhs as u128, rhs as u128);
+        lhs < rhs
+    }
+
+    // TODO: see above
+    fn check_carry_mul(lhs: usize, rhs: usize) -> bool {
+        let (lhs, rhs) = (lhs as u128, rhs as u128);
+        lhs * rhs > usize::MAX as u128 // TODO: see above
+    }
+
+    // TODO: see above
+    fn check_carry_div(lhs: usize, rhs: usize) -> bool {
+        usize::overflowing_div(lhs, rhs).1 // TODO: see above
+    }
+
     /// Compares two operands and sets the flags accordingly.
     #[inline]
-    fn cmp<const MEM_SIZE: usize, Insts, Words>(
-        lhs: Operand<W>,
-        rhs: Operand<W>,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+    fn cmp<const MEM_SIZE: usize, Insts, Bytes>(
+        lhs: Operand,
+        rhs: Operand,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         let a = lhs.resolve(processor);
         let b = rhs.resolve(processor);
 
         let (result, overflow) = a.overflowing_sub(b);
-        let carry = a.check_carry_sub(b);
+        let carry = Self::check_carry_sub(a, b);
 
         processor.registers.set_flag(Flag::V, overflow);
         processor.registers.set_flag(Flag::C, carry);
@@ -513,10 +511,10 @@ impl<W: ProcasmWord> Instruction<W> {
 
     /// Perform an xor operation on the value in the register with the value of the operand. (XOR)
     #[inline]
-    fn xor<const MEM_SIZE: usize, Insts, Words>(
+    fn xor<const MEM_SIZE: usize, Insts, Bytes>(
         reg: Register,
-        rhs: Operand<W>,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+        rhs: Operand,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         let a = processor.registers.get_reg(reg);
         let b = rhs.resolve(processor);
@@ -526,10 +524,10 @@ impl<W: ProcasmWord> Instruction<W> {
 
     /// Perform an and operation on the value in the register with the value of the operand. (AND)
     #[inline]
-    fn and<const MEM_SIZE: usize, Insts, Words>(
+    fn and<const MEM_SIZE: usize, Insts, Bytes>(
         reg: Register,
-        rhs: Operand<W>,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+        rhs: Operand,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         let a = processor.registers.get_reg(reg);
         let b = rhs.resolve(processor);
@@ -539,10 +537,10 @@ impl<W: ProcasmWord> Instruction<W> {
 
     /// Perform an or operation on the value in the register with the value of the operand. (OR)
     #[inline]
-    fn or<const MEM_SIZE: usize, Insts, Words>(
+    fn or<const MEM_SIZE: usize, Insts, Bytes>(
         reg: Register,
-        rhs: Operand<W>,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+        rhs: Operand,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         let a = processor.registers.get_reg(reg);
         let b = rhs.resolve(processor);
@@ -552,21 +550,20 @@ impl<W: ProcasmWord> Instruction<W> {
 
     /// Perform a not operation on the value in the register. (NOT)
     #[inline]
-    fn not<const MEM_SIZE: usize, Insts, Words>(
+    fn not<const MEM_SIZE: usize, Insts, Bytes>(
         reg: Register,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         let a = processor.registers.get_reg(reg);
-
         processor.registers.set_reg(reg, !a);
     }
 
     /// Shift the value in the register left by the specified number of bits.
     #[inline]
-    fn shl<const MEM_SIZE: usize, Insts, Words>(
+    fn shl<const MEM_SIZE: usize, Insts, Bytes>(
         reg: Register,
-        val: W,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+        val: usize, // TODO: Is this always the correct size?
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         let a = processor.registers.get_reg(reg);
         processor.registers.set_reg(reg, a << val);
@@ -574,10 +571,10 @@ impl<W: ProcasmWord> Instruction<W> {
 
     /// Shift the value in the register right by the specified number of bits.
     #[inline]
-    fn shr<const MEM_SIZE: usize, Insts, Words>(
+    fn shr<const MEM_SIZE: usize, Insts, Bytes>(
         reg: Register,
-        val: W,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+        val: usize, // TODO: Is this always the correct size?
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         let a = processor.registers.get_reg(reg);
         processor.registers.set_reg(reg, a >> val);
@@ -585,10 +582,10 @@ impl<W: ProcasmWord> Instruction<W> {
 
     /// Rotate the value in the register left by the specified number of bits.
     #[inline]
-    fn rol<const MEM_SIZE: usize, Insts, Words>(
+    fn rol<const MEM_SIZE: usize, Insts, Bytes>(
         reg: Register,
         val: u32,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         let a = processor.registers.get_reg(reg);
         processor.registers.set_reg(reg, a.rotate_left(val));
@@ -596,10 +593,10 @@ impl<W: ProcasmWord> Instruction<W> {
 
     /// Rotate the value in the register right by the specified number of bits.
     #[inline]
-    fn ror<const MEM_SIZE: usize, Insts, Words>(
+    fn ror<const MEM_SIZE: usize, Insts, Bytes>(
         reg: Register,
         val: u32,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, W, Words>,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         let a = processor.registers.get_reg(reg);
         processor.registers.set_reg(reg, a.rotate_right(val));
@@ -610,21 +607,19 @@ impl<W: ProcasmWord> Instruction<W> {
 mod test {
 
     use super::*;
-    use procem::word::*;
 
     const MEM_SIZE: usize = 32;
-    type IS = Instruction<W>;
+    type IS = Instruction;
     type P = Vec<IS>;
-    type W = I8;
-    type Words = Vec<W>;
+    type Bytes = Vec<u8>;
 
     mod mov {
         use super::*;
 
         #[test]
         fn test_move_reg() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, 10isize.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, 10);
             let _ = IS::execute(
                 Instruction::Mov {
                     from: Operand::Register(Register::R0),
@@ -640,15 +635,15 @@ mod test {
 
         #[test]
         fn test_move_val() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
             let _ = IS::execute(
                 Instruction::Mov {
                     to: Register::R0,
-                    from: Operand::Value(10isize.into()),
+                    from: Operand::Value(10),
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), 10isize.into());
+            assert_eq!(processor.registers.get_reg(Register::R0), 10);
         }
     }
 
@@ -657,25 +652,25 @@ mod test {
 
         #[test]
         fn test_str_direct_mem_location() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, 42i8.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, 42);
 
             let _ = IS::execute(
                 Instruction::Str {
                     from: Register::R0,
-                    to: MemoryLocation::Labeled(0i8.into()),
+                    to: MemoryLocation::Labeled(0),
                 },
                 &mut processor,
             );
 
-            assert_eq!(processor.mem.read(0i8.into()), I8::from(42i8));
+            assert_eq!(processor.mem.read(0), 42);
         }
 
         #[test]
         fn test_str_indirect_mem_location() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, 42i8.into());
-            processor.registers.set_reg(Register::R1, 1i8.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, 42);
+            processor.registers.set_reg(Register::R1, 1);
 
             // Positive value offset
             let _ = IS::execute(
@@ -683,12 +678,12 @@ mod test {
                     from: Register::R0,
                     to: MemoryLocation::Offset {
                         base: Register::R1,
-                        offset: Operand::Value(0i8.into()),
+                        offset: Operand::Value(0),
                     },
                 },
                 &mut processor,
             );
-            assert_eq!(processor.mem.read(1i8.into()), I8::from(42i8));
+            assert_eq!(processor.mem.read(1), 42);
 
             // Negative value offset
             let _ = IS::execute(
@@ -696,12 +691,12 @@ mod test {
                     from: Register::R0,
                     to: MemoryLocation::Offset {
                         base: Register::R1,
-                        offset: Operand::Value((-1i8).into()),
+                        offset: Operand::Value(-1isize as usize),
                     },
                 },
                 &mut processor,
             );
-            assert_eq!(processor.mem.read(0i8.into()), I8::from(42i8));
+            assert_eq!(processor.mem.read(0), 42);
 
             // Register offset
             let _ = IS::execute(
@@ -714,18 +709,18 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.mem.read(2i8.into()), I8::from(42i8));
+            assert_eq!(processor.mem.read(2), 42);
         }
 
         #[test]
         #[should_panic]
         fn test_str_invalid_memory_location_panics() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
 
             let _ = IS::execute(
                 Instruction::Str {
                     from: Register::R0,
-                    to: MemoryLocation::Labeled((MEM_SIZE as i8).into()),
+                    to: MemoryLocation::Labeled(MEM_SIZE),
                 },
                 &mut processor,
             );
@@ -735,27 +730,27 @@ mod test {
 
         #[test]
         fn test_ldr_direct_mem_location() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.mem.write(0i8.into(), 42i8.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.mem.write(0, 42);
 
             let _ = IS::execute(
                 Instruction::Ldr {
                     to: Register::R0,
-                    from: MemoryLocation::Labeled(0i8.into()),
+                    from: MemoryLocation::Labeled(0),
                 },
                 &mut processor,
             );
 
-            assert_eq!(processor.registers.get_reg(Register::R0), I8::from(42i8));
+            assert_eq!(processor.registers.get_reg(Register::R0), 42);
         }
 
         #[test]
         fn test_ldr_indirect_mem_location() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R1, 1i8.into());
-            processor.mem.write(0i8.into(), 42i8.into());
-            processor.mem.write(1i8.into(), 43i8.into());
-            processor.mem.write(2i8.into(), 44i8.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R1, 1);
+            processor.mem.write(0, 42);
+            processor.mem.write(1, 43);
+            processor.mem.write(2, 44);
 
             // Positive value offset
             let _ = IS::execute(
@@ -763,12 +758,12 @@ mod test {
                     to: Register::R0,
                     from: MemoryLocation::Offset {
                         base: Register::R1,
-                        offset: Operand::Value(0i8.into()),
+                        offset: Operand::Value(0),
                     },
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), I8::from(43i8));
+            assert_eq!(processor.registers.get_reg(Register::R0), 43);
 
             // Negative value offset
             let _ = IS::execute(
@@ -776,12 +771,12 @@ mod test {
                     to: Register::R0,
                     from: MemoryLocation::Offset {
                         base: Register::R1,
-                        offset: Operand::Value((-1i8).into()),
+                        offset: Operand::Value(-1isize as usize),
                     },
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), I8::from(42i8));
+            assert_eq!(processor.registers.get_reg(Register::R0), 42);
 
             // Register offset
             let _ = IS::execute(
@@ -794,17 +789,17 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), I8::from(44i8));
+            assert_eq!(processor.registers.get_reg(Register::R0), 44);
         }
 
         #[test]
         #[should_panic]
         fn test_ldr_invalid_memory_location_panics() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
 
             let _ = IS::execute(
                 Instruction::Ldr {
-                    from: MemoryLocation::Labeled((MEM_SIZE as i8).into()),
+                    from: MemoryLocation::Labeled(MEM_SIZE),
                     to: Register::R0,
                 },
                 &mut processor,
@@ -819,8 +814,8 @@ mod test {
 
         #[test]
         fn test_inc() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, 10isize.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, 10);
             let _ = IS::execute(
                 Instruction::Inc {
                     reg: Register::R0,
@@ -828,13 +823,13 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), 11isize.into());
+            assert_eq!(processor.registers.get_reg(Register::R0), 11);
         }
 
         #[test]
         fn test_inc_overflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, i8::MAX.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, usize::MAX);
             let _ = IS::execute(
                 Instruction::Inc {
                     reg: Register::R0,
@@ -842,7 +837,7 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), i8::MIN.into());
+            assert_eq!(processor.registers.get_reg(Register::R0), usize::MIN);
         }
     }
 
@@ -851,8 +846,8 @@ mod test {
 
         #[test]
         fn test_dec() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, 10isize.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, 10);
             let _ = IS::execute(
                 Instruction::Dec {
                     reg: Register::R0,
@@ -860,13 +855,13 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), 9isize.into());
+            assert_eq!(processor.registers.get_reg(Register::R0), 9);
         }
 
         #[test]
         fn test_dec_underflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, i8::MIN.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, usize::MIN);
             let _ = IS::execute(
                 Instruction::Dec {
                     reg: Register::R0,
@@ -874,7 +869,7 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), i8::MAX.into());
+            assert_eq!(processor.registers.get_reg(Register::R0), usize::MAX);
         }
     }
 
@@ -883,9 +878,9 @@ mod test {
 
         #[test]
         fn test_add_reg() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, 5isize.into());
-            processor.registers.set_reg(Register::R1, 10isize.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, 5);
+            processor.registers.set_reg(Register::R1, 10);
             let _ = IS::execute(
                 Instruction::Add {
                     acc: Register::R0,
@@ -894,14 +889,14 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), 15isize.into());
+            assert_eq!(processor.registers.get_reg(Register::R0), 15);
         }
 
         #[test]
         fn test_add_reg_overflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, i8::MAX.into());
-            processor.registers.set_reg(Register::R1, 1isize.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, usize::MAX.into());
+            processor.registers.set_reg(Register::R1, 1);
             let _ = IS::execute(
                 Instruction::Add {
                     acc: Register::R0,
@@ -910,37 +905,37 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), i8::MIN.into());
+            assert_eq!(processor.registers.get_reg(Register::R0), usize::MIN);
         }
 
         #[test]
         fn test_add_val() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, 5isize.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, 5);
             let _ = IS::execute(
                 Instruction::Add {
                     acc: Register::R0,
-                    rhs: Operand::Value(10isize.into()),
+                    rhs: Operand::Value(10),
                     signed: false,
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), 15isize.into());
+            assert_eq!(processor.registers.get_reg(Register::R0), 15);
         }
 
         #[test]
         fn test_add_val_overflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, i8::MAX.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, usize::MAX);
             let _ = IS::execute(
                 Instruction::Add {
                     acc: Register::R0,
-                    rhs: Operand::Value(1isize.into()),
+                    rhs: Operand::Value(1),
                     signed: false,
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), i8::MIN.into());
+            assert_eq!(processor.registers.get_reg(Register::R0), usize::MIN);
         }
     }
 
@@ -949,9 +944,9 @@ mod test {
 
         #[test]
         fn test_sub_reg() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, 5isize.into());
-            processor.registers.set_reg(Register::R1, 10isize.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, 5);
+            processor.registers.set_reg(Register::R1, 10);
             let _ = IS::execute(
                 Instruction::Sub {
                     acc: Register::R0,
@@ -960,14 +955,14 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), (-5isize).into());
+            assert_eq!(processor.registers.get_reg(Register::R0), -5isize as usize);
         }
 
         #[test]
         fn test_sub_reg_overflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, i8::MIN.into());
-            processor.registers.set_reg(Register::R1, 1isize.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, usize::MIN);
+            processor.registers.set_reg(Register::R1, 1);
             let _ = IS::execute(
                 Instruction::Sub {
                     acc: Register::R0,
@@ -976,37 +971,37 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), i8::MAX.into());
+            assert_eq!(processor.registers.get_reg(Register::R0), usize::MAX);
         }
 
         #[test]
         fn test_sub_val() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, 5isize.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, 5);
             let _ = IS::execute(
                 Instruction::Sub {
                     acc: Register::R0,
-                    rhs: Operand::Value(10isize.into()),
+                    rhs: Operand::Value(10),
                     signed: false,
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), (-5isize).into());
+            assert_eq!(processor.registers.get_reg(Register::R0), -5isize as usize);
         }
 
         #[test]
         fn test_sub_val_overflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, (-128isize).into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, -128isize as usize);
             let _ = IS::execute(
                 Instruction::Sub {
                     acc: Register::R0,
-                    rhs: Operand::Value(1isize.into()),
+                    rhs: Operand::Value(1),
                     signed: false,
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), 127isize.into());
+            assert_eq!(processor.registers.get_reg(Register::R0), 127);
         }
     }
 
@@ -1015,9 +1010,9 @@ mod test {
 
         #[test]
         fn test_mul_reg() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, 5isize.into());
-            processor.registers.set_reg(Register::R1, 10isize.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, 5);
+            processor.registers.set_reg(Register::R1, 10);
             let _ = IS::execute(
                 Instruction::Mul {
                     acc: Register::R0,
@@ -1026,10 +1021,10 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), 50isize.into());
+            assert_eq!(processor.registers.get_reg(Register::R0), 50);
 
-            processor.registers.set_reg(Register::R0, (-5isize).into());
-            processor.registers.set_reg(Register::R1, 10isize.into());
+            processor.registers.set_reg(Register::R0, -5isize as usize);
+            processor.registers.set_reg(Register::R1, 10);
             let _ = IS::execute(
                 Instruction::Mul {
                     acc: Register::R0,
@@ -1038,14 +1033,14 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), (-50isize).into());
+            assert_eq!(processor.registers.get_reg(Register::R0), -50isize as usize);
         }
 
         #[test]
         fn test_mul_reg_overflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, 80isize.into());
-            processor.registers.set_reg(Register::R1, 2isize.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, 80);
+            processor.registers.set_reg(Register::R1, 2);
             let _ = IS::execute(
                 Instruction::Mul {
                     acc: Register::R0,
@@ -1054,14 +1049,14 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), (-96isize).into());
+            assert_eq!(processor.registers.get_reg(Register::R0), -96isize as usize);
         }
 
         #[test]
         fn test_mul_reg_underflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, (-80isize).into());
-            processor.registers.set_reg(Register::R1, 2isize.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, -80isize as usize);
+            processor.registers.set_reg(Register::R1, 2);
             let _ = IS::execute(
                 Instruction::Mul {
                     acc: Register::R0,
@@ -1070,63 +1065,63 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), 96isize.into());
+            assert_eq!(processor.registers.get_reg(Register::R0), 96);
         }
 
         #[test]
         fn test_mul_val() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, 5isize.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, 5);
             let _ = IS::execute(
                 Instruction::Mul {
                     acc: Register::R0,
-                    rhs: Operand::Value(10isize.into()),
+                    rhs: Operand::Value(10),
                     signed: false,
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), 50isize.into());
+            assert_eq!(processor.registers.get_reg(Register::R0), 50);
 
-            processor.registers.set_reg(Register::R0, (-5isize).into());
+            processor.registers.set_reg(Register::R0, -5isize as usize);
             let _ = IS::execute(
                 Instruction::Mul {
                     acc: Register::R0,
-                    rhs: Operand::Value(10isize.into()),
+                    rhs: Operand::Value(10),
                     signed: false,
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), (-50isize).into());
+            assert_eq!(processor.registers.get_reg(Register::R0), -50isize as usize);
         }
 
         #[test]
         fn test_mul_val_overflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, 80isize.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, 80);
             let _ = IS::execute(
                 Instruction::Mul {
                     acc: Register::R0,
-                    rhs: Operand::Value(2isize.into()),
+                    rhs: Operand::Value(2),
                     signed: false,
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), (-96isize).into());
+            assert_eq!(processor.registers.get_reg(Register::R0), -96isize as usize);
         }
 
         #[test]
         fn test_mul_val_underflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, (-80isize).into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, -80isize as usize);
             let _ = IS::execute(
                 Instruction::Mul {
                     acc: Register::R0,
-                    rhs: Operand::Value(2isize.into()),
+                    rhs: Operand::Value(2),
                     signed: false,
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), 96isize.into());
+            assert_eq!(processor.registers.get_reg(Register::R0), 96);
         }
     }
 
@@ -1135,9 +1130,9 @@ mod test {
 
         #[test]
         fn test_div_reg() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, 10isize.into());
-            processor.registers.set_reg(Register::R1, 5isize.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, 10);
+            processor.registers.set_reg(Register::R1, 5);
             let _ = IS::execute(
                 Instruction::Div {
                     acc: Register::R0,
@@ -1146,10 +1141,10 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), 2isize.into());
+            assert_eq!(processor.registers.get_reg(Register::R0), 2);
 
-            processor.registers.set_reg(Register::R0, (-10isize).into());
-            processor.registers.set_reg(Register::R1, 5isize.into());
+            processor.registers.set_reg(Register::R0, -10isize as usize);
+            processor.registers.set_reg(Register::R1, 5);
             let _ = IS::execute(
                 Instruction::Div {
                     acc: Register::R0,
@@ -1158,14 +1153,14 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), (-2isize).into());
+            assert_eq!(processor.registers.get_reg(Register::R0), -2isize as usize);
         }
 
         #[test]
         fn test_div_reg_truncate() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, 3isize.into());
-            processor.registers.set_reg(Register::R1, 2isize.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, 3);
+            processor.registers.set_reg(Register::R1, 2);
             let _ = IS::execute(
                 Instruction::Div {
                     acc: Register::R0,
@@ -1174,14 +1169,14 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), 1isize.into());
+            assert_eq!(processor.registers.get_reg(Register::R0), 1);
         }
 
         #[test]
         fn test_div_reg_overflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, i8::MIN.into());
-            processor.registers.set_reg(Register::R1, (-1isize).into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, usize::MIN);
+            processor.registers.set_reg(Register::R1, -1isize as usize);
             let _ = IS::execute(
                 Instruction::Div {
                     acc: Register::R0,
@@ -1190,74 +1185,74 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), (i8::MIN).into());
+            assert_eq!(processor.registers.get_reg(Register::R0), usize::MIN);
         }
 
         #[test]
         fn test_div_val() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, 10isize.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, 10);
             let _ = IS::execute(
                 Instruction::Div {
                     acc: Register::R0,
-                    rhs: Operand::Value(5isize.into()),
+                    rhs: Operand::Value(5),
                     signed: false,
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), 2isize.into());
+            assert_eq!(processor.registers.get_reg(Register::R0), 2);
 
-            processor.registers.set_reg(Register::R0, (-10isize).into());
+            processor.registers.set_reg(Register::R0, -10isize as usize);
             let _ = IS::execute(
                 Instruction::Div {
                     acc: Register::R0,
-                    rhs: Operand::Value(5isize.into()),
+                    rhs: Operand::Value(5),
                     signed: false,
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), (-2isize).into());
+            assert_eq!(processor.registers.get_reg(Register::R0), -2isize as usize);
         }
 
         #[test]
         fn test_div_val_truncate() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, 3isize.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, 3);
             let _ = IS::execute(
                 Instruction::Div {
                     acc: Register::R0,
-                    rhs: Operand::Value(4isize.into()),
+                    rhs: Operand::Value(4),
                     signed: false,
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), 0isize.into());
+            assert_eq!(processor.registers.get_reg(Register::R0), 0);
 
-            processor.registers.set_reg(Register::R0, 3isize.into());
+            processor.registers.set_reg(Register::R0, 3);
             let _ = IS::execute(
                 Instruction::Div {
                     acc: Register::R0,
-                    rhs: Operand::Value(2isize.into()),
+                    rhs: Operand::Value(2),
                     signed: false,
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), 1isize.into());
+            assert_eq!(processor.registers.get_reg(Register::R0), 1);
         }
 
         #[test]
         fn test_div_val_overflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            processor.registers.set_reg(Register::R0, i8::MIN.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            processor.registers.set_reg(Register::R0, usize::MIN);
             let _ = IS::execute(
                 Instruction::Div {
                     acc: Register::R0,
-                    rhs: Operand::Value((-1isize).into()),
+                    rhs: Operand::Value(-1isize as usize),
                     signed: false,
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), (i8::MIN).into());
+            assert_eq!(processor.registers.get_reg(Register::R0), usize::MIN);
         }
     }
 
@@ -1266,30 +1261,30 @@ mod test {
 
         #[test]
         fn test_jmp() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            assert_eq!(processor.registers.get_reg(Register::PC), 0isize.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            assert_eq!(processor.registers.get_reg(Register::PC), 0);
             let _ = IS::execute(
                 Instruction::Jump {
-                    to: 2isize.into(),
+                    to: 2,
                     condition: JumpCondition::Unconditional,
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::PC), 2isize.into());
+            assert_eq!(processor.registers.get_reg(Register::PC), 2);
         }
 
         #[test]
         fn test_jmp_overflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            assert_eq!(processor.registers.get_reg(Register::PC), 0isize.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            assert_eq!(processor.registers.get_reg(Register::PC), 0);
             let _ = IS::execute(
                 Instruction::Jump {
-                    to: i8::MAX.into(),
+                    to: usize::MAX,
                     condition: JumpCondition::Unconditional,
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::PC), i8::MAX.into());
+            assert_eq!(processor.registers.get_reg(Register::PC), usize::MAX);
             let _ = IS::execute(
                 Instruction::Inc {
                     reg: Register::PC,
@@ -1297,21 +1292,21 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::PC), i8::MIN.into());
+            assert_eq!(processor.registers.get_reg(Register::PC), usize::MIN);
         }
 
         #[test]
         fn test_jmp_underflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
-            assert_eq!(processor.registers.get_reg(Register::PC), 0isize.into());
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+            assert_eq!(processor.registers.get_reg(Register::PC), 0);
             let _ = IS::execute(
                 Instruction::Jump {
-                    to: i8::MIN.into(),
+                    to: usize::MIN,
                     condition: JumpCondition::Unconditional,
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::PC), i8::MIN.into());
+            assert_eq!(processor.registers.get_reg(Register::PC), usize::MIN);
             let _ = IS::execute(
                 Instruction::Dec {
                     reg: Register::PC,
@@ -1319,7 +1314,7 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::PC), i8::MAX.into());
+            assert_eq!(processor.registers.get_reg(Register::PC), usize::MAX);
         }
     }
 
@@ -1328,10 +1323,10 @@ mod test {
 
         #[test]
         fn test_cmp_eq_reg() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
 
-            processor.registers.set_reg(Register::R0, 1isize.into());
-            processor.registers.set_reg(Register::R1, 1isize.into());
+            processor.registers.set_reg(Register::R0, 1);
+            processor.registers.set_reg(Register::R1, 1);
 
             let _ = IS::execute(
                 Instruction::Cmp {
@@ -1348,14 +1343,14 @@ mod test {
 
         #[test]
         fn test_cmp_eq_reg_val() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
 
-            processor.registers.set_reg(Register::R0, 1isize.into());
+            processor.registers.set_reg(Register::R0, 1);
 
             let _ = IS::execute(
                 Instruction::Cmp {
                     lhs: Operand::Register(Register::R0),
-                    rhs: Operand::Value(1isize.into()),
+                    rhs: Operand::Value(1),
                 },
                 &mut processor,
             );
@@ -1367,12 +1362,12 @@ mod test {
 
         #[test]
         fn test_cmp_eq_val() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
 
             let _ = IS::execute(
                 Instruction::Cmp {
-                    lhs: Operand::Value(1isize.into()),
-                    rhs: Operand::Value(1isize.into()),
+                    lhs: Operand::Value(1),
+                    rhs: Operand::Value(1),
                 },
                 &mut processor,
             );
@@ -1384,10 +1379,10 @@ mod test {
 
         #[test]
         fn test_cmp_less() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
 
-            processor.registers.set_reg(Register::R0, 1isize.into());
-            processor.registers.set_reg(Register::R1, 2isize.into());
+            processor.registers.set_reg(Register::R0, 1);
+            processor.registers.set_reg(Register::R1, 2);
 
             let _ = IS::execute(
                 Instruction::Cmp {
@@ -1404,10 +1399,10 @@ mod test {
 
         #[test]
         fn test_cmp_greater() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
 
-            processor.registers.set_reg(Register::R0, 2isize.into());
-            processor.registers.set_reg(Register::R1, 1isize.into());
+            processor.registers.set_reg(Register::R0, 2);
+            processor.registers.set_reg(Register::R1, 1);
 
             let _ = IS::execute(
                 Instruction::Cmp {
@@ -1429,12 +1424,10 @@ mod test {
 
         #[test]
         fn test_push_pop() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, W, Words>::new();
+            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
 
-            processor
-                .registers
-                .set_reg(Register::SP, W::try_from(MEM_SIZE - 1).unwrap());
-            processor.registers.set_reg(Register::R0, 1isize.into());
+            processor.registers.set_reg(Register::SP, MEM_SIZE - 1);
+            processor.registers.set_reg(Register::R0, 1);
 
             [
                 Instruction::Push {
@@ -1453,10 +1446,10 @@ mod test {
             .iter()
             .for_each(|&inst| IS::execute(inst, &mut processor));
 
-            assert_eq!(processor.registers.get_reg(Register::R1), W::from(1isize));
-            assert_eq!(processor.registers.get_reg(Register::R2), W::from(1isize));
-            assert_eq!(processor.registers.get_reg(Register::R3), W::from(1isize));
-            assert_eq!(processor.registers.sp(), W::try_from(MEM_SIZE - 1).unwrap());
+            assert_eq!(processor.registers.get_reg(Register::R1), 1);
+            assert_eq!(processor.registers.get_reg(Register::R2), 1);
+            assert_eq!(processor.registers.get_reg(Register::R3), 1);
+            assert_eq!(processor.registers.sp(), MEM_SIZE - 1);
         }
     }
 }

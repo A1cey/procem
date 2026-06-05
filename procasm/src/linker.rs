@@ -7,21 +7,17 @@ use crate::{
     AssembledProgram,
     instruction::{Instruction, memory_location::MemoryLocation, unlinked::UnlinkedInstruction},
     parser::Parsed,
-    word::ProcasmWord,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Linker<'input, const MEM_SIZE: usize, W> {
+pub struct Linker<'input, const MEM_SIZE: usize> {
     errors: Vec<LinkerError>,
     input: &'input [u8],
-    parsed: Parsed<'input, W>,
+    parsed: Parsed<'input>,
 }
 
-impl<'input, const MEM_SIZE: usize, W: ProcasmWord> Linker<'input, MEM_SIZE, W> {
-    pub fn link(
-        input: &'input [u8],
-        parsed: Parsed<'input, W>,
-    ) -> Result<AssembledProgram<MEM_SIZE, W>, Vec<LinkerError>> {
+impl<'input, const MEM_SIZE: usize> Linker<'input, MEM_SIZE> {
+    pub fn link(input: &'input [u8], parsed: Parsed<'input>) -> Result<AssembledProgram<MEM_SIZE>, Vec<LinkerError>> {
         let mut linker = Self {
             errors: Vec::new(),
             input,
@@ -37,7 +33,7 @@ impl<'input, const MEM_SIZE: usize, W: ProcasmWord> Linker<'input, MEM_SIZE, W> 
         Ok(program)
     }
 
-    fn run(&mut self) -> AssembledProgram<MEM_SIZE, W> {
+    fn run(&mut self) -> AssembledProgram<MEM_SIZE> {
         let unlinked_instructions = mem::take(self.parsed.mut_unlinked_instructions());
 
         for unlinked_instruction in unlinked_instructions {
@@ -65,20 +61,13 @@ impl<'input, const MEM_SIZE: usize, W: ProcasmWord> Linker<'input, MEM_SIZE, W> 
             }
         };
 
-        let Ok(addr) = addr.try_into() else {
-            return self.errors.push(LinkerError::LabelIndexToWordConversionFailed {
-                idx: unlinked_instruction.instr_idx(),
-                label: String::from_utf8_lossy(label).to_string(),
-            });
-        };
-
         let instruction = self
             .parsed
             .mut_instructions()
             .get_mut(unlinked_instruction.instr_idx())
             .expect("The instruction index is always in range of the instructions.");
 
-        let linked_instruction: Instruction<W> = match instruction {
+        let linked_instruction: Instruction = match instruction {
             Instruction::Jump { to: _, condition } => Instruction::Jump {
                 to: addr,
                 condition: *condition,
@@ -106,17 +95,14 @@ impl<'input, const MEM_SIZE: usize, W: ProcasmWord> Linker<'input, MEM_SIZE, W> 
 
     #[must_use]
     #[inline]
-    fn create_header(&mut self) -> Header<W> {
+    fn create_header(&mut self) -> Header {
         let init_pc = self.get_init_pc();
         let init_sp = self.get_init_sp();
-        Header::new(
-            init_pc.unwrap_or_else(|| <W as ProcasmWord>::max()),
-            init_sp.unwrap_or_else(|| <W as ProcasmWord>::max()),
-        )
+        Header::new(init_pc.unwrap_or_else(|| usize::MAX), init_sp)
     }
 
     #[inline]
-    fn get_init_pc(&mut self) -> Option<W> {
+    fn get_init_pc(&mut self) -> Option<usize> {
         const START_LABEL: &[u8] = b"_start";
 
         let idx = self.parsed.labels().get(START_LABEL);
@@ -126,75 +112,39 @@ impl<'input, const MEM_SIZE: usize, W: ProcasmWord> Linker<'input, MEM_SIZE, W> 
                 self.errors.push(LinkerError::StartSymbolNotFound);
                 return None;
             }
-            Some(idx) => {
-                if let Ok(idx) = (*idx).try_into() {
-                    idx
-                } else {
-                    self.errors.push(LinkerError::LabelIndexToWordConversionFailed {
-                        idx: *idx,
-                        label: String::from_utf8_lossy(START_LABEL).to_string(),
-                    });
-                    return None;
-                }
-            }
+            Some(idx) => *idx,
         };
 
         Some(init_pc)
     }
 
     #[inline]
-    fn get_init_sp(&mut self) -> Option<W> {
+    fn get_init_sp(&mut self) -> usize {
         // Stack starts at highest value in memory
-        let Ok(init_sp) = { MEM_SIZE - 1 }.try_into() else {
-            self.errors.push(LinkerError::MemorySizeToBig {
-                mem_size: MEM_SIZE,
-                max_word_value: <W as ProcasmWord>::max().into(),
-            });
-            return None;
-        };
-
-        Some(init_sp)
+        MEM_SIZE - 1
     }
 
     #[must_use]
     #[inline]
-    fn create_data(&mut self) -> Data<W, Vec<W>> {
-        Data::new(W::from(0), mem::take(self.parsed.mut_data()))
+    fn create_data(&mut self) -> Data<Vec<u8>> {
+        Data::new(0, mem::take(self.parsed.mut_data()))
     }
 
     #[must_use]
-    fn create_bss(&mut self) -> Bss<W> {
+    fn create_bss(&mut self) -> Bss {
         if self.parsed.bss() == 0 {
-            return Bss::new(W::from(0), W::from(0));
+            return Bss::new(0, 0);
         }
 
-        let base_addr = if let Ok(base_addr) = self.parsed.data().len().try_into() {
-            base_addr
-        } else {
-            self.errors.push(LinkerError::DataToBigForBss {
-                data_size: self.parsed.data().len(),
-                max_word_value: <W as ProcasmWord>::max().into(),
-                bss_size: self.parsed.bss(),
-            });
-            W::from(0)
-        };
-
-        let bss_size = if let Ok(base_addr) = self.parsed.bss().try_into() {
-            base_addr
-        } else {
-            self.errors.push(LinkerError::BssToBig {
-                bss_size: self.parsed.data().len(),
-                max_word_value: <W as ProcasmWord>::max().into(),
-            });
-            W::from(0)
-        };
+        let base_addr = self.parsed.data().len();
+        let bss_size = self.parsed.bss();
 
         Bss::new(base_addr, bss_size)
     }
 
     #[must_use]
     #[inline]
-    fn create_code(&mut self) -> Code<Instruction<W>, Vec<Instruction<W>>, W> {
+    fn create_code(&mut self) -> Code<Instruction, Vec<Instruction>> {
         Code::new(mem::take(self.parsed.mut_instructions()))
     }
 }
@@ -203,20 +153,6 @@ impl<'input, const MEM_SIZE: usize, W: ProcasmWord> Linker<'input, MEM_SIZE, W> 
 pub enum LinkerError {
     #[error("Label \".{label}\" not found. Needed at {idx}.")]
     LabelNotFound { idx: usize, label: String },
-    #[error("Index {idx} of label \".{label}\" cannot be converted to word.")]
-    LabelIndexToWordConversionFailed { idx: usize, label: String },
     #[error("Could not find start symbol \"_start\".")]
     StartSymbolNotFound,
-    #[error("The specified memory size ({mem_size}) exceeds the maximum value of Word: {max_word_value}")]
-    MemorySizeToBig { mem_size: usize, max_word_value: usize },
-    #[error(
-        "The specified data section size ({data_size}) reaches the maximum value of Word: {max_word_value}. As a result there is no space available for the bss section of size {bss_size}."
-    )]
-    DataToBigForBss {
-        data_size: usize,
-        max_word_value: usize,
-        bss_size: usize,
-    },
-    #[error("The specified bss size ({bss_size}) exceeds the maximum value of Word: {max_word_value}")]
-    BssToBig { bss_size: usize, max_word_value: usize },
 }

@@ -1,4 +1,4 @@
-use procem::{processor::Processor, register::Flag, word::Word};
+use procem::{processor::Processor, register::Flag};
 
 use crate::instruction::Instruction;
 
@@ -32,9 +32,9 @@ pub enum JumpCondition {
 impl JumpCondition {
     /// Check the jump condition.
     #[inline]
-    pub(crate) fn check<const MEM_SIZE: usize, W: Word, Insts, Words>(
+    pub(crate) fn check<const MEM_SIZE: usize, Insts, Bytes>(
         self,
-        processor: &Processor<MEM_SIZE, Instruction<W>, Insts, W, Words>,
+        processor: &Processor<MEM_SIZE, Instruction, Insts, Bytes>,
     ) -> bool {
         let flags = &processor.registers;
         match self {
