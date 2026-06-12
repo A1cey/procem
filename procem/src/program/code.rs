@@ -53,7 +53,7 @@ where
     }
 }
 
-impl<Inst, Insts> Index<usize> for Code<Inst, Insts>
+impl<Inst, Insts> Index<u64> for Code<Inst, Insts>
 where
     Inst: Instruction,
     Insts: Deref<Target = [Inst]>,
@@ -65,8 +65,11 @@ where
     /// # Panics
     /// Panics if the program counter is out of bounds.
     #[inline]
-    fn index(&self, pc: usize) -> &Self::Output {
-        self.get(pc).unwrap_or_else(|| {
+    fn index(&self, pc: u64) -> &Self::Output {
+        // Not more than usize addressable
+        let addr = pc as usize;
+
+        self.get(addr).unwrap_or_else(|| {
             panic!(
                 "Program counter out of bounds. Program length: {}, Program counter: {}",
                 self.len(),

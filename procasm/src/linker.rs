@@ -30,10 +30,10 @@ impl<'input, const MEM_SIZE: usize> Linker<'input, MEM_SIZE> {
             return Err(linker.errors);
         }
 
-        Ok(program)
+        Ok(program.expect("There were no errors, so this is not None."))
     }
 
-    fn run(&mut self) -> AssembledProgram<MEM_SIZE> {
+    fn run(&mut self) -> Option<AssembledProgram<MEM_SIZE>> {
         let unlinked_instructions = mem::take(self.parsed.mut_unlinked_instructions());
 
         for unlinked_instruction in unlinked_instructions {
@@ -45,7 +45,13 @@ impl<'input, const MEM_SIZE: usize> Linker<'input, MEM_SIZE> {
         let bss = self.create_bss();
         let code = self.create_code();
 
-        Program::new(header, data, bss, code)
+        if let Some(header) = header
+            && let Some(bss) = bss
+        {
+            Some(Program::new(header, data, bss, code))
+        } else {
+            None
+        }
     }
 
     fn link_instruction(&mut self, unlinked_instruction: UnlinkedInstruction) {
@@ -95,33 +101,43 @@ impl<'input, const MEM_SIZE: usize> Linker<'input, MEM_SIZE> {
 
     #[must_use]
     #[inline]
-    fn create_header(&mut self) -> Header {
+    fn create_header(&mut self) -> Option<Header> {
         let init_pc = self.get_init_pc();
         let init_sp = self.get_init_sp();
-        Header::new(init_pc.unwrap_or_else(|| usize::MAX), init_sp)
+
+        if let Some(init_pc) = init_pc
+            && let Some(init_sp) = init_sp
+        {
+            let header = Header::new(init_pc, init_sp);
+            Some(header)
+        } else {
+            None
+        }
     }
 
     #[inline]
-    fn get_init_pc(&mut self) -> Option<usize> {
+    fn get_init_pc(&mut self) -> Option<u64> {
         const START_LABEL: &[u8] = b"_start";
 
-        let idx = self.parsed.labels().get(START_LABEL);
+        let pc = self.parsed.labels().get(START_LABEL);
 
-        let init_pc = match idx {
-            None => {
-                self.errors.push(LinkerError::StartSymbolNotFound);
-                return None;
-            }
-            Some(idx) => *idx,
-        };
+        if pc.is_none() {
+            self.errors.push(LinkerError::StartSymbolNotFound);
+        }
 
-        Some(init_pc)
+        pc.copied()
     }
 
     #[inline]
-    fn get_init_sp(&mut self) -> usize {
+    fn get_init_sp(&mut self) -> Option<u64> {
         // Stack starts at highest value in memory
-        MEM_SIZE - 1
+
+        if MEM_SIZE as u128 - 1 > u64::MAX as u128 {
+            self.errors.push(LinkerError::MemoryTooLarge { requested: MEM_SIZE });
+            None
+        } else {
+            Some(MEM_SIZE as u64 - 1)
+        }
     }
 
     #[must_use]
@@ -131,15 +147,23 @@ impl<'input, const MEM_SIZE: usize> Linker<'input, MEM_SIZE> {
     }
 
     #[must_use]
-    fn create_bss(&mut self) -> Bss {
+    fn create_bss(&mut self) -> Option<Bss> {
         if self.parsed.bss() == 0 {
-            return Bss::new(0, 0);
+            return Some(Bss::new(0, 0));
         }
 
         let base_addr = self.parsed.data().len();
+
+        if base_addr as u128 > u64::MAX as u128 {
+            self.errors
+                .push(LinkerError::DataSectionTooLarge { requested: base_addr });
+            return None;
+        }
+        let base_addr = base_addr as u64;
+
         let bss_size = self.parsed.bss();
 
-        Bss::new(base_addr, bss_size)
+        Some(Bss::new(base_addr, bss_size))
     }
 
     #[must_use]
@@ -155,4 +179,14 @@ pub enum LinkerError {
     LabelNotFound { idx: usize, label: String },
     #[error("Could not find start symbol \"_start\".")]
     StartSymbolNotFound,
+    #[error(
+        "Specified memory size is too large. Only 64bit can be addressed. Max memory size: {}, Requested: {requested}",
+        u64::MAX
+    )]
+    MemoryTooLarge { requested: usize },
+    #[error(
+        "Specified data section is too large. Only 64bit can be addressed. Max memory size: {}, requested: {requested}",
+        u64::MAX
+    )]
+    DataSectionTooLarge { requested: usize },
 }

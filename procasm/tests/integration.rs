@@ -32,7 +32,7 @@ fn simple_5x2_multiplication() {
     assert_eq!(
         program,
         AssembledProgram::new(
-            Header::new(0, MEM_SIZE - 1),
+            Header::new(0, MEM_SIZE as u64 - 1),
             Data::default(),
             Bss::default(),
             Code::from(vec![
@@ -91,7 +91,7 @@ fn parse_various_literals() {
     assert_eq!(
         program,
         Program::new(
-            Header::new(0, MEM_SIZE - 1),
+            Header::new(0, MEM_SIZE as u64 - 1),
             Data::default(),
             Bss::default(),
             Code::from(vec![
@@ -194,7 +194,7 @@ fn test_overflow_and_flags() {
     let mut processor = Processor::builder().with_program(&program).build();
 
     let _ = processor.run_program();
-    assert_eq!(processor.registers.get_reg(Register::R0), usize::MIN);
+    assert_eq!(processor.registers.get_reg(Register::R0), u64::MIN);
     assert_eq!(processor.registers.get_flag(procem::register::Flag::Z), true);
 }
 

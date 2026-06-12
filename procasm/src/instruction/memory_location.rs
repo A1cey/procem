@@ -4,7 +4,7 @@ use crate::instruction::{Instruction, operand::Operand};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MemoryLocation {
-    Labeled(usize),
+    Labeled(u64),
     Offset { base: Register, offset: Operand },
 }
 
@@ -14,7 +14,7 @@ impl MemoryLocation {
     pub fn resolve<const MEM_SIZE: usize, Insts, Bytes>(
         self,
         processor: &Processor<MEM_SIZE, Instruction, Insts, Bytes>,
-    ) -> usize {
+    ) -> u64 {
         match self {
             Self::Labeled(addr) => addr,
             Self::Offset { base, offset } => processor.registers.get_reg(base) + offset.resolve(processor),

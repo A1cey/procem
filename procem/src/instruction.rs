@@ -2,7 +2,9 @@
 
 use core::fmt::Debug;
 
-use crate::processor::Processor;
+use crate::processor::{Processor, ProcessorError};
+
+pub type InstructionResult = Result<(), ProcessorError>;
 
 /// The [`Instruction`] trait is implemented by all instructions or instruction sets that can be executed by the processor.
 ///
@@ -13,5 +15,5 @@ pub trait Instruction: Debug + Copy {
     fn execute<const MEM_SIZE: usize, Insts, Words>(
         instruction: Self,
         processor: &mut Processor<MEM_SIZE, Self, Insts, Words>,
-    );
+    ) -> InstructionResult;
 }

@@ -2,7 +2,7 @@ use core::ops::Deref;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Data<D> {
-    base_addr: usize,
+    base_addr: u64,
     data: D,
 }
 
@@ -15,14 +15,14 @@ where
     /// `base_addr` is the address where the first element of `data` will be loaded.
     #[inline]
     #[must_use]
-    pub const fn new(base_addr: usize, data: Bytes) -> Self {
+    pub const fn new(base_addr: u64, data: Bytes) -> Self {
         Self { base_addr, data }
     }
 
     /// Get the base address of the data section.
     #[inline]
     #[must_use]
-    pub const fn base_addr(&self) -> usize {
+    pub const fn base_addr(&self) -> u64 {
         self.base_addr
     }
 
@@ -43,8 +43,13 @@ where
     /// Number of words in the data section.
     #[must_use]
     #[inline]
-    pub fn len(&self) -> usize {
-        self.as_slice().len()
+    pub fn len(&self) -> u64 {
+        debug_assert!(
+            self.data.len() as u128 <= u64::MAX as u128,
+            "Cannot address more then {} values.",
+            u64::MAX
+        );
+        self.data.len() as u64
     }
 
     /// Whether the data region is empty.

@@ -1,9 +1,8 @@
 //! The processor's [`Memory`].
 
 use ars::fmt::slice::FmtSlice;
-use ars::range::Range;
 use core::fmt::{Debug, Display, Formatter};
-use core::ops::{Index, IndexMut, RangeFull};
+use core::ops::{Index, IndexMut, Range, RangeFull};
 
 use core::range::RangeInclusive;
 
@@ -56,79 +55,105 @@ impl<const MEM_SIZE: usize> Display for Memory<MEM_SIZE> {
     }
 }
 
-impl<const MEM_SIZE: usize> Index<usize> for Memory<MEM_SIZE> {
+impl<const MEM_SIZE: usize> Index<u64> for Memory<MEM_SIZE> {
     type Output = u8;
 
     /// Get a reference to the value in memory at the provided address.
     ///
     /// # Panics
     /// Panics if the address is out of bounds.
-    fn index(&self, addr: usize) -> &Self::Output {
-        self.0.get(addr).unwrap_or_else(|| {
-            panic!(
-                "{}",
-                ProcessorError::OutOfBoundsMemoryAccess {
-                    mem_size: MEM_SIZE,
-                    addr,
-                }
+    fn index(&self, addr: u64) -> &Self::Output {
+        self.0
+            .get(
+                // Not more than usize is addressable
+                addr as usize,
             )
-        })
+            .unwrap_or_else(|| {
+                panic!(
+                    "{}",
+                    ProcessorError::OutOfBoundsMemoryAccess {
+                        mem_size: MEM_SIZE,
+                        addr,
+                    }
+                )
+            })
     }
 }
 
-impl<const MEM_SIZE: usize> IndexMut<usize> for Memory<MEM_SIZE> {
+impl<const MEM_SIZE: usize> IndexMut<u64> for Memory<MEM_SIZE> {
     /// Get a mutable reference to the value in memory at the provided address.
     ///
     /// # Panics
     /// Panics if the address is out of bounds.
-    fn index_mut(&mut self, addr: usize) -> &mut Self::Output {
-        self.0.get_mut(addr).unwrap_or_else(|| {
-            panic!(
-                "{}",
-                ProcessorError::OutOfBoundsMemoryAccess {
-                    mem_size: MEM_SIZE,
-                    addr,
-                }
+    fn index_mut(&mut self, addr: u64) -> &mut Self::Output {
+        self.0
+            .get_mut(
+                // Not more than usize is addressable
+                addr as usize,
             )
-        })
+            .unwrap_or_else(|| {
+                panic!(
+                    "{}",
+                    ProcessorError::OutOfBoundsMemoryAccess {
+                        mem_size: MEM_SIZE,
+                        addr,
+                    }
+                )
+            })
     }
 }
 
-impl<const MEM_SIZE: usize> Index<core::ops::Range<usize>> for Memory<MEM_SIZE> {
+impl<const MEM_SIZE: usize> Index<Range<u64>> for Memory<MEM_SIZE> {
     type Output = [u8];
 
     /// Get a reference to the slice of memory at the provided address range.
     ///
     /// # Panics
     /// Panics if the address range is out of bounds.
-    fn index(&self, addr_range: core::ops::Range<usize>) -> &Self::Output {
-        self.0.get(addr_range.clone()).unwrap_or_else(|| {
-            panic!(
-                "{}",
-                ProcessorError::OutOfBoundsRangeMemoryAccess {
-                    mem_size: MEM_SIZE,
-                    addr_range: Range::from(addr_range),
-                }
+    fn index(&self, addr_range: Range<u64>) -> &Self::Output {
+        self.0
+            .get(
+                // Not more than usize is addressable
+                Range {
+                    start: addr_range.start as usize,
+                    end: addr_range.end as usize,
+                },
             )
-        })
+            .unwrap_or_else(|| {
+                panic!(
+                    "{}",
+                    ProcessorError::OutOfBoundsRangeMemoryAccess {
+                        mem_size: MEM_SIZE,
+                        addr_range,
+                    }
+                )
+            })
     }
 }
 
-impl<const MEM_SIZE: usize> IndexMut<core::ops::Range<usize>> for Memory<MEM_SIZE> {
+impl<const MEM_SIZE: usize> IndexMut<Range<u64>> for Memory<MEM_SIZE> {
     /// Get a mutable reference to the slice of memory at the provided address range.
     ///
     /// # Panics
     /// Panics if the address range is out of bounds.
-    fn index_mut(&mut self, addr_range: core::ops::Range<usize>) -> &mut Self::Output {
-        self.0.get_mut(addr_range.clone()).unwrap_or_else(|| {
-            panic!(
-                "{}",
-                ProcessorError::OutOfBoundsRangeMemoryAccess {
-                    mem_size: MEM_SIZE,
-                    addr_range: Range::from(addr_range),
-                }
+    fn index_mut(&mut self, addr_range: Range<u64>) -> &mut Self::Output {
+        self.0
+            .get_mut(
+                // Not more than usize is addressable
+                Range {
+                    start: addr_range.start as usize,
+                    end: addr_range.end as usize,
+                },
             )
-        })
+            .unwrap_or_else(|| {
+                panic!(
+                    "{}",
+                    ProcessorError::OutOfBoundsRangeMemoryAccess {
+                        mem_size: MEM_SIZE,
+                        addr_range,
+                    }
+                )
+            })
     }
 }
 
@@ -148,41 +173,57 @@ impl<const MEM_SIZE: usize> IndexMut<RangeFull> for Memory<MEM_SIZE> {
     }
 }
 
-impl<const MEM_SIZE: usize> Index<RangeInclusive<usize>> for Memory<MEM_SIZE> {
+impl<const MEM_SIZE: usize> Index<RangeInclusive<u64>> for Memory<MEM_SIZE> {
     type Output = [u8];
 
     /// Get a reference to the slice of memory at the provided address range.
     ///
     /// # Panics
     /// Panics if the address range is out of bounds.
-    fn index(&self, addr_range: RangeInclusive<usize>) -> &Self::Output {
-        self.0.get(addr_range).unwrap_or_else(|| {
-            panic!(
-                "{}",
-                ProcessorError::OutOfBoundsRangeMemoryAccess {
-                    mem_size: MEM_SIZE,
-                    addr_range: Range::from(addr_range),
-                }
+    fn index(&self, addr_range: RangeInclusive<u64>) -> &Self::Output {
+        self.0
+            .get(
+                // Not more than usize is addressable
+                RangeInclusive {
+                    start: addr_range.start as usize,
+                    last: addr_range.last as usize,
+                },
             )
-        })
+            .unwrap_or_else(|| {
+                panic!(
+                    "{}",
+                    ProcessorError::OutOfBoundsRangeMemoryAccess {
+                        mem_size: MEM_SIZE,
+                        addr_range: addr_range.start..addr_range.last + 1
+                    }
+                )
+            })
     }
 }
 
-impl<const MEM_SIZE: usize> IndexMut<RangeInclusive<usize>> for Memory<MEM_SIZE> {
+impl<const MEM_SIZE: usize> IndexMut<RangeInclusive<u64>> for Memory<MEM_SIZE> {
     /// Get a mutable reference to the slice of memory at the provided address range.
     ///
     /// # Panics
     /// Panics if the address range is out of bounds.
-    fn index_mut(&mut self, addr_range: RangeInclusive<usize>) -> &mut Self::Output {
-        self.0.get_mut(addr_range).unwrap_or_else(|| {
-            panic!(
-                "{}",
-                ProcessorError::OutOfBoundsRangeMemoryAccess {
-                    mem_size: MEM_SIZE,
-                    addr_range: addr_range.into(),
-                }
+    fn index_mut(&mut self, addr_range: RangeInclusive<u64>) -> &mut Self::Output {
+        self.0
+            .get_mut(
+                // Not more than usize is addressable
+                RangeInclusive {
+                    start: addr_range.start as usize,
+                    last: addr_range.last as usize,
+                },
             )
-        })
+            .unwrap_or_else(|| {
+                panic!(
+                    "{}",
+                    ProcessorError::OutOfBoundsRangeMemoryAccess {
+                        mem_size: MEM_SIZE,
+                        addr_range: addr_range.start..addr_range.last + 1,
+                    }
+                )
+            })
     }
 }
 
@@ -195,8 +236,9 @@ impl<const MEM_SIZE: usize> Memory<MEM_SIZE> {
 
     /// Get the size of the memory
     #[must_use]
-    pub const fn size(&self) -> usize {
-        MEM_SIZE
+    pub const fn size(&self) -> u64 {
+        // only 64bit address space with sp being u64
+        MEM_SIZE as u64
     }
 
     /// Read a value from memory at the provided address.
@@ -205,7 +247,7 @@ impl<const MEM_SIZE: usize> Memory<MEM_SIZE> {
     ///
     /// # Panics
     /// Panics if the address is out of bounds.
-    pub fn read(&self, addr: usize) -> u8 {
+    pub fn read(&self, addr: u64) -> u8 {
         self[addr]
     }
 
@@ -213,11 +255,12 @@ impl<const MEM_SIZE: usize> Memory<MEM_SIZE> {
     ///
     /// # Errors
     /// Returns an [`OutOfBoundsMemoryAccess`](ProcessorError::OutOfBoundsMemoryAccess) error if the address is out of bounds.
-    pub fn try_read(&self, addr: usize) -> Result<u8, ProcessorError> {
-        let addr: usize = addr;
-
+    pub fn try_read(&self, addr: u64) -> Result<u8, ProcessorError> {
         self.0
-            .get(addr)
+            .get(
+                // Not more than usize is addressable
+                addr as usize,
+            )
             .copied()
             .ok_or(ProcessorError::OutOfBoundsMemoryAccess {
                 mem_size: MEM_SIZE,
@@ -231,9 +274,61 @@ impl<const MEM_SIZE: usize> Memory<MEM_SIZE> {
     ///
     /// # Safety
     /// Calling this method with an out-of-bounds address value is undefined behavior.
-    pub unsafe fn read_unchecked(&self, addr: usize) -> u8 {
+    pub unsafe fn read_unchecked(&self, addr: u64) -> u8 {
+        // Not more than usize is addressable
+        let addr = addr as usize;
+
         // SAFETY: The caller must uphold safety and provide an in-bounds address value.
         *unsafe { self.0.get_unchecked(addr) }
+    }
+
+    /// Read a slice of bytes from memory starting at the specified address.
+    ///
+    /// The memory range written to spans from `start_addr` to `start_addr + len` (exclusive).
+    ///
+    /// For a non-panicking alternative, see [`try_read_slice`](Memory::try_read_slice).
+    ///
+    /// # Panics
+    /// Panics if the address range exceeds the memory bounds.
+    pub fn read_slice(&mut self, start_addr: u64, len: usize) -> &[u8] {
+        // Not more than usize is addressable
+        let start_addr = start_addr as usize;
+        &self.0[start_addr..start_addr + len]
+    }
+
+    /// Read a slice of bytes to memory starting at the specified address.
+    ///
+    /// The memory range written to spans from `start_addr` to `start_addr + len` (exclusive).
+    ///
+    /// # Errors
+    /// Returns an [`OutOfBoundsMemoryAccess`](ProcessorError::OutOfBoundsMemoryAccess) error if the address range is out of bounds.
+    pub fn try_read_slice(&mut self, start_addr: u64, len: usize) -> Result<&[u8], ProcessorError> {
+        self.0
+            .get(
+                // Not more than usize is addressable
+                start_addr as usize..start_addr as usize + len,
+            )
+            .ok_or(ProcessorError::OutOfBoundsRangeMemoryAccess {
+                mem_size: MEM_SIZE,
+                addr_range: start_addr..start_addr + len as u64,
+            })
+    }
+
+    /// Read a slice of bytes to memory starting at the specified address, without doing bounds
+    /// checking.
+    ///
+    /// The memory range written to spans from `start_addr` to `start_addr + len` (exclusive).
+    ///
+    /// For a safe alternative see [`read_slice`](Memory::read_slice).
+    ///
+    /// # Safety
+    /// Calling this method is undefined behavior if the `start_addr` or `start_addr + len` is out of bounds.
+    pub unsafe fn write_read_unchecked(&mut self, start_addr: u64, len: usize) -> &[u8] {
+        // Not more than usize is addressable
+        let start_addr = start_addr as usize;
+
+        // SAFETY: The caller must uphold safety and provide an in-bounds address range.
+        unsafe { self.0.get_unchecked(start_addr..start_addr + len) }
     }
 
     /// Write a value to memory at the given address.
@@ -242,7 +337,7 @@ impl<const MEM_SIZE: usize> Memory<MEM_SIZE> {
     ///
     /// # Panics
     /// Panics if the address is out of bounds.
-    pub fn write(&mut self, addr: usize, value: u8) {
+    pub fn write(&mut self, addr: u64, value: u8) {
         self[addr] = value;
     }
 
@@ -250,13 +345,17 @@ impl<const MEM_SIZE: usize> Memory<MEM_SIZE> {
     ///
     /// # Errors
     /// Returns an [`OutOfBoundsMemoryAccess`](ProcessorError::OutOfBoundsMemoryAccess) error if the address is out of bounds.
-    pub fn try_write(&mut self, addr: usize, value: u8) -> Result<(), ProcessorError> {
-        let addr: usize = addr;
-
-        *self.0.get_mut(addr).ok_or(ProcessorError::OutOfBoundsMemoryAccess {
-            mem_size: MEM_SIZE,
-            addr,
-        })? = value;
+    pub fn try_write(&mut self, addr: u64, value: u8) -> Result<(), ProcessorError> {
+        *self
+            .0
+            .get_mut(
+                // Not more than usize is addressable
+                addr as usize,
+            )
+            .ok_or(ProcessorError::OutOfBoundsMemoryAccess {
+                mem_size: MEM_SIZE,
+                addr,
+            })? = value;
 
         Ok(())
     }
@@ -267,8 +366,85 @@ impl<const MEM_SIZE: usize> Memory<MEM_SIZE> {
     ///
     /// # Safety
     /// Calling this method with an out-of-bounds address value is undefined behavior.
-    pub unsafe fn write_unchecked(&mut self, addr: usize, value: u8) {
+    pub unsafe fn write_unchecked(&mut self, addr: u64, value: u8) {
+        // Not more than usize is addressable
+        let addr = addr as usize;
+
         // SAFETY: The caller must uphold safety and provide an in-bounds address value.
         *unsafe { self.0.get_unchecked_mut(addr) } = value;
+    }
+
+    /// Write a slice of bytes to memory starting at the specified address.
+    ///
+    /// The memory range written to spans from `start_addr` to `start_addr + values.len()` (exclusive).
+    ///
+    /// For a non-panicking alternative, see [`try_write_slice`](Memory::try_write_slice).
+    ///
+    /// # Panics
+    /// Panics if the address range exceeds the memory bounds.
+    pub fn write_slice(&mut self, start_addr: u64, values: &[u8]) {
+        // slices with more than u64
+        debug_assert!(values.len() as u128 <= u64::MAX as u128);
+        let end_addr = start_addr + values.len() as u64;
+
+        self[start_addr..end_addr].copy_from_slice(values);
+    }
+
+    /// Write a slice of bytes to memory starting at the specified address.
+    ///
+    /// The memory range written to spans from `start_addr` to `start_addr + values.len()` (exclusive).
+    ///
+    /// # Errors
+    /// Returns an [`OutOfBoundsMemoryAccess`](ProcessorError::OutOfBoundsMemoryAccess) error if the address range is out of bounds.
+    pub fn try_write_slice(&mut self, start_addr: u64, values: &[u8]) -> Result<(), ProcessorError> {
+        let slice = self
+            .0
+            .get_mut(
+                // Not more than usize is addressable
+                start_addr as usize..start_addr as usize + values.len(),
+            )
+            .ok_or(ProcessorError::OutOfBoundsRangeMemoryAccess {
+                mem_size: MEM_SIZE,
+                addr_range: start_addr..start_addr + values.len() as u64,
+            })?;
+
+        if slice.len() != values.len() {
+            return Err(ProcessorError::InvalidSliceSize {
+                expected: slice.len(),
+                got: values.len(),
+            });
+        }
+
+        // Cannot panic due to check above
+        slice.copy_from_slice(values);
+
+        Ok(())
+    }
+
+    /// Write a slice of bytes to memory starting at the specified address, without doing bounds
+    /// checking.
+    ///
+    /// The memory range written to spans from `start_addr` to `start_addr + values.len()` (exclusive).
+    ///
+    /// For a safe alternative see [`write_slice`](Memory::write_slice).
+    ///
+    /// # Safety
+    /// Calling this method is undefined behavior if:
+    /// * The `start_addr` or `start_addr + values.len()` is out of bounds.
+    /// * The address range in memory overlaps with the address range of `values`.
+    pub unsafe fn write_slice_unchecked(&mut self, start_addr: u64, values: &[u8]) {
+        // Not more than usize is addressable
+        let start_addr = start_addr as usize;
+
+        let mem_ptr = self.0.as_mut_ptr();
+
+        // SAFETY: The caller must uphold safety and provide a valid `start_addr`.
+        let start_addr_ptr = unsafe { mem_ptr.add(start_addr) };
+
+        // SAFETY: The caller must uphold safety and provide a valid address range (`start_addr + values.len()` must be in bounds).
+        // The address range of values is not allowed to overlap with the address range of the destination in memory.
+        unsafe {
+            core::ptr::copy_nonoverlapping(values.as_ptr(), start_addr_ptr, values.len());
+        }
     }
 }

@@ -52,18 +52,22 @@ where
     /// # Errors
     /// Returns `PCOutOfBounds` error if the program counter is not in bounds.
     #[inline]
-    pub fn try_fetch(&self, pc: usize) -> Result<Inst, ProcessorError> {
-        let pc: usize = pc;
-
-        self.code.get(pc).map_or_else(
-            || {
-                Err(ProcessorError::PCOutOfBounds {
-                    pc,
-                    program_len: self.code.len(),
-                })
-            },
-            |instruction| Ok(*instruction),
-        )
+    pub fn try_fetch(&self, pc: u64) -> Result<Inst, ProcessorError> {
+        self.code
+            .get(
+                // Not more than usize values addressable
+                pc as usize,
+            )
+            .map_or_else(
+                || {
+                    Err(ProcessorError::PCOutOfBounds {
+                        pc,
+                        // because pc is u64 and out of bounds (pc >= code.len()), this cast cannot loose data
+                        program_len: self.code.len() as u64,
+                    })
+                },
+                |instruction| Ok(*instruction),
+            )
     }
 
     /// Returns the instruction at the provided index.
@@ -74,7 +78,7 @@ where
     /// Panics if the program counter is not in bounds.
     #[inline]
     #[must_use]
-    pub fn fetch(&self, pc: usize) -> Inst {
+    pub fn fetch(&self, pc: u64) -> Inst {
         self.code[pc]
     }
 
@@ -86,9 +90,12 @@ where
     /// Calling this method with an out-of-bounds program counter value is undefined behavior even if the resulting value is not used.
     #[inline]
     #[must_use]
-    pub unsafe fn fetch_unchecked(&self, pc: usize) -> Inst {
+    pub unsafe fn fetch_unchecked(&self, pc: u64) -> Inst {
+        // Not more than usize values addressable
+        let addr = pc as usize;
+
         // SAFETY: The caller must uphold safety and provide an in-bounds program counter value.
-        *unsafe { self.code.get_unchecked(pc) }
+        *unsafe { self.code.get_unchecked(addr) }
     }
 
     /// Get a reference to the header.
@@ -101,14 +108,14 @@ where
     /// Convenience: initial program counter from the header.
     #[inline]
     #[must_use]
-    pub const fn init_pc(&self) -> usize {
+    pub const fn init_pc(&self) -> u64 {
         self.header.init_pc()
     }
 
     /// Convenience: initial stack pointer from the header.
     #[inline]
     #[must_use]
-    pub const fn init_sp(&self) -> usize {
+    pub const fn init_sp(&self) -> u64 {
         self.header.init_sp()
     }
 

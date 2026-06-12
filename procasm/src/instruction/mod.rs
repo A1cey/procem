@@ -6,7 +6,7 @@ pub mod unlinked;
 
 use core::cmp::Ordering;
 use procem::{
-    instruction::Instruction as InstructionTrait,
+    instruction::{Instruction as InstructionTrait, InstructionResult},
     processor::Processor,
     register::{Flag, Register},
 };
@@ -27,12 +27,32 @@ pub enum Instruction {
     /// No operation. (NOP)
     Nop,
     /// Store the memory location of a label in a register. (ADR)
-    Adr { reg: Register, addr: usize },
+    Adr { reg: Register, addr: u64 },
     /// Copy a value from the operand to the register. (MOV)
     Mov { to: Register, from: Operand },
-    /// Store a value from a register to a memory location. (STR)
+    /// Store an 8-bit value from a register to a memory location. (STRB)
+    Strb { from: Register, to: MemoryLocation },
+    /// Store a 16-bit value from a register to a memory location. (STRH)
+    Strh { from: Register, to: MemoryLocation },
+    /// Store a 32-bit value from a register to a memory location. (STRW)
+    Strw { from: Register, to: MemoryLocation },
+    /// Store a 64-bit value from a register to a memory location. (STRD)
+    Strd { from: Register, to: MemoryLocation },
+    /// Store a 128-bit value from a register to a memory location. (STRQ)
+    Strq { from: Register, to: MemoryLocation },
+    /// Store a 64-bit value from a register to a memory location. (STR)
     Str { from: Register, to: MemoryLocation },
-    /// Load a value from a memory location into a register. (LDR)
+    /// Load an 8-bit value from a memory location into a register. (LDR)
+    Ldrb { to: Register, from: MemoryLocation },
+    /// Load a 16-bit value from a memory location into a register. (LDR)
+    Ldrh { to: Register, from: MemoryLocation },
+    /// Load a 32-bit value from a memory location into a register. (LDR)
+    Ldrw { to: Register, from: MemoryLocation },
+    /// Load a 64-bit value from a memory location into a register. (LDR)
+    Ldrd { to: Register, from: MemoryLocation },
+    /// Load a 128-bit value from a memory location into a register. (LDR)
+    Ldrq { to: Register, from: MemoryLocation },
+    /// Load a 64-bit value from a memory location into a register. (LDR)
     Ldr { to: Register, from: MemoryLocation },
     /// Push a value from the operand to the stack. (PUSH)
     Push { from: Operand },
@@ -63,7 +83,7 @@ pub enum Instruction {
     /// Set program counter to a value, effectively jumping to the instruction at this point in the program.
     /// The condition is checked before jumping and the jump is performed if the condition is met.
     /// See the assembly instruction at `JumpCondition`.
-    Jump { to: usize, condition: JumpCondition },
+    Jump { to: u64, condition: JumpCondition },
     /// Compare the values of two operands and set the flags accordingly. This is the same as `SUBS` but disregards the result of the subtraction. (CMP)
     Cmp { lhs: Operand, rhs: Operand },
     /// Perform an xor operation on the value in the register with the value of the operand. (XOR)
@@ -76,10 +96,10 @@ pub enum Instruction {
     Not { reg: Register },
     /// Shift the value in the register left by the specified number of bits.
     /// The assembler only accepts values between 1 and the number of bits of the Word size minus 1.
-    Shl { reg: Register, val: usize },
+    Shl { reg: Register, val: u64 },
     /// Shift the value in the register right by the specified number of bits.
     /// The assembler only accepts values between 1 and the number of bits of the Word size minus 1.
-    Shr { reg: Register, val: usize },
+    Shr { reg: Register, val: u64 },
     /// Rotate the value in the register left by the specified number of bits.
     /// The assembler only accepts values between 1 and the number of bits of the Word size minus 1.
     Rol { reg: Register, val: u32 },
@@ -93,17 +113,27 @@ impl InstructionTrait for Instruction {
     fn execute<const MEM_SIZE: usize, Insts, Bytes>(
         instruction: Self,
         processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
-    ) {
+    ) -> InstructionResult {
         match instruction {
             Self::Nop => (),
             Self::Adr { reg, addr } => Self::adr(reg, addr, processor),
             Self::Mov { to, from } => Self::mov(to, from, processor),
-            Self::Str { from, to } => Self::str(from, to, processor),
-            Self::Ldr { to, from } => Self::ldr(to, from, processor),
-            Self::Push { from } => Self::push(from, processor),
-            Self::Pop { to } => Self::pop(to, processor),
-            Self::Call { addr } => Self::call(addr, processor),
-            Self::Ret => Self::ret(processor),
+            Self::Strb { from, to } => Self::strb(from, to, processor)?,
+            Self::Strh { from, to } => Self::strh(from, to, processor)?,
+            Self::Strw { from, to } => Self::strw(from, to, processor)?,
+            Self::Strd { from, to } => Self::strd(from, to, processor)?,
+            Self::Strq { from, to } => Self::strq(from, to, processor)?,
+            Self::Str { from, to } => Self::str(from, to, processor)?,
+            Self::Ldrb { to, from } => Self::ldrb(to, from, processor)?,
+            Self::Ldrw { to, from } => Self::ldrw(to, from, processor)?,
+            Self::Ldrh { to, from } => Self::ldrh(to, from, processor)?,
+            Self::Ldrd { to, from } => Self::ldrd(to, from, processor)?,
+            Self::Ldrq { to, from } => Self::ldrq(to, from, processor)?,
+            Self::Ldr { to, from } => Self::ldr(to, from, processor)?,
+            Self::Push { from } => Self::push(from, processor)?,
+            Self::Pop { to } => Self::pop(to, processor)?,
+            Self::Call { addr } => Self::call(addr, processor)?,
+            Self::Ret => Self::ret(processor)?,
             Self::Add { acc, rhs, signed } => Self::add(acc, rhs, signed, processor),
             Self::Sub { acc, rhs, signed } => Self::sub(acc, rhs, signed, processor),
             Self::Mul { acc, rhs, signed } => Self::mul(acc, rhs, signed, processor),
@@ -121,6 +151,8 @@ impl InstructionTrait for Instruction {
             Self::Rol { reg, val } => Self::rol(reg, val, processor),
             Self::Ror { reg, val } => Self::ror(reg, val, processor),
         }
+
+        Ok(())
     }
 }
 
@@ -182,7 +214,7 @@ impl Instruction {
         }
     }
 
-    pub(crate) const fn from_shift_instruction(instr: ASMShiftInstruction, reg: Register, val: usize) -> Self {
+    pub(crate) const fn from_shift_instruction(instr: ASMShiftInstruction, reg: Register, val: u64) -> Self {
         use ASMShiftInstruction::{Shl, Shr};
 
         match instr {
@@ -200,7 +232,7 @@ impl Instruction {
         }
     }
 
-    pub(crate) const fn from_jump_instruction(instr: ASMJumpInstruction, dest: usize) -> Self {
+    pub(crate) const fn from_jump_instruction(instr: ASMJumpInstruction, dest: u64) -> Self {
         use ASMJumpInstruction::{Jc, Jg, Jge, Jl, Jle, Jmp, Jnc, Jns, Jnz, Js, Jz};
         let condition = match instr {
             Jmp => JumpCondition::Unconditional,
@@ -218,12 +250,14 @@ impl Instruction {
 
         Self::Jump { to: dest, condition }
     }
+}
 
+impl Instruction {
     /// Move a memory address into a register.
     #[inline]
     fn adr<const MEM_SIZE: usize, Insts, Bytes>(
         reg: Register,
-        addr: usize,
+        addr: u64,
         processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         processor.registers.set_reg(reg, addr);
@@ -239,28 +273,177 @@ impl Instruction {
         processor.registers.set_reg(to, from.resolve(processor));
     }
 
-    /// Store a value from a register into a memory location.
+    /// Store an 8-bit value from a register into a memory location.
+    #[inline]
+    fn strb<const MEM_SIZE: usize, Insts, Bytes>(
+        from: Register,
+        to: MemoryLocation,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
+    ) -> InstructionResult {
+        let to_addr = to.resolve(processor);
+        let val = processor.registers.get_reg(from);
+        processor.mem.try_write(to_addr, val as u8) // Discard the upper bytes of the u64 value
+    }
+
+    /// Store a 16-bit value from a register into a memory location.
+    #[inline]
+    fn strh<const MEM_SIZE: usize, Insts, Bytes>(
+        from: Register,
+        to: MemoryLocation,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
+    ) -> InstructionResult {
+        let to_addr = to.resolve(processor);
+        let val = processor.registers.get_reg(from);
+        let bytes = (val as u16).to_le_bytes(); // Discard the upper bytes of the u64 value
+
+        processor.mem.try_write_slice(to_addr, &bytes)
+    }
+
+    /// Store a 32-bit value from a register into a memory location.
+    #[inline]
+    fn strw<const MEM_SIZE: usize, Insts, Bytes>(
+        from: Register,
+        to: MemoryLocation,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
+    ) -> InstructionResult {
+        let to_addr = to.resolve(processor);
+        let val = processor.registers.get_reg(from);
+        let bytes = (val as u32).to_le_bytes(); // Discard the upper bytes of the u64 value
+
+        processor.mem.try_write_slice(to_addr, &bytes)
+    }
+
+    /// Store a 64-bit value from a register into a memory location.
+    #[inline]
+    fn strd<const MEM_SIZE: usize, Insts, Bytes>(
+        from: Register,
+        to: MemoryLocation,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
+    ) -> InstructionResult {
+        let to_addr = to.resolve(processor);
+        let val = processor.registers.get_reg(from);
+        let bytes = val.to_le_bytes();
+
+        processor.mem.try_write_slice(to_addr, &bytes)
+    }
+
+    // TODO: Handle 128bit immediate values when storing the value in memory -> Add u128 registers
+    /// Store a 128-bit value from a register into a memory location.
+    #[inline]
+    fn strq<const MEM_SIZE: usize, Insts, Bytes>(
+        from: Register,
+        to: MemoryLocation,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
+    ) -> InstructionResult {
+        let to_addr = to.resolve(processor);
+        let val = processor.registers.get_reg(from);
+        let bytes = (val as u128).to_le_bytes(); // Fills the upper bytes with 0
+
+        processor.mem.try_write_slice(to_addr, &bytes)
+    }
+
+    /// Store a 64-bit value from a register to a memory location.
     #[inline]
     fn str<const MEM_SIZE: usize, Insts, Bytes>(
         from: Register,
         to: MemoryLocation,
         processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
-    ) {
+    ) -> InstructionResult {
         let to_addr = to.resolve(processor);
         let val = processor.registers.get_reg(from);
-        processor.mem.write(to_addr, val as u8); // TODO: Writes from reg to memory how to handle? usize -> u8
+        let bytes = val.to_le_bytes();
+
+        processor.mem.try_write_slice(to_addr, &bytes)
     }
 
-    /// Load a value from a memory location into a register.
+    /// Load an 8-bit value from a memory location into a register.
+    #[inline]
+    fn ldrb<const MEM_SIZE: usize, Insts, Bytes>(
+        to: Register,
+        from: MemoryLocation,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
+    ) -> InstructionResult {
+        let from_addr = from.resolve(processor);
+        let byte = processor.mem.try_read(from_addr)?;
+
+        processor.registers.set_reg(to, u64::from(byte)); // Fills the upper bytes with 0
+        Ok(())
+    }
+
+    /// Load a 16-bit value from a memory location into a register.
+    #[inline]
+    fn ldrh<const MEM_SIZE: usize, Insts, Bytes>(
+        to: Register,
+        from: MemoryLocation,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
+    ) -> InstructionResult {
+        let from_addr = from.resolve(processor);
+        let bytes = processor.mem.try_read_slice(from_addr, size_of::<u16>())?;
+        let val = u16::from_le_bytes(*bytes.as_array().expect("Just read two bytes."));
+
+        processor.registers.set_reg(to, u64::from(val)); // Fills the upper bytes with 0
+        Ok(())
+    }
+
+    /// Load a 32-bit value from a memory location into a register.
+    #[inline]
+    fn ldrw<const MEM_SIZE: usize, Insts, Bytes>(
+        to: Register,
+        from: MemoryLocation,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
+    ) -> InstructionResult {
+        let from_addr = from.resolve(processor);
+        let bytes = processor.mem.try_read_slice(from_addr, size_of::<u32>())?;
+        let val = u32::from_le_bytes(*bytes.as_array().expect("Just read four bytes."));
+
+        processor.registers.set_reg(to, u64::from(val)); // Fills the upper bytes with 0
+        Ok(())
+    }
+
+    /// Load a 64-bit value from a memory location into a register.
+    #[inline]
+    fn ldrd<const MEM_SIZE: usize, Insts, Bytes>(
+        to: Register,
+        from: MemoryLocation,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
+    ) -> InstructionResult {
+        let from_addr = from.resolve(processor);
+        let bytes = processor.mem.try_read_slice(from_addr, size_of::<u64>())?;
+        let val = u64::from_le_bytes(*bytes.as_array().expect("Just read eight bytes."));
+
+        processor.registers.set_reg(to, val);
+        Ok(())
+    }
+
+    // TODO: This always discards the upper bytes
+    /// Load a 128-bit value from a memory location into a register.
+    #[inline]
+    fn ldrq<const MEM_SIZE: usize, Insts, Bytes>(
+        to: Register,
+        from: MemoryLocation,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
+    ) -> InstructionResult {
+        let from_addr = from.resolve(processor);
+        let bytes = processor.mem.read_slice(from_addr, size_of::<u128>());
+        let val = u128::from_le_bytes(*bytes.as_array().expect("Just read sixteen bytes."));
+
+        processor.registers.set_reg(to, val as u64); // Discards the upper bytes
+        Ok(())
+    }
+
+    /// Load a 64-bit value from a memory location into a register.
     #[inline]
     fn ldr<const MEM_SIZE: usize, Insts, Bytes>(
         to: Register,
         from: MemoryLocation,
         processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
-    ) {
+    ) -> InstructionResult {
         let from_addr = from.resolve(processor);
-        let val = processor.mem.read(from_addr);
-        processor.registers.set_reg(to, usize::from(val));
+        let bytes = processor.mem.try_read_slice(from_addr, size_of::<u64>())?;
+        let val = u64::from_le_bytes(*bytes.as_array().expect("Just read eight bytes."));
+
+        processor.registers.set_reg(to, val);
+        Ok(())
     }
 
     /// Push a value from the operand to the stack.
@@ -268,21 +451,33 @@ impl Instruction {
     fn push<const MEM_SIZE: usize, Insts, Bytes>(
         from: Operand,
         processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
-    ) {
-        processor.registers.dec(Register::SP);
-        let sp = processor.registers.sp();
+    ) -> InstructionResult {
+        // Move SP
+        let new_sp = processor.registers.sp() - size_of::<u64>() as u64; // Substract size of register
+        processor.registers.set_reg(Register::SP, new_sp);
 
-        processor.mem.write(sp, from.resolve(processor) as u8); // TODO: fix this conversion
+        // Write value
+        let bytes = from.resolve(processor).to_le_bytes();
+        processor.mem.try_write_slice(new_sp, &bytes)
     }
 
     /// Pop a value from the stack to the register.
     #[inline]
-    fn pop<const MEM_SIZE: usize, Insts, Bytes>(to: Register, processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>) {
+    fn pop<const MEM_SIZE: usize, Insts, Bytes>(
+        to: Register,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
+    ) -> InstructionResult {
+        // Read value
         let sp = processor.registers.sp();
-        let val = processor.mem.read(sp);
+        let bytes = processor.mem.try_read_slice(sp, size_of::<u64>())?;
+        let val = u64::from_le_bytes(*bytes.as_array().expect("Just read eight bytes"));
+        processor.registers.set_reg(to, val);
 
-        processor.registers.inc(Register::SP);
-        processor.registers.set_reg(to, usize::from(val));
+        // Move SP
+        let new_sp = sp + size_of::<u64>() as u64; // Add size of register
+        processor.registers.set_reg(Register::SP, new_sp);
+
+        Ok(())
     }
 
     /// Call a subroutine at the program address specified by the operand.
@@ -291,23 +486,26 @@ impl Instruction {
     fn call<const MEM_SIZE: usize, Insts, Bytes>(
         addr: Operand,
         processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
-    ) {
-        Self::push(Operand::Value(processor.registers.pc()), processor);
+    ) -> InstructionResult {
+        Self::push(Operand::Value(processor.registers.pc()), processor)?;
         processor.registers.set_reg(Register::PC, addr.resolve(processor));
+        Ok(())
     }
 
     /// Return from a subroutine.
     /// Pops the return address from the stack and sets the program counter to the popped value.
     #[inline]
-    fn ret<const MEM_SIZE: usize, Insts, Bytes>(processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>) {
-        Self::pop(Register::PC, processor);
+    fn ret<const MEM_SIZE: usize, Insts, Bytes>(
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
+    ) -> InstructionResult {
+        Self::pop(Register::PC, processor)
     }
 
     /// Set program pointer to value, effectively jumping to the instruction at this point in the program.
     /// The condition is checked before jumping and the jump is performed if the condition is met.
     #[inline]
     fn jmp<const MEM_SIZE: usize, Insts, Bytes>(
-        to: usize,
+        to: u64,
         condition: JumpCondition,
         processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
@@ -449,7 +647,7 @@ impl Instruction {
     /// Sets the signed and zero flags.
     #[inline]
     fn set_signed_zero_flags<const MEM_SIZE: usize, Insts, Bytes>(
-        val: usize,
+        val: u64,
         processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         match val.cmp(&0) {
@@ -469,26 +667,26 @@ impl Instruction {
     }
 
     //  TODO: lhs and rhs entirely depend on the word size, i think...
-    fn check_carry_add(lhs: usize, rhs: usize) -> bool {
+    fn check_carry_add(lhs: u64, rhs: u64) -> bool {
         let (lhs, rhs) = (lhs as u128, rhs as u128);
-        lhs + rhs > usize::MAX as u128 // TODO: usize here depends on the word size used: byte --> u8, word --> u32, dword --> u64
+        lhs + rhs > u64::MAX as u128 // TODO: usize here depends on the word size used: byte --> u8, word --> u32, dword --> u64
     }
 
     // TODO: see above
-    fn check_carry_sub(lhs: usize, rhs: usize) -> bool {
+    fn check_carry_sub(lhs: u64, rhs: u64) -> bool {
         let (lhs, rhs) = (lhs as u128, rhs as u128);
         lhs < rhs
     }
 
     // TODO: see above
-    fn check_carry_mul(lhs: usize, rhs: usize) -> bool {
+    fn check_carry_mul(lhs: u64, rhs: u64) -> bool {
         let (lhs, rhs) = (lhs as u128, rhs as u128);
-        lhs * rhs > usize::MAX as u128 // TODO: see above
+        lhs * rhs > u64::MAX as u128 // TODO: see above
     }
 
     // TODO: see above
-    fn check_carry_div(lhs: usize, rhs: usize) -> bool {
-        usize::overflowing_div(lhs, rhs).1 // TODO: see above
+    fn check_carry_div(lhs: u64, rhs: u64) -> bool {
+        u64::overflowing_div(lhs, rhs).1 // TODO: see above
     }
 
     /// Compares two operands and sets the flags accordingly.
@@ -562,7 +760,7 @@ impl Instruction {
     #[inline]
     fn shl<const MEM_SIZE: usize, Insts, Bytes>(
         reg: Register,
-        val: usize, // TODO: Is this always the correct size?
+        val: u64,
         processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         let a = processor.registers.get_reg(reg);
@@ -573,7 +771,7 @@ impl Instruction {
     #[inline]
     fn shr<const MEM_SIZE: usize, Insts, Bytes>(
         reg: Register,
-        val: usize, // TODO: Is this always the correct size?
+        val: u64,
         processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         let a = processor.registers.get_reg(reg);
@@ -691,7 +889,7 @@ mod test {
                     from: Register::R0,
                     to: MemoryLocation::Offset {
                         base: Register::R1,
-                        offset: Operand::Value(-1isize as usize),
+                        offset: Operand::Value(-1isize as u64),
                     },
                 },
                 &mut processor,
@@ -720,7 +918,7 @@ mod test {
             let _ = IS::execute(
                 Instruction::Str {
                     from: Register::R0,
-                    to: MemoryLocation::Labeled(MEM_SIZE),
+                    to: MemoryLocation::Labeled(MEM_SIZE as u64),
                 },
                 &mut processor,
             );
@@ -771,7 +969,7 @@ mod test {
                     to: Register::R0,
                     from: MemoryLocation::Offset {
                         base: Register::R1,
-                        offset: Operand::Value(-1isize as usize),
+                        offset: Operand::Value(-1isize as u64),
                     },
                 },
                 &mut processor,
@@ -799,7 +997,7 @@ mod test {
 
             let _ = IS::execute(
                 Instruction::Ldr {
-                    from: MemoryLocation::Labeled(MEM_SIZE),
+                    from: MemoryLocation::Labeled(MEM_SIZE as u64),
                     to: Register::R0,
                 },
                 &mut processor,
@@ -829,7 +1027,7 @@ mod test {
         #[test]
         fn test_inc_overflow() {
             let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, usize::MAX);
+            processor.registers.set_reg(Register::R0, u64::MAX);
             let _ = IS::execute(
                 Instruction::Inc {
                     reg: Register::R0,
@@ -837,7 +1035,7 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), usize::MIN);
+            assert_eq!(processor.registers.get_reg(Register::R0), u64::MIN);
         }
     }
 
@@ -861,7 +1059,7 @@ mod test {
         #[test]
         fn test_dec_underflow() {
             let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, usize::MIN);
+            processor.registers.set_reg(Register::R0, u64::MIN);
             let _ = IS::execute(
                 Instruction::Dec {
                     reg: Register::R0,
@@ -869,7 +1067,7 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), usize::MAX);
+            assert_eq!(processor.registers.get_reg(Register::R0), u64::MAX);
         }
     }
 
@@ -895,7 +1093,7 @@ mod test {
         #[test]
         fn test_add_reg_overflow() {
             let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, usize::MAX.into());
+            processor.registers.set_reg(Register::R0, u64::MAX.into());
             processor.registers.set_reg(Register::R1, 1);
             let _ = IS::execute(
                 Instruction::Add {
@@ -905,7 +1103,7 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), usize::MIN);
+            assert_eq!(processor.registers.get_reg(Register::R0), u64::MIN);
         }
 
         #[test]
@@ -926,7 +1124,7 @@ mod test {
         #[test]
         fn test_add_val_overflow() {
             let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, usize::MAX);
+            processor.registers.set_reg(Register::R0, u64::MAX);
             let _ = IS::execute(
                 Instruction::Add {
                     acc: Register::R0,
@@ -935,7 +1133,7 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), usize::MIN);
+            assert_eq!(processor.registers.get_reg(Register::R0), u64::MIN);
         }
     }
 
@@ -955,13 +1153,13 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), -5isize as usize);
+            assert_eq!(processor.registers.get_reg(Register::R0), -5isize as u64);
         }
 
         #[test]
         fn test_sub_reg_overflow() {
             let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, usize::MIN);
+            processor.registers.set_reg(Register::R0, u64::MIN);
             processor.registers.set_reg(Register::R1, 1);
             let _ = IS::execute(
                 Instruction::Sub {
@@ -971,7 +1169,7 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), usize::MAX);
+            assert_eq!(processor.registers.get_reg(Register::R0), u64::MAX);
         }
 
         #[test]
@@ -986,13 +1184,13 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), -5isize as usize);
+            assert_eq!(processor.registers.get_reg(Register::R0), -5isize as u64);
         }
 
         #[test]
         fn test_sub_val_overflow() {
             let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, -128isize as usize);
+            processor.registers.set_reg(Register::R0, -128isize as u64);
             let _ = IS::execute(
                 Instruction::Sub {
                     acc: Register::R0,
@@ -1023,7 +1221,7 @@ mod test {
             );
             assert_eq!(processor.registers.get_reg(Register::R0), 50);
 
-            processor.registers.set_reg(Register::R0, -5isize as usize);
+            processor.registers.set_reg(Register::R0, -5isize as u64);
             processor.registers.set_reg(Register::R1, 10);
             let _ = IS::execute(
                 Instruction::Mul {
@@ -1033,7 +1231,7 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), -50isize as usize);
+            assert_eq!(processor.registers.get_reg(Register::R0), -50isize as u64);
         }
 
         #[test]
@@ -1049,13 +1247,13 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), -96isize as usize);
+            assert_eq!(processor.registers.get_reg(Register::R0), -96isize as u64);
         }
 
         #[test]
         fn test_mul_reg_underflow() {
             let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, -80isize as usize);
+            processor.registers.set_reg(Register::R0, -80isize as u64);
             processor.registers.set_reg(Register::R1, 2);
             let _ = IS::execute(
                 Instruction::Mul {
@@ -1082,7 +1280,7 @@ mod test {
             );
             assert_eq!(processor.registers.get_reg(Register::R0), 50);
 
-            processor.registers.set_reg(Register::R0, -5isize as usize);
+            processor.registers.set_reg(Register::R0, -5isize as u64);
             let _ = IS::execute(
                 Instruction::Mul {
                     acc: Register::R0,
@@ -1091,7 +1289,7 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), -50isize as usize);
+            assert_eq!(processor.registers.get_reg(Register::R0), -50isize as u64);
         }
 
         #[test]
@@ -1106,13 +1304,13 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), -96isize as usize);
+            assert_eq!(processor.registers.get_reg(Register::R0), -96isize as u64);
         }
 
         #[test]
         fn test_mul_val_underflow() {
             let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, -80isize as usize);
+            processor.registers.set_reg(Register::R0, -80isize as u64);
             let _ = IS::execute(
                 Instruction::Mul {
                     acc: Register::R0,
@@ -1143,7 +1341,7 @@ mod test {
             );
             assert_eq!(processor.registers.get_reg(Register::R0), 2);
 
-            processor.registers.set_reg(Register::R0, -10isize as usize);
+            processor.registers.set_reg(Register::R0, -10isize as u64);
             processor.registers.set_reg(Register::R1, 5);
             let _ = IS::execute(
                 Instruction::Div {
@@ -1153,7 +1351,7 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), -2isize as usize);
+            assert_eq!(processor.registers.get_reg(Register::R0), -2isize as u64);
         }
 
         #[test]
@@ -1175,8 +1373,8 @@ mod test {
         #[test]
         fn test_div_reg_overflow() {
             let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, usize::MIN);
-            processor.registers.set_reg(Register::R1, -1isize as usize);
+            processor.registers.set_reg(Register::R0, u64::MIN);
+            processor.registers.set_reg(Register::R1, -1isize as u64);
             let _ = IS::execute(
                 Instruction::Div {
                     acc: Register::R0,
@@ -1185,7 +1383,7 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), usize::MIN);
+            assert_eq!(processor.registers.get_reg(Register::R0), u64::MIN);
         }
 
         #[test]
@@ -1202,7 +1400,7 @@ mod test {
             );
             assert_eq!(processor.registers.get_reg(Register::R0), 2);
 
-            processor.registers.set_reg(Register::R0, -10isize as usize);
+            processor.registers.set_reg(Register::R0, -10isize as u64);
             let _ = IS::execute(
                 Instruction::Div {
                     acc: Register::R0,
@@ -1211,7 +1409,7 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), -2isize as usize);
+            assert_eq!(processor.registers.get_reg(Register::R0), -2isize as u64);
         }
 
         #[test]
@@ -1243,16 +1441,16 @@ mod test {
         #[test]
         fn test_div_val_overflow() {
             let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, usize::MIN);
+            processor.registers.set_reg(Register::R0, u64::MIN);
             let _ = IS::execute(
                 Instruction::Div {
                     acc: Register::R0,
-                    rhs: Operand::Value(-1isize as usize),
+                    rhs: Operand::Value(-1isize as u64),
                     signed: false,
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), usize::MIN);
+            assert_eq!(processor.registers.get_reg(Register::R0), u64::MIN);
         }
     }
 
@@ -1279,12 +1477,12 @@ mod test {
             assert_eq!(processor.registers.get_reg(Register::PC), 0);
             let _ = IS::execute(
                 Instruction::Jump {
-                    to: usize::MAX,
+                    to: u64::MAX,
                     condition: JumpCondition::Unconditional,
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::PC), usize::MAX);
+            assert_eq!(processor.registers.get_reg(Register::PC), u64::MAX);
             let _ = IS::execute(
                 Instruction::Inc {
                     reg: Register::PC,
@@ -1292,7 +1490,7 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::PC), usize::MIN);
+            assert_eq!(processor.registers.get_reg(Register::PC), u64::MIN);
         }
 
         #[test]
@@ -1301,12 +1499,12 @@ mod test {
             assert_eq!(processor.registers.get_reg(Register::PC), 0);
             let _ = IS::execute(
                 Instruction::Jump {
-                    to: usize::MIN,
+                    to: u64::MIN,
                     condition: JumpCondition::Unconditional,
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::PC), usize::MIN);
+            assert_eq!(processor.registers.get_reg(Register::PC), u64::MIN);
             let _ = IS::execute(
                 Instruction::Dec {
                     reg: Register::PC,
@@ -1314,7 +1512,7 @@ mod test {
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::PC), usize::MAX);
+            assert_eq!(processor.registers.get_reg(Register::PC), u64::MAX);
         }
     }
 
@@ -1426,7 +1624,7 @@ mod test {
         fn test_push_pop() {
             let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
 
-            processor.registers.set_reg(Register::SP, MEM_SIZE - 1);
+            processor.registers.set_reg(Register::SP, MEM_SIZE as u64 - 1);
             processor.registers.set_reg(Register::R0, 1);
 
             [
@@ -1444,12 +1642,12 @@ mod test {
                 Instruction::Pop { to: Register::R3 },
             ]
             .iter()
-            .for_each(|&inst| IS::execute(inst, &mut processor));
+            .for_each(|&inst| IS::execute(inst, &mut processor).unwrap());
 
             assert_eq!(processor.registers.get_reg(Register::R1), 1);
             assert_eq!(processor.registers.get_reg(Register::R2), 1);
             assert_eq!(processor.registers.get_reg(Register::R3), 1);
-            assert_eq!(processor.registers.sp(), MEM_SIZE - 1);
+            assert_eq!(processor.registers.sp(), MEM_SIZE as u64 - 1);
         }
     }
 }

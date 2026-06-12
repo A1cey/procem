@@ -6,7 +6,7 @@ use crate::instruction::Instruction;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Operand {
     Register(Register),
-    Value(usize),
+    Value(u64),
 }
 
 impl Operand {
@@ -15,7 +15,7 @@ impl Operand {
     pub fn resolve<const MEM_SIZE: usize, Insts, Bytes>(
         self,
         processor: &Processor<MEM_SIZE, Instruction, Insts, Bytes>,
-    ) -> usize {
+    ) -> u64 {
         match self {
             Self::Register(reg) => processor.registers.get_reg(reg),
             Self::Value(val) => val,

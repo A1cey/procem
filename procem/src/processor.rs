@@ -1,5 +1,4 @@
 //! The [`Processor`] and [`ProcessorBuilder`] structs.
-use ars::range::Range;
 use core::fmt::{Display, Formatter};
 use core::ops::Deref;
 use thiserror::Error;
@@ -12,7 +11,7 @@ use crate::register::{Register, Registers};
 /// The [`Processor`] is the main component of the emulator. It represents a simplified real world processor with memory, registers and flags.
 ///
 /// It can store a singular [`Program`].
-/// It has [`GENERAL_REGISTER_COUNT`](crate::register::GENERAL_REGISTER_COUNT) general purpose [`register`](crate::register)s,
+/// It has 16 general purpose [`register`](crate::register)s,
 /// a program counter ([`pc`](crate::register::Registers::pc)), a stack pointer ([`sp`](crate::register::Registers::sp))
 /// and 4 flags ([`C`](crate::register::Flag::C), [`S`](crate::register::Flag::S), [`V`](crate::register::Flag::V), [`Z`](crate::register::Flag::Z)).
 /// It also has memory of size `MEM_SIZE`.
@@ -77,8 +76,8 @@ where
         match self.program {
             Some(program) => {
                 let base_addr = program.data().base_addr();
-                let data = program.data().data();
-                self.mem[base_addr..data.len()].clone_from_slice(data);
+                let data = program.data();
+                self.mem[base_addr..data.len()].clone_from_slice(data.data());
             }
             None => unreachable!("This function is only called after program is loaded into processor."),
         }
@@ -137,7 +136,7 @@ where
 
         self.registers.inc(Register::PC);
 
-        Inst::execute(instruction, self);
+        Inst::execute(instruction, self)?;
 
         Ok(())
     }
@@ -222,13 +221,18 @@ where
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum ProcessorError {
     #[error("Program counter out of bounds. Program length: {program_len}, Program counter: {pc}")]
-    PCOutOfBounds { pc: usize, program_len: usize },
+    PCOutOfBounds { pc: u64, program_len: u64 },
     #[error("No program loaded")]
     NoProgramLoaded,
     #[error("Out of bounds memory access. Memory size: {mem_size}, Accessed address: {addr}")]
-    OutOfBoundsMemoryAccess { mem_size: usize, addr: usize },
+    OutOfBoundsMemoryAccess { mem_size: usize, addr: u64 },
     #[error("Out of bounds memory access. Memory size: {mem_size}, Accessed addresses: {addr_range:?}")]
-    OutOfBoundsRangeMemoryAccess { mem_size: usize, addr_range: Range },
+    OutOfBoundsRangeMemoryAccess {
+        mem_size: usize,
+        addr_range: core::ops::Range<u64>,
+    },
+    #[error("Invalid slice size when trying to write to a memory range. Expected: {expected}, Got: {got}.")]
+    InvalidSliceSize { expected: usize, got: usize },
 }
 
 #[cfg(test)]
@@ -236,7 +240,7 @@ mod test {
     use alloc::{vec, vec::Vec};
 
     use crate::{
-        instruction::Instruction,
+        instruction::{Instruction, InstructionResult},
         program::{Bss, Code, Data, Header},
     };
 
@@ -251,13 +255,14 @@ mod test {
         fn execute<const MEM_SIZE: usize, Insts, Bytes>(
             _instruction: Self,
             _processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
-        ) {
+        ) -> InstructionResult {
+            Ok(())
         }
     }
 
     #[test]
     fn load_data() {
-        const DATA_BASE_ADDR: usize = 0;
+        const DATA_BASE_ADDR: u64 = 0;
 
         let mut processor = Processor::new();
         let program = Program::<32, Inst, Vec<_>, Vec<_>>::new(
@@ -278,7 +283,7 @@ mod test {
 
     #[test]
     fn load_program_only_data() {
-        const DATA_BASE_ADDR: usize = 0;
+        const DATA_BASE_ADDR: u64 = 0;
 
         let mut processor = Processor::new();
         let program = Program::<32, Inst, Vec<_>, Vec<_>>::new(
@@ -297,7 +302,7 @@ mod test {
 
     #[test]
     fn load_bss() {
-        const BSS_SIZE: usize = 10;
+        const BSS_SIZE: u64 = 10;
 
         let mut processor = Processor::new();
         let program = Program::<32, Inst, Vec<_>, Vec<_>>::new(
@@ -329,7 +334,7 @@ mod test {
 
     #[test]
     fn load_programm_only_bss() {
-        const BSS_SIZE: usize = 10;
+        const BSS_SIZE: u64 = 10;
 
         let mut processor = Processor::new();
         let program = Program::<32, Inst, Vec<_>, Vec<_>>::new(

@@ -1,7 +1,7 @@
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Bss {
-    base_addr: usize,
-    size: usize,
+    base_addr: u64,
+    size: u64,
 }
 
 impl Bss {
@@ -10,28 +10,28 @@ impl Bss {
     /// `base_addr` is the start address; `size` is the number of bytes in this memory region.
     #[inline]
     #[must_use]
-    pub const fn new(base_addr: usize, size: usize) -> Self {
+    pub const fn new(base_addr: u64, size: u64) -> Self {
         Self { base_addr, size }
     }
 
     /// Get the base address of the BSS section.
     #[inline]
     #[must_use]
-    pub const fn base_addr(&self) -> usize {
+    pub const fn base_addr(&self) -> u64 {
         self.base_addr
     }
 
     /// Get the size of the BSS section.
     #[inline]
     #[must_use]
-    pub const fn size(&self) -> usize {
+    pub const fn size(&self) -> u64 {
         self.size
     }
 
     /// Compute the end address of the BSS region (exclusive) by adding `base_addr` and `size`.
     #[must_use]
     #[inline]
-    pub fn end_addr(&self) -> usize {
+    pub fn end_addr(&self) -> u64 {
         self.base_addr + self.size
     }
 

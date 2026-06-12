@@ -21,10 +21,10 @@ use ars::range::Range;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Parsed<'input> {
     instructions: Vec<Instruction>,
-    labels: HashMap<&'input [u8], usize>,
+    labels: HashMap<&'input [u8], u64>,
     unlinked_instructions: Vec<UnlinkedInstruction>,
     data: Vec<u8>,
-    bss: usize,
+    bss: u64,
 }
 
 impl Parsed<'_> {
@@ -37,7 +37,7 @@ impl Parsed<'_> {
 
     #[inline]
     #[must_use]
-    pub(crate) const fn labels(&self) -> &HashMap<&[u8], usize> {
+    pub(crate) const fn labels(&self) -> &HashMap<&[u8], u64> {
         &self.labels
     }
 
@@ -62,7 +62,7 @@ impl Parsed<'_> {
 
     #[inline]
     #[must_use]
-    pub(crate) const fn bss(&self) -> usize {
+    pub(crate) const fn bss(&self) -> u64 {
         self.bss
     }
 }
@@ -299,10 +299,10 @@ impl<'input> Parser<'input> {
 pub struct InnerParser<'input, Section = Undefined> {
     tokens: &'input [Token],
     instructions: Vec<Instruction>,
-    labels: HashMap<&'input [u8], usize>,
+    labels: HashMap<&'input [u8], u64>,
     unlinked_instructions: Vec<UnlinkedInstruction>,
     data: Vec<u8>,
-    bss: usize,
+    bss: u64,
     errors: Option<Vec<ParserError>>,
     idx: usize,
     input: &'input [u8],
@@ -382,33 +382,34 @@ impl<'input, Section> InnerParser<'input, Section> {
         self.errors.get_or_insert_default().push(err);
     }
 
-    fn convert_lit_to_word(&self, lit: ImmediateLiteral) -> Result<usize, ParserError> {
+    /// Parse an `ImmediateLiteral` into a `u64`.
+    fn u64_from_literal(&self, lit: ImmediateLiteral) -> Result<u64, ParserError> {
         match lit {
-            ImmediateLiteral::Char(c) => Ok(usize::from(c)),
+            ImmediateLiteral::Char(c) => Ok(u64::from(c)),
             ImmediateLiteral::Binary(range) => {
                 let lit = String::from_utf8_lossy(&self.input[range]);
-                usize::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
+                u64::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
                     lit: lit.to_string(),
                     err,
                 })
             }
             ImmediateLiteral::Decimal(range) => {
                 let lit = String::from_utf8_lossy(&self.input[range]);
-                usize::from_str_radix(&lit, 10).map_err(|err| ParserError::LiteralParsing {
+                lit.parse().map_err(|err| ParserError::LiteralParsing {
                     lit: lit.to_string(),
                     err,
                 })
             }
             ImmediateLiteral::Hexadecimal(range) => {
                 let lit = String::from_utf8_lossy(&self.input[range]);
-                usize::from_str_radix(&lit, 16).map_err(|err| ParserError::LiteralParsing {
+                u64::from_str_radix(&lit, 16).map_err(|err| ParserError::LiteralParsing {
                     lit: lit.to_string(),
                     err,
                 })
             }
             ImmediateLiteral::Octal(range) => {
                 let lit = String::from_utf8_lossy(&self.input[range]);
-                usize::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
+                u64::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
                     lit: lit.to_string(),
                     err,
                 })
@@ -460,7 +461,7 @@ impl InnerParser<'_, Code> {
     }
 
     fn parse_label(&mut self, range: Range) {
-        if let Some(old_instruction_idx) = self.labels.insert(&self.input[range], self.instructions.len()) {
+        if let Some(old_instruction_idx) = self.labels.insert(&self.input[range], self.instructions.len() as u64) {
             self.add_error(ParserError::DuplicateLabel {
                 idx: self.instructions.len(),
                 old_idx: old_instruction_idx,
@@ -501,7 +502,7 @@ impl InnerParser<'_, Code> {
                 self.unlinked_instructions
                     .push(UnlinkedInstruction::new(self.instructions.len(), *range));
                 self.instructions
-                    .push(Instruction::from_jump_instruction(instr, usize::MAX));
+                    .push(Instruction::from_jump_instruction(instr, u64::MAX));
             }
             Some(token) => self.add_error(ParserError::InvalidToken {
                 idx: self.idx,
@@ -547,7 +548,7 @@ impl InnerParser<'_, Code> {
             Some(Token::Identifier(range)) => Ok(Operand::Register(
                 Register::try_from(&self.input[range]).map_err(|err| ParserError::RegisterParsing { err })?,
             )),
-            Some(Token::ImmediateLiteral(lit)) => Ok(Operand::Value(self.convert_lit_to_word(*lit)?)),
+            Some(Token::ImmediateLiteral(lit)) => Ok(Operand::Value(self.u64_from_literal(*lit)?)),
             Some(token) => Err(ParserError::InvalidToken {
                 idx: self.idx,
                 expected: "Identifier (Register) or Literal",
@@ -574,7 +575,7 @@ impl InnerParser<'_, Code> {
             Some(Token::Identifier(range)) => {
                 self.unlinked_instructions
                     .push(UnlinkedInstruction::new(self.instructions.len(), *range));
-                self.instructions.push(Instruction::Adr { reg, addr: usize::MAX });
+                self.instructions.push(Instruction::Adr { reg, addr: u64::MAX });
             }
             Some(token) => self.add_error(ParserError::InvalidToken {
                 idx: self.idx,
@@ -658,7 +659,7 @@ impl InnerParser<'_, Code> {
             Err(err) => return self.add_error(err),
         };
 
-        let word = match self.convert_lit_to_word(literal) {
+        let word = match self.u64_from_literal(literal) {
             Ok(word) => word,
             Err(err) => return self.add_error(err),
         };
@@ -682,12 +683,11 @@ impl InnerParser<'_, Code> {
             Err(err) => return self.add_error(err),
         };
 
-        let word = match self.convert_lit_to_word(literal) {
+        let literal = match self.u64_from_literal(literal) {
             Ok(word) => word,
             Err(err) => return self.add_error(err),
         };
 
-        let literal: usize = word.into();
         let literal: u32 = match literal.try_into() {
             Ok(lit) => lit,
             Err(err) => return self.add_error(ParserError::CannotConvertLiteralToU32 { literal, err }),
@@ -745,7 +745,7 @@ impl InnerParser<'_, Code> {
     fn expect_label_mem_location(&mut self, range: Range) -> MemoryLocation {
         self.unlinked_instructions
             .push(UnlinkedInstruction::new(self.instructions.len(), range));
-        MemoryLocation::Labeled(usize::MAX)
+        MemoryLocation::Labeled(u64::MAX)
     }
 
     fn expect_direct_mem_location(&mut self) -> Result<MemoryLocation, ParserError> {
@@ -777,7 +777,7 @@ impl InnerParser<'_, Data> {
     fn parse_next_token(&mut self) {
         match &self.tokens[self.idx] {
             Token::Identifier(range) => {
-                if let Some(old_data_idx) = self.labels.insert(&self.input[range], self.data.len()) {
+                if let Some(old_data_idx) = self.labels.insert(&self.input[range], self.data.len() as u64) {
                     self.add_error(ParserError::DuplicateLabel {
                         idx: self.instructions.len(),
                         old_idx: old_data_idx,
@@ -820,7 +820,7 @@ impl InnerParser<'_, Data> {
     #[inline]
     fn expect_word(&mut self) {
         match self.expect_immediate_literal() {
-            Ok(lit) => match self.convert_lit_to_word(lit) {
+            Ok(lit) => match self.u64_from_literal(lit) {
                 Ok(word) => self.data.push(word as u8), // TODO: How to cast this
                 Err(err) => self.add_error(err),
             },
@@ -845,7 +845,7 @@ impl InnerParser<'_, Data> {
         match token {
             Some(token) => match token {
                 Token::StringLiteral(lit) => {
-                    self.data.extend(self.input[lit].iter().map(|&byte| byte));
+                    self.data.extend(self.input[lit].iter().copied());
                 }
                 token => self.add_error(ParserError::InvalidToken {
                     idx: self.idx,
@@ -905,45 +905,11 @@ impl InnerParser<'_, Bss> {
     #[inline]
     fn expect_space(&mut self) {
         match self.expect_immediate_literal() {
-            Ok(lit) => match self.convert_lit_to_usize(lit) {
+            Ok(lit) => match self.u64_from_literal(lit) {
                 Ok(space) => self.bss += space,
                 Err(err) => self.add_error(err),
             },
             Err(err) => self.add_error(err),
-        }
-    }
-
-    fn convert_lit_to_usize(&self, lit: ImmediateLiteral) -> Result<usize, ParserError> {
-        match lit {
-            ImmediateLiteral::Decimal(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                lit.parse().map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
-            }
-            ImmediateLiteral::Binary(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                usize::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
-            }
-            ImmediateLiteral::Hexadecimal(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                usize::from_str_radix(&lit, 16).map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
-            }
-            ImmediateLiteral::Octal(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                usize::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
-            }
-            ImmediateLiteral::Char(c) => Ok(usize::from(c)),
         }
     }
 }
@@ -965,7 +931,7 @@ pub enum ParserError {
         got: Token,
     },
     #[error("Duplicate lable: First occurrence: {old_idx}, second occurrence {idx}")]
-    DuplicateLabel { idx: usize, old_idx: usize },
+    DuplicateLabel { idx: usize, old_idx: u64 },
     #[error("Unkown instruction at idx {idx}: {inst}")]
     UnknownInstruction { idx: usize, inst: String },
     #[error("Error while parsing register: {err}")]
@@ -978,7 +944,7 @@ pub enum ParserError {
     #[error("Strings cannot be converted to numeric values directly. You could use a hex representation instead.")]
     CannotConvertStrToVal,
     #[error("Cannot convert literal {literal} to u32. This is likely due to the literal being too large.\n{err}")]
-    CannotConvertLiteralToU32 { literal: usize, err: TryFromIntError },
+    CannotConvertLiteralToU32 { literal: u64, err: TryFromIntError },
 
     #[error("Invalid section identifier: {identifier} at {idx}.")]
     InvalidSection { idx: usize, identifier: String },
@@ -1094,7 +1060,7 @@ mod test {
         assert_eq!(parsed.labels[b"b".as_slice()], 1 + 1);
         assert_eq!(
             parsed.labels[b"c".as_slice()],
-            1 + 1 + b"Hello World!".len() + b"\0".len()
+            1 + 1 + b"Hello World!".len() as u64 + b"\0".len() as u64
         );
     }
 
@@ -1214,7 +1180,7 @@ mod test {
                     *to,
                     MemoryLocation::Offset {
                         base: Register::R1,
-                        offset: Operand::Value(-1isize as usize)
+                        offset: Operand::Value(-1isize as u64)
                     }
                 );
             }
@@ -1236,7 +1202,7 @@ mod test {
         match insts.next().unwrap() {
             Instruction::Str { from, to } => {
                 assert_eq!(*from, Register::R0);
-                assert_eq!(*to, MemoryLocation::Labeled(usize::MAX));
+                assert_eq!(*to, MemoryLocation::Labeled(u64::MAX));
             }
             i => unreachable!("Expected Str instruction, got {i:?}"),
         }
@@ -1309,7 +1275,7 @@ mod test {
                     *from,
                     MemoryLocation::Offset {
                         base: Register::R1,
-                        offset: Operand::Value(-1isize as usize)
+                        offset: Operand::Value(-1isize as u64)
                     }
                 );
             }
@@ -1331,7 +1297,7 @@ mod test {
         match insts.next().unwrap() {
             Instruction::Ldr { to, from } => {
                 assert_eq!(*to, Register::R0);
-                assert_eq!(*from, MemoryLocation::Labeled(usize::MAX));
+                assert_eq!(*from, MemoryLocation::Labeled(u64::MAX));
             }
             i => unreachable!("Expected Ldr instruction, got {i:?}"),
         }
@@ -1353,7 +1319,7 @@ mod test {
             parsed.instructions[0],
             Instruction::Adr {
                 reg: Register::R0,
-                addr: usize::MAX
+                addr: u64::MAX
             }
         );
     }

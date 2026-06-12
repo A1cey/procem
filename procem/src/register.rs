@@ -1,37 +1,80 @@
 //! The [`Registers`] struct, [`Register`] enum and [`Flag`] enum.
 use ars::fmt::slice::FmtSlice;
-use core::fmt::Debug;
+use core::ops::IndexMut;
 use core::str::FromStr;
+use core::{fmt::Debug, ops::Index};
 use thiserror::Error;
+
+/// Generate an enum with an associated constant `COUNT` equal to the number of variants.
+///
+/// # Example
+///
+/// ```
+/// counted_enum!(
+///     #[doc = "Doc comment via attribute."]
+///     #[derive(Debug, Clone, Copy, Default)]
+///     pub enum Foo {
+///         #[doc = "Variant doc comment."]
+///         #[defaul]
+///         Bar,
+///         Baz(usize, usize),
+///         Bat { foo: char }
+///     }
+/// );
+///
+/// assert_eq!(Foo::COUNT, 2);
+/// ```
+#[macro_export]
+macro_rules! counted_enum {
+    (
+        $(#[$enum_meta:meta])*
+        $vis:vis enum $name:ident {
+            $(
+                $(#[$variant_meta:meta])*
+                $variant:ident $({ $($variant_struct_fields:tt)* })? $(( $($variant_tuple_fields:tt)* ))?
+            ),* $(,)?
+        }
+    ) => {
+        $(#[$enum_meta])*
+        $vis enum $name {
+            $(
+                $(#[$variant_meta])*
+                $variant $({ $($variant_struct_fields)* })? $(( $($variant_tuple_fields)* ))?
+            ),*
+        }
+
+        impl $name {
+            $vis const COUNT: usize = [ $(stringify!($variant)),* ].len();
+        }
+    };
+}
 
 #[cfg(feature = "alloc")]
 use alloc::string::{String, ToString};
 
-pub const GENERAL_REGISTER_COUNT: usize = 16;
-
 /// The `Registers` struct provides general purpose registers,
 /// a program counter, a stack pointer and flags.
 ///
-/// There are [`GENERAL_REGISTER_COUNT`] general purpose registers (R1 - Rn).
-/// They can be accessed with the [`get_reg`](Registers::get_reg) and [`set_reg`](Registers::set_reg) methods by providing the corresponding [`Register`] value.
+/// There are 16 general purpose registers (R1 - Rn).
+/// They can be accessed with the [`get_reg`](Registers::get_reg and [`set_reg`](Registers::set_reg) methods by providing the corresponding [`Register`] value.
 ///
 /// The program counter (pc) can be read with the [`pc`](Registers::pc) method and the stack pointer (sp) can be read with the [`sp`](Registers::sp) method.
-/// Both of these registers can also be accessed with the [`get_reg`](Registers::get_reg) and [`set_reg`](Registers::set_reg) methods.
+/// Both of these registers can also be accessed with the [`get_reg`](Registers::get_reg and [`set_reg`](Registers::set_reg) methods.
 ///
 /// Note: [`sp`](Registers::sp) is a bare register. A stack is not directly provided by this emulator. The instruction set defines how the memory is used.
 ///
-/// The register sizes correspond to the memory word size.
+/// All registers are 64bit.
 ///
 /// The flags are carry flag ([`C`](Flag::C)), signed flag ([`S`](Flag::S)), overflow flag ([`V`](Flag::V)) and zero condition flag ([`Z`](Flag::Z)).
-/// They can be accessed with the [`get_flag`](Registers::get_flag) and [`set_flag`](Registers::set_flag) methods by providing the corresponding [`Flag`] value.
+/// They can be accessed with the [`get_flag`](Registers::get_flag and [`set_flag`](Registers::set_flag) methods by providing the corresponding [`Flag`] value.
 ///
 /// There are two convenience methods for incrementing and decrementing registers: [`inc`](Registers::inc) and [`dec`](Registers::dec).
 #[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, Ord, Default)]
 pub struct Registers {
     // General purpose registers, program counter (pc) and stack pointer (sp).
-    registers: [usize; GENERAL_REGISTER_COUNT + 2],
+    registers: [u64; Register::COUNT],
     // Flags: carry flag (C), signed flag (S), overflow flag (V), zero condition flag (Z).
-    flags: [bool; 4],
+    flags: [bool; Flag::COUNT],
 }
 
 impl Registers {
@@ -39,57 +82,57 @@ impl Registers {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            registers: [usize::default(); GENERAL_REGISTER_COUNT + 2],
-            flags: [false; 4],
+            registers: [u64::default(); Register::COUNT],
+            flags: [false; Flag::COUNT],
         }
     }
 
     /// Get the value of a register.
     #[inline]
-    pub fn get_reg(&self, reg: Register) -> usize {
-        self.registers[usize::from(reg)]
+    pub fn get_reg(&self, reg: Register) -> u64 {
+        self.registers[reg]
     }
 
     /// Get the value of the program counter register.
     #[inline]
-    pub fn pc(&self) -> usize {
-        self.registers[usize::from(Register::PC)]
+    pub fn pc(&self) -> u64 {
+        self.registers[Register::PC]
     }
 
     /// Get the value of the stack pointer register.
     #[inline]
-    pub fn sp(&self) -> usize {
-        self.registers[usize::from(Register::SP)]
+    pub fn sp(&self) -> u64 {
+        self.registers[Register::SP]
     }
 
     /// Set the value of a register.
     #[inline]
-    pub fn set_reg(&mut self, reg: Register, val: usize) {
-        self.registers[usize::from(reg)] = val;
+    pub fn set_reg(&mut self, reg: Register, val: u64) {
+        self.registers[reg] = val;
     }
 
     /// Increment the value in a register by one.
     #[inline]
     pub fn inc(&mut self, reg: Register) {
-        self.registers[usize::from(reg)] += 1;
+        self.registers[reg] += 1;
     }
 
     /// Decrement the value in a register by one.
     #[inline]
     pub fn dec(&mut self, reg: Register) {
-        self.registers[usize::from(reg)] -= 1;
+        self.registers[reg] -= 1;
     }
 
     /// Get the value of a flag.
     #[inline]
     pub fn get_flag(&self, flag: Flag) -> bool {
-        self.flags[usize::from(flag)]
+        self.flags[flag]
     }
 
     /// Set the value of a flag.
     #[inline]
     pub fn set_flag(&mut self, flag: Flag, val: bool) {
-        self.flags[usize::from(flag)] = val;
+        self.flags[flag] = val;
     }
 }
 
@@ -106,28 +149,30 @@ impl core::fmt::Display for Registers {
     }
 }
 
-/// Register enum.
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, PartialOrd, Ord)]
-pub enum Register {
-    R0,
-    R1,
-    R2,
-    R3,
-    R4,
-    R5,
-    R6,
-    R7,
-    R8,
-    R9,
-    R10,
-    R11,
-    R12,
-    R13,
-    R14,
-    R15,
-    PC,
-    SP,
-}
+counted_enum!(
+    #[doc = "Register enum."]
+    #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, PartialOrd, Ord)]
+    pub enum Register {
+        R0,
+        R1,
+        R2,
+        R3,
+        R4,
+        R5,
+        R6,
+        R7,
+        R8,
+        R9,
+        R10,
+        R11,
+        R12,
+        R13,
+        R14,
+        R15,
+        PC,
+        SP,
+    }
+);
 
 impl FromStr for Register {
     type Err = RegisterError;
@@ -223,18 +268,46 @@ impl From<Register> for usize {
     }
 }
 
-/// Flag enum.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
-pub enum Flag {
-    /// Carry flag. Normally set when an addition results in a carry or a subtraction results in a borrow.
-    C,
-    /// Signed flag. Normally set when the last arithmetic computation resulted in a negative value.
-    S,
-    /// Overflow flag. Normally set when the last arithmetic computation resulted in an overflow.
-    V,
-    /// Zero condition flag. Normally set when the last arithmetic, logical or bitwise computation resulted in zero.
-    Z,
+impl Index<Register> for [u64; Register::COUNT] {
+    type Output = u64;
+
+    fn index(&self, reg: Register) -> &Self::Output {
+        debug_assert!(
+            usize::from(reg) < self.len(),
+            "Register variants are always inbound of length Register::COUNT."
+        );
+
+        // SAFETY: Index cannot overflow, because Register::COUNT is generated automatically.
+        unsafe { self.get_unchecked(usize::from(reg)) }
+    }
 }
+
+impl IndexMut<Register> for [u64; Register::COUNT] {
+    fn index_mut(&mut self, reg: Register) -> &mut Self::Output {
+        debug_assert!(
+            usize::from(reg) < self.len(),
+            "Register variants are always inbound of length Register::COUNT."
+        );
+
+        // SAFETY: Index cannot overflow, because Register::COUNT is generated automatically.
+        unsafe { self.get_unchecked_mut(usize::from(reg)) }
+    }
+}
+
+counted_enum!(
+    #[doc = "Flag enum."]
+    #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
+    pub enum Flag {
+        #[doc = "Carry flag. Normally set when an addition results in a carry or a subtraction results in a borrow."]
+        C,
+        #[doc = "Signed flag. Normally set when the last arithmetic computation resulted in a negative value."]
+        S,
+        #[doc = "Overflow flag. Normally set when the last arithmetic computation resulted in an overflow."]
+        V,
+        #[doc = "Zero condition flag. Normally set when the last arithmetic, logical or bitwise computation resulted in zero."]
+        Z,
+    }
+);
 
 impl From<Flag> for usize {
     fn from(reg: Flag) -> Self {
@@ -244,6 +317,32 @@ impl From<Flag> for usize {
             Flag::V => 2,
             Flag::Z => 3,
         }
+    }
+}
+
+impl Index<Flag> for [bool; Flag::COUNT] {
+    type Output = bool;
+
+    fn index(&self, flag: Flag) -> &Self::Output {
+        debug_assert!(
+            usize::from(flag) < self.len(),
+            "Flage variants are always inbound of length Flag::COUNT."
+        );
+
+        // SAFETY: Index cannot overflow, because Flag::COUNT is generated automatically.
+        unsafe { self.get_unchecked(usize::from(flag)) }
+    }
+}
+
+impl IndexMut<Flag> for [bool; Flag::COUNT] {
+    fn index_mut(&mut self, flag: Flag) -> &mut Self::Output {
+        debug_assert!(
+            usize::from(flag) < self.len(),
+            "Flage variants are always inbound of length Flag::COUNT."
+        );
+
+        // SAFETY: Index cannot overflow, because Flag::COUNT is generated automatically.
+        unsafe { self.get_unchecked_mut(usize::from(flag)) }
     }
 }
 
