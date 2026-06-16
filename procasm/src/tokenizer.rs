@@ -319,9 +319,9 @@ pub enum TokenizerError {
 
 #[cfg(test)]
 mod test {
-    use std::panic;
-
     use super::*;
+    use pretty_assertions_sorted::assert_eq;
+    use std::panic;
 
     #[test]
     fn test_run() {

@@ -803,8 +803,8 @@ impl Instruction {
 
 #[cfg(test)]
 mod test {
-
     use super::*;
+    use pretty_assertions_sorted::assert_eq;
 
     const MEM_SIZE: usize = 32;
     type IS = Instruction;
@@ -812,7 +812,7 @@ mod test {
     type Bytes = Vec<u8>;
 
     mod mov {
-        use super::*;
+        use super::{super::*, Bytes, IS, MEM_SIZE, P, assert_eq};
 
         #[test]
         fn test_move_reg() {
@@ -846,7 +846,7 @@ mod test {
     }
 
     mod ldr_str {
-        use super::*;
+        use super::{super::*, Bytes, IS, MEM_SIZE, P, assert_eq};
 
         #[test]
         fn test_str_direct_mem_location() {
@@ -1008,7 +1008,7 @@ mod test {
     }
 
     mod inc {
-        use super::*;
+        use super::{super::*, Bytes, IS, MEM_SIZE, P, assert_eq};
 
         #[test]
         fn test_inc() {
@@ -1040,7 +1040,7 @@ mod test {
     }
 
     mod dec {
-        use super::*;
+        use super::{super::*, Bytes, IS, MEM_SIZE, P, assert_eq};
 
         #[test]
         fn test_dec() {
@@ -1072,7 +1072,7 @@ mod test {
     }
 
     mod add {
-        use super::*;
+        use super::{super::*, Bytes, IS, MEM_SIZE, P, assert_eq};
 
         #[test]
         fn test_add_reg() {
@@ -1138,7 +1138,7 @@ mod test {
     }
 
     mod sub {
-        use super::*;
+        use super::{super::*, Bytes, IS, MEM_SIZE, P, assert_eq};
 
         #[test]
         fn test_sub_reg() {
@@ -1204,7 +1204,7 @@ mod test {
     }
 
     mod mul {
-        use super::*;
+        use super::{super::*, Bytes, IS, MEM_SIZE, P, assert_eq};
 
         #[test]
         fn test_mul_reg() {
@@ -1324,7 +1324,7 @@ mod test {
     }
 
     mod div {
-        use super::*;
+        use super::{super::*, Bytes, IS, MEM_SIZE, P, assert_eq};
 
         #[test]
         fn test_div_reg() {
@@ -1455,7 +1455,7 @@ mod test {
     }
 
     mod jmp {
-        use super::*;
+        use super::{super::*, Bytes, IS, MEM_SIZE, P, assert_eq};
 
         #[test]
         fn test_jmp() {
@@ -1517,7 +1517,7 @@ mod test {
     }
 
     mod cmp {
-        use super::*;
+        use super::{super::*, Bytes, IS, MEM_SIZE, P, assert_eq};
 
         #[test]
         fn test_cmp_eq_reg() {
@@ -1617,8 +1617,7 @@ mod test {
     }
 
     mod stack {
-        use super::*;
-        use procem::processor::Processor;
+        use super::{super::*, Bytes, IS, MEM_SIZE, P, assert_eq};
 
         #[test]
         fn test_push_pop() {

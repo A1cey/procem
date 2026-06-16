@@ -395,10 +395,12 @@ impl<'input, Section> InnerParser<'input, Section> {
             }
             ImmediateLiteral::Decimal(range) => {
                 let lit = String::from_utf8_lossy(&self.input[range]);
-                lit.parse().map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
+                lit.parse::<i64>() // first parse as i64 to include negative nums
+                    .map(|val| val as u64) // then cast to u64
+                    .map_err(|err| ParserError::LiteralParsing {
+                        lit: lit.to_string(),
+                        err,
+                    })
             }
             ImmediateLiteral::Hexadecimal(range) => {
                 let lit = String::from_utf8_lossy(&self.input[range]);
@@ -960,13 +962,13 @@ pub enum ParserError {
 
 #[cfg(test)]
 mod test {
-    use procem::register::Register;
-
     use crate::{
         instruction::{Instruction, memory_location::MemoryLocation, operand::Operand},
         parser::{Parser, ParserError},
         tokenizer::Tokenizer,
     };
+    use pretty_assertions_sorted::assert_eq;
+    use procem::register::Register;
 
     #[test]
     fn parse_section() {

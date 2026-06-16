@@ -18,6 +18,7 @@ name = "procasm"
 [dev-dependencies]
 criterion = "0.8.2"
 dev_utilities = { path = "../dev_utilities" }
+pretty_assertions_sorted = "1.2.3"
 
 [[bench]]
 name = "tokenizer"
