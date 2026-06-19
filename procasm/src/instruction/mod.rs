@@ -66,20 +66,36 @@ pub enum Instruction {
     Ret,
     /// Add the value of the operand (rhs) to the register (acc).
     /// The result is stored in acc. (ADD\[S\])
-    Add { acc: Register, rhs: Operand, signed: bool },
+    Add {
+        acc: Register,
+        rhs: Operand,
+        set_flags: bool,
+    },
     /// Subtract the value of the operand (rhs) from the register (acc).
     /// The result is stored in acc. (SUB\[S\])
-    Sub { acc: Register, rhs: Operand, signed: bool },
+    Sub {
+        acc: Register,
+        rhs: Operand,
+        set_flags: bool,
+    },
     /// Multiply the value of the operand (rhs) with the value of the register (acc).
     /// The result is stored in acc. (MUL\[S\])
-    Mul { acc: Register, rhs: Operand, signed: bool },
+    Mul {
+        acc: Register,
+        rhs: Operand,
+        set_flags: bool,
+    },
     /// Divide the value of the register (acc) by the value of the operand (rhs).
     /// The result is stored in acc. (DIV\[S\])
-    Div { acc: Register, rhs: Operand, signed: bool },
+    Div {
+        acc: Register,
+        rhs: Operand,
+        set_flags: bool,
+    },
     /// Increment the value in a register by one. (INC\[S\])
-    Inc { reg: Register, signed: bool },
+    Inc { reg: Register, set_flags: bool },
     /// Decrement the value in a register by one. (DEC\[S\])
-    Dec { reg: Register, signed: bool },
+    Dec { reg: Register, set_flags: bool },
     /// Set program counter to a value, effectively jumping to the instruction at this point in the program.
     /// The condition is checked before jumping and the jump is performed if the condition is met.
     /// See the assembly instruction at `JumpCondition`.
@@ -134,12 +150,28 @@ impl InstructionTrait for Instruction {
             Self::Pop { to } => Self::pop(to, processor)?,
             Self::Call { addr } => Self::call(addr, processor)?,
             Self::Ret => Self::ret(processor)?,
-            Self::Add { acc, rhs, signed } => Self::add(acc, rhs, signed, processor),
-            Self::Sub { acc, rhs, signed } => Self::sub(acc, rhs, signed, processor),
-            Self::Mul { acc, rhs, signed } => Self::mul(acc, rhs, signed, processor),
-            Self::Div { acc, rhs, signed } => Self::div(acc, rhs, signed, processor),
-            Self::Inc { reg, signed } => Self::inc(reg, signed, processor),
-            Self::Dec { reg, signed } => Self::dec(reg, signed, processor),
+            Self::Add {
+                acc,
+                rhs,
+                set_flags: signed,
+            } => Self::add(acc, rhs, signed, processor),
+            Self::Sub {
+                acc,
+                rhs,
+                set_flags: signed,
+            } => Self::sub(acc, rhs, signed, processor),
+            Self::Mul {
+                acc,
+                rhs,
+                set_flags: signed,
+            } => Self::mul(acc, rhs, signed, processor),
+            Self::Div {
+                acc,
+                rhs,
+                set_flags: signed,
+            } => Self::div(acc, rhs, signed, processor),
+            Self::Inc { reg, set_flags: signed } => Self::inc(reg, signed, processor),
+            Self::Dec { reg, set_flags: signed } => Self::dec(reg, signed, processor),
             Self::Jump { to, condition } => Self::jmp(to, condition, processor),
             Self::Cmp { lhs, rhs } => Self::cmp(lhs, rhs, processor),
             Self::Xor { reg, rhs } => Self::xor(reg, rhs, processor),
@@ -167,14 +199,14 @@ impl Instruction {
         use ASMRegOperandInstruction::{Mov, Add, AddS, Sub, SubS, Mul, MulS, Div, DivS, Or, And, Xor};
         match instr {
             Mov => Self::Mov { to: lhs, from: rhs },
-            Add => Self::Add { acc: lhs, rhs, signed: false },
-            AddS => Self::Add { acc: lhs, rhs, signed: true },
-            Sub => Self::Sub { acc: lhs, rhs, signed: false },
-            SubS => Self::Sub { acc: lhs, rhs, signed: true },
-            Mul => Self::Mul { acc: lhs, rhs, signed: false },
-            MulS => Self::Mul { acc: lhs, rhs, signed: true },
-            Div => Self::Div { acc: lhs, rhs, signed: false },
-            DivS => Self::Div { acc: lhs, rhs, signed: true },
+            Add => Self::Add { acc: lhs, rhs, set_flags: false },
+            AddS => Self::Add { acc: lhs, rhs, set_flags: true },
+            Sub => Self::Sub { acc: lhs, rhs, set_flags: false },
+            SubS => Self::Sub { acc: lhs, rhs, set_flags: true },
+            Mul => Self::Mul { acc: lhs, rhs, set_flags: false },
+            MulS => Self::Mul { acc: lhs, rhs, set_flags: true },
+            Div => Self::Div { acc: lhs, rhs, set_flags: false },
+            DivS => Self::Div { acc: lhs, rhs, set_flags: true },
             Or => Self::Or { reg: lhs, rhs },
             And => Self::And { reg: lhs, rhs },
             Xor => Self::Xor { reg: lhs, rhs },
@@ -184,10 +216,10 @@ impl Instruction {
     pub(crate) const fn from_single_reg_instruction(instr: ASMSingleRegInstruction, reg: Register) -> Self {
         use ASMSingleRegInstruction::{Dec, DecS, Inc, IncS, Not, Pop};
         match instr {
-            Inc => Self::Inc { reg, signed: false },
-            IncS => Self::Inc { reg, signed: true },
-            Dec => Self::Dec { reg, signed: false },
-            DecS => Self::Dec { reg, signed: true },
+            Inc => Self::Inc { reg, set_flags: false },
+            IncS => Self::Inc { reg, set_flags: true },
+            Dec => Self::Dec { reg, set_flags: false },
+            DecS => Self::Dec { reg, set_flags: true },
             Not => Self::Not { reg },
             Pop => Self::Pop { to: reg },
         }
@@ -1017,7 +1049,7 @@ mod test {
             let _ = IS::execute(
                 Instruction::Inc {
                     reg: Register::R0,
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1031,7 +1063,7 @@ mod test {
             let _ = IS::execute(
                 Instruction::Inc {
                     reg: Register::R0,
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1049,7 +1081,7 @@ mod test {
             let _ = IS::execute(
                 Instruction::Dec {
                     reg: Register::R0,
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1063,7 +1095,7 @@ mod test {
             let _ = IS::execute(
                 Instruction::Dec {
                     reg: Register::R0,
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1074,66 +1106,53 @@ mod test {
     mod add {
         use super::{super::*, Bytes, IS, MEM_SIZE, P, assert_eq};
 
-        #[test]
-        fn test_add_reg() {
+        fn add(lhs: u64, rhs: u64, res: u64, carry: bool, signed: bool, overflow: bool, zero: bool) {
             let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, 5);
-            processor.registers.set_reg(Register::R1, 10);
+            processor.registers.set_reg(Register::R0, lhs);
+            processor.registers.set_reg(Register::R1, rhs);
             let _ = IS::execute(
                 Instruction::Add {
                     acc: Register::R0,
                     rhs: Operand::Register(Register::R1),
-                    signed: false,
+                    set_flags: true,
                 },
                 &mut processor,
             );
-            assert_eq!(processor.registers.get_reg(Register::R0), 15);
+            assert_eq!(processor.registers.get_reg(Register::R0), res);
+            assert_eq!(processor.registers.get_flag(Flag::C), carry);
+            assert_eq!(processor.registers.get_flag(Flag::S), signed);
+            assert_eq!(processor.registers.get_flag(Flag::V), overflow);
+            assert_eq!(processor.registers.get_flag(Flag::Z), zero);
         }
 
         #[test]
-        fn test_add_reg_overflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, u64::MAX.into());
-            processor.registers.set_reg(Register::R1, 1);
-            let _ = IS::execute(
-                Instruction::Add {
-                    acc: Register::R0,
-                    rhs: Operand::Register(Register::R1),
-                    signed: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), u64::MIN);
+        fn unsigned_add() {
+            add(5, 10, 15, false, false, false, false);
         }
 
         #[test]
-        fn test_add_val() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, 5);
-            let _ = IS::execute(
-                Instruction::Add {
-                    acc: Register::R0,
-                    rhs: Operand::Value(10),
-                    signed: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), 15);
+        fn unsigned_add_overflow() {
+            add(u64::MAX, 1, u64::MIN, true, false, true, true);
         }
 
         #[test]
-        fn test_add_val_overflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, u64::MAX);
-            let _ = IS::execute(
-                Instruction::Add {
-                    acc: Register::R0,
-                    rhs: Operand::Value(1),
-                    signed: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), u64::MIN);
+        fn signed_add_res_negative() {
+            add(-5i64 as u64, -10i64 as u64, -15i64 as u64, false, true, false, false);
+        }
+
+        #[test]
+        fn signed_add_res_positive() {
+            add(-5i64 as u64, 10, 5, false, false, false, false);
+        }
+
+        #[test]
+        fn signed_add_overflow() {
+            add(i64::MAX as u64, 1, i64::MIN as u64, true, true, true, false);
+        }
+
+        #[test]
+        fn signed_add_underflow() {
+            add(i64::MIN as u64, -1i64 as u64, i64::MAX as u64, true, false, true, false);
         }
     }
 
@@ -1149,7 +1168,7 @@ mod test {
                 Instruction::Sub {
                     acc: Register::R0,
                     rhs: Operand::Register(Register::R1),
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1165,7 +1184,7 @@ mod test {
                 Instruction::Sub {
                     acc: Register::R0,
                     rhs: Operand::Register(Register::R1),
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1180,7 +1199,7 @@ mod test {
                 Instruction::Sub {
                     acc: Register::R0,
                     rhs: Operand::Value(10),
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1195,7 +1214,7 @@ mod test {
                 Instruction::Sub {
                     acc: Register::R0,
                     rhs: Operand::Value(1),
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1215,7 +1234,7 @@ mod test {
                 Instruction::Mul {
                     acc: Register::R0,
                     rhs: Operand::Register(Register::R1),
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1227,7 +1246,7 @@ mod test {
                 Instruction::Mul {
                     acc: Register::R0,
                     rhs: Operand::Register(Register::R1),
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1243,7 +1262,7 @@ mod test {
                 Instruction::Mul {
                     acc: Register::R0,
                     rhs: Operand::Register(Register::R1),
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1259,7 +1278,7 @@ mod test {
                 Instruction::Mul {
                     acc: Register::R0,
                     rhs: Operand::Register(Register::R1),
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1274,7 +1293,7 @@ mod test {
                 Instruction::Mul {
                     acc: Register::R0,
                     rhs: Operand::Value(10),
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1285,7 +1304,7 @@ mod test {
                 Instruction::Mul {
                     acc: Register::R0,
                     rhs: Operand::Value(10),
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1300,7 +1319,7 @@ mod test {
                 Instruction::Mul {
                     acc: Register::R0,
                     rhs: Operand::Value(2),
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1315,7 +1334,7 @@ mod test {
                 Instruction::Mul {
                     acc: Register::R0,
                     rhs: Operand::Value(2),
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1335,7 +1354,7 @@ mod test {
                 Instruction::Div {
                     acc: Register::R0,
                     rhs: Operand::Register(Register::R1),
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1347,7 +1366,7 @@ mod test {
                 Instruction::Div {
                     acc: Register::R0,
                     rhs: Operand::Register(Register::R1),
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1363,7 +1382,7 @@ mod test {
                 Instruction::Div {
                     acc: Register::R0,
                     rhs: Operand::Register(Register::R1),
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1379,7 +1398,7 @@ mod test {
                 Instruction::Div {
                     acc: Register::R0,
                     rhs: Operand::Register(Register::R1),
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1394,7 +1413,7 @@ mod test {
                 Instruction::Div {
                     acc: Register::R0,
                     rhs: Operand::Value(5),
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1405,7 +1424,7 @@ mod test {
                 Instruction::Div {
                     acc: Register::R0,
                     rhs: Operand::Value(5),
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1420,7 +1439,7 @@ mod test {
                 Instruction::Div {
                     acc: Register::R0,
                     rhs: Operand::Value(4),
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1431,7 +1450,7 @@ mod test {
                 Instruction::Div {
                     acc: Register::R0,
                     rhs: Operand::Value(2),
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1446,7 +1465,7 @@ mod test {
                 Instruction::Div {
                     acc: Register::R0,
                     rhs: Operand::Value(-1isize as u64),
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1486,7 +1505,7 @@ mod test {
             let _ = IS::execute(
                 Instruction::Inc {
                     reg: Register::PC,
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
@@ -1508,7 +1527,7 @@ mod test {
             let _ = IS::execute(
                 Instruction::Dec {
                     reg: Register::PC,
-                    signed: false,
+                    set_flags: false,
                 },
                 &mut processor,
             );
