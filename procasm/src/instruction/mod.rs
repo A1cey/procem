@@ -1106,7 +1106,14 @@ mod test {
     mod add {
         use super::{super::*, Bytes, IS, MEM_SIZE, P, assert_eq};
 
-        fn add(lhs: u64, rhs: u64, res: u64, carry: bool, signed: bool, overflow: bool, zero: bool) {
+        struct Flags {
+            carry: bool,
+            signed: bool,
+            overflow: bool,
+            zero: bool,
+        }
+
+        fn add(lhs: u64, rhs: u64, res: u64, flags: Flags) {
             let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
             processor.registers.set_reg(Register::R0, lhs);
             processor.registers.set_reg(Register::R1, rhs);
@@ -1119,40 +1126,100 @@ mod test {
                 &mut processor,
             );
             assert_eq!(processor.registers.get_reg(Register::R0), res);
-            assert_eq!(processor.registers.get_flag(Flag::C), carry);
-            assert_eq!(processor.registers.get_flag(Flag::S), signed);
-            assert_eq!(processor.registers.get_flag(Flag::V), overflow);
-            assert_eq!(processor.registers.get_flag(Flag::Z), zero);
+            assert_eq!(processor.registers.get_flag(Flag::C), flags.carry);
+            assert_eq!(processor.registers.get_flag(Flag::S), flags.signed);
+            assert_eq!(processor.registers.get_flag(Flag::V), flags.overflow);
+            assert_eq!(processor.registers.get_flag(Flag::Z), flags.zero);
         }
 
         #[test]
         fn unsigned_add() {
-            add(5, 10, 15, false, false, false, false);
+            add(
+                5,  // 0x0000_0000_0000_0005
+                10, // 0x0000_0000_0000_000A
+                15, // 0x0000_0000_0000_000F
+                Flags {
+                    carry: false, // No unsigned overflow
+                    signed: false,
+                    overflow: false, // No signed overflow: pos + pos = pos
+                    zero: false,
+                },
+            );
         }
 
         #[test]
         fn unsigned_add_overflow() {
-            add(u64::MAX, 1, u64::MIN, true, false, true, true);
+            add(
+                u64::MAX, // 0xFFFF_FFFF_FFFF_FFFF
+                1,        // 0x0000_0000_0000_0001
+                u64::MIN, // 0x0000000000000000000
+                Flags {
+                    carry: true, // Unsigned overflow: wrap past u64::MAX
+                    signed: false,
+                    overflow: false, // No signed overflow: opposing signs cannot cause signed overflow
+                    zero: true,      // u64::MIN == 0
+                },
+            );
         }
 
         #[test]
         fn signed_add_res_negative() {
-            add(-5i64 as u64, -10i64 as u64, -15i64 as u64, false, true, false, false);
+            add(
+                -5i64 as u64,  // 0xFFFF_FFFF_FFFF_FFFB
+                -10i64 as u64, // 0xFFFF_FFFF_FFFF_FFF6
+                -15i64 as u64, // 0xFFFF_FFFF_FFFF_FFF1
+                Flags {
+                    carry: true, // Unsigned overflow: wrap past u64::MAX
+                    signed: true,
+                    overflow: false, // No signed overflow: neg + neg = neg
+                    zero: false,
+                },
+            );
         }
 
         #[test]
         fn signed_add_res_positive() {
-            add(-5i64 as u64, 10, 5, false, false, false, false);
+            add(
+                -5i64 as u64, // 0xFFFF_FFFF_FFFF_FFFB
+                10,           // 0x0000_0000_0000_000A
+                5,            // 0x0000_0000_0000_0005
+                Flags {
+                    carry: true, // Unsigned overflow: wrap past u64::MAX
+                    signed: false,
+                    overflow: false, // No signed overflow: opposing signs cannot cause signed overflow
+                    zero: false,
+                },
+            );
         }
 
         #[test]
         fn signed_add_overflow() {
-            add(i64::MAX as u64, 1, i64::MIN as u64, true, true, true, false);
+            add(
+                i64::MAX as u64, // 0x7FFF_FFFF_FFFF_FFFF
+                1,               // 0x0000_0000_0000_0001
+                i64::MIN as u64, // 0x8000_0000_0000_0000
+                Flags {
+                    carry: false, // No unsigned overflow
+                    signed: true,
+                    overflow: true, // Signed overflow: pos + pos = neg
+                    zero: false,
+                },
+            );
         }
 
         #[test]
         fn signed_add_underflow() {
-            add(i64::MIN as u64, -1i64 as u64, i64::MAX as u64, true, false, true, false);
+            add(
+                i64::MIN as u64, // 0x8000_0000_0000_0000
+                -1i64 as u64,    // 0xFFFF_FFFF_FFFF_FFFF
+                i64::MAX as u64, // 0x7FFF_FFFF_FFFF_FFFF
+                Flags {
+                    carry: true, // Signed overflow: wrap past u64::MAX
+                    signed: false,
+                    overflow: true, // Unsigned overflow: neg + neg = pos
+                    zero: false,
+                },
+            );
         }
     }
 
