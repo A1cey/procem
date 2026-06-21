@@ -1103,8 +1103,8 @@ mod test {
         }
     }
 
-    mod add {
-        use super::{super::*, Bytes, IS, MEM_SIZE, P, assert_eq};
+    mod arithmetic {
+        use super::{Bytes, IS, MEM_SIZE, P, assert_eq};
 
         struct Flags {
             carry: bool,
@@ -1113,430 +1113,475 @@ mod test {
             zero: bool,
         }
 
-        fn add(lhs: u64, rhs: u64, res: u64, flags: Flags) {
-            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, lhs);
-            processor.registers.set_reg(Register::R1, rhs);
-            let _ = IS::execute(
-                Instruction::Add {
-                    acc: Register::R0,
-                    rhs: Operand::Register(Register::R1),
-                    set_flags: true,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), res);
-            assert_eq!(processor.registers.get_flag(Flag::C), flags.carry);
-            assert_eq!(processor.registers.get_flag(Flag::S), flags.signed);
-            assert_eq!(processor.registers.get_flag(Flag::V), flags.overflow);
-            assert_eq!(processor.registers.get_flag(Flag::Z), flags.zero);
+        macro_rules! exec {
+            ($instr: ident, $lhs: expr, $rhs: expr, $res: expr, $flags: ident) => {
+                let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+                processor.registers.set_reg(Register::R0, $lhs);
+                processor.registers.set_reg(Register::R1, $rhs);
+                let _ = IS::execute(
+                    Instruction::$instr {
+                        acc: Register::R0,
+                        rhs: Operand::Register(Register::R1),
+                        set_flags: true,
+                    },
+                    &mut processor,
+                );
+                assert_eq!(processor.registers.get_reg(Register::R0), $res);
+                assert_eq!(processor.registers.get_flag(Flag::C), $flags.carry);
+                assert_eq!(processor.registers.get_flag(Flag::S), $flags.signed);
+                assert_eq!(processor.registers.get_flag(Flag::V), $flags.overflow);
+                assert_eq!(processor.registers.get_flag(Flag::Z), $flags.zero);
+            };
         }
 
-        #[test]
-        fn unsigned_add() {
-            add(
-                5,  // 0x0000_0000_0000_0005
-                10, // 0x0000_0000_0000_000A
-                15, // 0x0000_0000_0000_000F
-                Flags {
-                    carry: false, // No unsigned overflow
-                    signed: false,
-                    overflow: false, // No signed overflow: pos + pos = pos
-                    zero: false,
-                },
-            );
+        mod add {
+            use super::{super::*, Bytes, Flags, IS, MEM_SIZE, P, assert_eq};
+
+            fn add(lhs: u64, rhs: u64, res: u64, flags: Flags) {
+                exec!(Add, lhs, rhs, res, flags);
+            }
+
+            #[test]
+            fn unsigned() {
+                add(
+                    5,  // 0x0000_0000_0000_0005
+                    10, // 0x0000_0000_0000_000A
+                    15, // 0x0000_0000_0000_000F
+                    Flags {
+                        carry: false, // No unsigned overflow
+                        signed: false,
+                        overflow: false, // No signed overflow: pos + pos = pos
+                        zero: false,
+                    },
+                );
+            }
+
+            #[test]
+            fn unsigned_overflow() {
+                add(
+                    u64::MAX, // 0xFFFF_FFFF_FFFF_FFFF
+                    1,        // 0x0000_0000_0000_0001
+                    u64::MIN, // 0x0000000000000000000
+                    Flags {
+                        carry: true, // Unsigned overflow: wrap past u64::MAX
+                        signed: false,
+                        overflow: false, // No signed overflow: opposing signs cannot cause signed overflow
+                        zero: true,      // u64::MIN == 0
+                    },
+                );
+            }
+
+            #[test]
+            fn signed_res_negative() {
+                add(
+                    -5i64 as u64,  // 0xFFFF_FFFF_FFFF_FFFB
+                    -10i64 as u64, // 0xFFFF_FFFF_FFFF_FFF6
+                    -15i64 as u64, // 0xFFFF_FFFF_FFFF_FFF1
+                    Flags {
+                        carry: true, // Unsigned overflow: wrap past u64::MAX
+                        signed: true,
+                        overflow: false, // No signed overflow: neg + neg = neg
+                        zero: false,
+                    },
+                );
+            }
+
+            #[test]
+            fn signed_res_positive() {
+                add(
+                    -5i64 as u64, // 0xFFFF_FFFF_FFFF_FFFB
+                    10,           // 0x0000_0000_0000_000A
+                    5,            // 0x0000_0000_0000_0005
+                    Flags {
+                        carry: true, // Unsigned overflow: wrap past u64::MAX
+                        signed: false,
+                        overflow: false, // No signed overflow: opposing signs cannot cause signed overflow
+                        zero: false,
+                    },
+                );
+            }
+
+            #[test]
+            fn signed_overflow() {
+                add(
+                    i64::MAX as u64, // 0x7FFF_FFFF_FFFF_FFFF
+                    1,               // 0x0000_0000_0000_0001
+                    i64::MIN as u64, // 0x8000_0000_0000_0000
+                    Flags {
+                        carry: false, // No unsigned overflow
+                        signed: true,
+                        overflow: true, // Signed overflow: pos + pos = neg
+                        zero: false,
+                    },
+                );
+            }
+
+            #[test]
+            fn signed_underflow() {
+                add(
+                    i64::MIN as u64, // 0x8000_0000_0000_0000
+                    -1i64 as u64,    // 0xFFFF_FFFF_FFFF_FFFF
+                    i64::MAX as u64, // 0x7FFF_FFFF_FFFF_FFFF
+                    Flags {
+                        carry: true, // Unsigned overflow: neg + neg = pos
+                        signed: false,
+                        overflow: true, // Signed overflow: wrap past u64::MAX
+                        zero: false,
+                    },
+                );
+            }
         }
 
-        #[test]
-        fn unsigned_add_overflow() {
-            add(
-                u64::MAX, // 0xFFFF_FFFF_FFFF_FFFF
-                1,        // 0x0000_0000_0000_0001
-                u64::MIN, // 0x0000000000000000000
-                Flags {
-                    carry: true, // Unsigned overflow: wrap past u64::MAX
-                    signed: false,
-                    overflow: false, // No signed overflow: opposing signs cannot cause signed overflow
-                    zero: true,      // u64::MIN == 0
-                },
-            );
+        mod sub {
+            use super::{super::*, Bytes, Flags, IS, MEM_SIZE, P, assert_eq};
+
+            fn sub(lhs: u64, rhs: u64, res: u64, flags: Flags) {
+                exec!(Sub, lhs, rhs, res, flags);
+            }
+
+            #[test]
+            fn unsigned() {
+                sub(
+                    15, // 0x0000_0000_0000_000F
+                    10, // 0x0000_0000_0000_000A
+                    5,  // 0x0000_0000_0000_0005
+                    Flags {
+                        carry: false, // No unsigned overflow
+                        signed: false,
+                        overflow: false, // No signed overflow: pos - pos = pos
+                        zero: false,
+                    },
+                );
+            }
+
+            #[test]
+            fn unsigned_underflow() {
+                sub(
+                    u64::MIN, // 0x0000000000000000000
+                    1,        // 0x0000_0000_0000_0001
+                    u64::MAX, // 0xFFFF_FFFF_FFFF_FFFF
+                    Flags {
+                        carry: true,     // Unsigned underflow: 0 < 1
+                        signed: true,    // Highest bit == 1
+                        overflow: false, // No signed underflow: crosses 0, not u64::MIN/MAX border
+                        zero: false,
+                    },
+                );
+            }
+
+            #[test]
+            fn signed_res_negative() {
+                sub(
+                    -5i64 as u64,  // 0xFFFF_FFFF_FFFF_FFFB
+                    10,            // 0x0000_0000_0000_000A
+                    -15i64 as u64, // 0xFFFF_FFFF_FFFF_FFF1
+                    Flags {
+                        carry: false, // No unsigned overflow: -5 > 10 (bits)
+                        signed: true,
+                        overflow: false, // No signed overflow: result sign matches first operand
+                        zero: false,
+                    },
+                );
+            }
+
+            #[test]
+            fn signed_res_positive() {
+                sub(
+                    -5i64 as u64,  // 0xFFFF_FFFF_FFFF_FFFB
+                    -10i64 as u64, // 0xFFFF_FFFF_FFFF_FFF6
+                    5,             // 0x0000_0000_0000_0005
+                    Flags {
+                        carry: false, // No unsigned overflow: -5 > -10 (bits)
+                        signed: false,
+                        overflow: false, // No signed overflow: Not crossing i64::MAX/MIN
+                        zero: false,
+                    },
+                );
+            }
+
+            #[test]
+            fn signed_overflow() {
+                sub(
+                    i64::MAX as u64, // 0x7FFF_FFFF_FFFF_FFFF
+                    -1i64 as u64,    // 0xFFFF_FFFF_FFFF_FFFF
+                    i64::MIN as u64, // 0x8000_0000_0000_0000
+                    Flags {
+                        carry: true, // Unsigned overflow: i64::MAX < -1 (bits)
+                        signed: true,
+                        overflow: true, // Signed overflow: pos - neg = neg
+                        zero: false,
+                    },
+                );
+            }
+
+            #[test]
+            fn signed_underflow() {
+                sub(
+                    i64::MIN as u64, // 0x8000_0000_0000_0000
+                    1,               // 0x0000_0000_0000_0001
+                    i64::MAX as u64, // 0x7FFF_FFFF_FFFF_FFFF
+                    Flags {
+                        carry: false, // No signed underflow: i64::MIN > 1 (bits)
+                        signed: false,
+                        overflow: true, // Unsigned underflow: wraps i64::MIN
+                        zero: false,
+                    },
+                );
+            }
         }
 
-        #[test]
-        fn signed_add_res_negative() {
-            add(
-                -5i64 as u64,  // 0xFFFF_FFFF_FFFF_FFFB
-                -10i64 as u64, // 0xFFFF_FFFF_FFFF_FFF6
-                -15i64 as u64, // 0xFFFF_FFFF_FFFF_FFF1
-                Flags {
-                    carry: true, // Unsigned overflow: wrap past u64::MAX
-                    signed: true,
-                    overflow: false, // No signed overflow: neg + neg = neg
-                    zero: false,
-                },
-            );
+        mod mul {
+            use super::{super::*, Bytes, IS, MEM_SIZE, P, assert_eq};
+
+            #[test]
+            fn test_mul_reg() {
+                let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+                processor.registers.set_reg(Register::R0, 5);
+                processor.registers.set_reg(Register::R1, 10);
+                let _ = IS::execute(
+                    Instruction::Mul {
+                        acc: Register::R0,
+                        rhs: Operand::Register(Register::R1),
+                        set_flags: false,
+                    },
+                    &mut processor,
+                );
+                assert_eq!(processor.registers.get_reg(Register::R0), 50);
+
+                processor.registers.set_reg(Register::R0, -5isize as u64);
+                processor.registers.set_reg(Register::R1, 10);
+                let _ = IS::execute(
+                    Instruction::Mul {
+                        acc: Register::R0,
+                        rhs: Operand::Register(Register::R1),
+                        set_flags: false,
+                    },
+                    &mut processor,
+                );
+                assert_eq!(processor.registers.get_reg(Register::R0), -50isize as u64);
+            }
+
+            #[test]
+            fn test_mul_reg_overflow() {
+                let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+                processor.registers.set_reg(Register::R0, 80);
+                processor.registers.set_reg(Register::R1, 2);
+                let _ = IS::execute(
+                    Instruction::Mul {
+                        acc: Register::R0,
+                        rhs: Operand::Register(Register::R1),
+                        set_flags: false,
+                    },
+                    &mut processor,
+                );
+                assert_eq!(processor.registers.get_reg(Register::R0), -96isize as u64);
+            }
+
+            #[test]
+            fn test_mul_reg_underflow() {
+                let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+                processor.registers.set_reg(Register::R0, -80isize as u64);
+                processor.registers.set_reg(Register::R1, 2);
+                let _ = IS::execute(
+                    Instruction::Mul {
+                        acc: Register::R0,
+                        rhs: Operand::Register(Register::R1),
+                        set_flags: false,
+                    },
+                    &mut processor,
+                );
+                assert_eq!(processor.registers.get_reg(Register::R0), 96);
+            }
+
+            #[test]
+            fn test_mul_val() {
+                let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+                processor.registers.set_reg(Register::R0, 5);
+                let _ = IS::execute(
+                    Instruction::Mul {
+                        acc: Register::R0,
+                        rhs: Operand::Value(10),
+                        set_flags: false,
+                    },
+                    &mut processor,
+                );
+                assert_eq!(processor.registers.get_reg(Register::R0), 50);
+
+                processor.registers.set_reg(Register::R0, -5isize as u64);
+                let _ = IS::execute(
+                    Instruction::Mul {
+                        acc: Register::R0,
+                        rhs: Operand::Value(10),
+                        set_flags: false,
+                    },
+                    &mut processor,
+                );
+                assert_eq!(processor.registers.get_reg(Register::R0), -50isize as u64);
+            }
+
+            #[test]
+            fn test_mul_val_overflow() {
+                let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+                processor.registers.set_reg(Register::R0, 80);
+                let _ = IS::execute(
+                    Instruction::Mul {
+                        acc: Register::R0,
+                        rhs: Operand::Value(2),
+                        set_flags: false,
+                    },
+                    &mut processor,
+                );
+                assert_eq!(processor.registers.get_reg(Register::R0), -96isize as u64);
+            }
+
+            #[test]
+            fn test_mul_val_underflow() {
+                let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+                processor.registers.set_reg(Register::R0, -80isize as u64);
+                let _ = IS::execute(
+                    Instruction::Mul {
+                        acc: Register::R0,
+                        rhs: Operand::Value(2),
+                        set_flags: false,
+                    },
+                    &mut processor,
+                );
+                assert_eq!(processor.registers.get_reg(Register::R0), 96);
+            }
         }
 
-        #[test]
-        fn signed_add_res_positive() {
-            add(
-                -5i64 as u64, // 0xFFFF_FFFF_FFFF_FFFB
-                10,           // 0x0000_0000_0000_000A
-                5,            // 0x0000_0000_0000_0005
-                Flags {
-                    carry: true, // Unsigned overflow: wrap past u64::MAX
-                    signed: false,
-                    overflow: false, // No signed overflow: opposing signs cannot cause signed overflow
-                    zero: false,
-                },
-            );
-        }
+        mod div {
+            use super::{super::*, Bytes, IS, MEM_SIZE, P, assert_eq};
 
-        #[test]
-        fn signed_add_overflow() {
-            add(
-                i64::MAX as u64, // 0x7FFF_FFFF_FFFF_FFFF
-                1,               // 0x0000_0000_0000_0001
-                i64::MIN as u64, // 0x8000_0000_0000_0000
-                Flags {
-                    carry: false, // No unsigned overflow
-                    signed: true,
-                    overflow: true, // Signed overflow: pos + pos = neg
-                    zero: false,
-                },
-            );
-        }
+            #[test]
+            fn test_div_reg() {
+                let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+                processor.registers.set_reg(Register::R0, 10);
+                processor.registers.set_reg(Register::R1, 5);
+                let _ = IS::execute(
+                    Instruction::Div {
+                        acc: Register::R0,
+                        rhs: Operand::Register(Register::R1),
+                        set_flags: false,
+                    },
+                    &mut processor,
+                );
+                assert_eq!(processor.registers.get_reg(Register::R0), 2);
 
-        #[test]
-        fn signed_add_underflow() {
-            add(
-                i64::MIN as u64, // 0x8000_0000_0000_0000
-                -1i64 as u64,    // 0xFFFF_FFFF_FFFF_FFFF
-                i64::MAX as u64, // 0x7FFF_FFFF_FFFF_FFFF
-                Flags {
-                    carry: true, // Signed overflow: wrap past u64::MAX
-                    signed: false,
-                    overflow: true, // Unsigned overflow: neg + neg = pos
-                    zero: false,
-                },
-            );
-        }
-    }
+                processor.registers.set_reg(Register::R0, -10isize as u64);
+                processor.registers.set_reg(Register::R1, 5);
+                let _ = IS::execute(
+                    Instruction::Div {
+                        acc: Register::R0,
+                        rhs: Operand::Register(Register::R1),
+                        set_flags: false,
+                    },
+                    &mut processor,
+                );
+                assert_eq!(processor.registers.get_reg(Register::R0), -2isize as u64);
+            }
 
-    mod sub {
-        use super::{super::*, Bytes, IS, MEM_SIZE, P, assert_eq};
+            #[test]
+            fn test_div_reg_truncate() {
+                let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+                processor.registers.set_reg(Register::R0, 3);
+                processor.registers.set_reg(Register::R1, 2);
+                let _ = IS::execute(
+                    Instruction::Div {
+                        acc: Register::R0,
+                        rhs: Operand::Register(Register::R1),
+                        set_flags: false,
+                    },
+                    &mut processor,
+                );
+                assert_eq!(processor.registers.get_reg(Register::R0), 1);
+            }
 
-        #[test]
-        fn test_sub_reg() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, 5);
-            processor.registers.set_reg(Register::R1, 10);
-            let _ = IS::execute(
-                Instruction::Sub {
-                    acc: Register::R0,
-                    rhs: Operand::Register(Register::R1),
-                    set_flags: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), -5isize as u64);
-        }
+            #[test]
+            fn test_div_reg_overflow() {
+                let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+                processor.registers.set_reg(Register::R0, u64::MIN);
+                processor.registers.set_reg(Register::R1, -1isize as u64);
+                let _ = IS::execute(
+                    Instruction::Div {
+                        acc: Register::R0,
+                        rhs: Operand::Register(Register::R1),
+                        set_flags: false,
+                    },
+                    &mut processor,
+                );
+                assert_eq!(processor.registers.get_reg(Register::R0), u64::MIN);
+            }
 
-        #[test]
-        fn test_sub_reg_overflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, u64::MIN);
-            processor.registers.set_reg(Register::R1, 1);
-            let _ = IS::execute(
-                Instruction::Sub {
-                    acc: Register::R0,
-                    rhs: Operand::Register(Register::R1),
-                    set_flags: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), u64::MAX);
-        }
+            #[test]
+            fn test_div_val() {
+                let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+                processor.registers.set_reg(Register::R0, 10);
+                let _ = IS::execute(
+                    Instruction::Div {
+                        acc: Register::R0,
+                        rhs: Operand::Value(5),
+                        set_flags: false,
+                    },
+                    &mut processor,
+                );
+                assert_eq!(processor.registers.get_reg(Register::R0), 2);
 
-        #[test]
-        fn test_sub_val() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, 5);
-            let _ = IS::execute(
-                Instruction::Sub {
-                    acc: Register::R0,
-                    rhs: Operand::Value(10),
-                    set_flags: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), -5isize as u64);
-        }
+                processor.registers.set_reg(Register::R0, -10isize as u64);
+                let _ = IS::execute(
+                    Instruction::Div {
+                        acc: Register::R0,
+                        rhs: Operand::Value(5),
+                        set_flags: false,
+                    },
+                    &mut processor,
+                );
+                assert_eq!(processor.registers.get_reg(Register::R0), -2isize as u64);
+            }
 
-        #[test]
-        fn test_sub_val_overflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, -128isize as u64);
-            let _ = IS::execute(
-                Instruction::Sub {
-                    acc: Register::R0,
-                    rhs: Operand::Value(1),
-                    set_flags: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), 127);
-        }
-    }
+            #[test]
+            fn test_div_val_truncate() {
+                let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+                {
+                    { { { { { { { { { { {} } } } } } } } } } }
+                }
+                processor.registers.set_reg(Register::R0, 3);
+                let _ = IS::execute(
+                    Instruction::Div {
+                        acc: Register::R0,
+                        rhs: Operand::Value(4),
+                        set_flags: false,
+                    },
+                    &mut processor,
+                );
+                assert_eq!(processor.registers.get_reg(Register::R0), 0);
 
-    mod mul {
-        use super::{super::*, Bytes, IS, MEM_SIZE, P, assert_eq};
+                processor.registers.set_reg(Register::R0, 3);
+                let _ = IS::execute(
+                    Instruction::Div {
+                        acc: Register::R0,
+                        rhs: Operand::Value(2),
+                        set_flags: false,
+                    },
+                    &mut processor,
+                );
+                assert_eq!(processor.registers.get_reg(Register::R0), 1);
+            }
 
-        #[test]
-        fn test_mul_reg() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, 5);
-            processor.registers.set_reg(Register::R1, 10);
-            let _ = IS::execute(
-                Instruction::Mul {
-                    acc: Register::R0,
-                    rhs: Operand::Register(Register::R1),
-                    set_flags: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), 50);
-
-            processor.registers.set_reg(Register::R0, -5isize as u64);
-            processor.registers.set_reg(Register::R1, 10);
-            let _ = IS::execute(
-                Instruction::Mul {
-                    acc: Register::R0,
-                    rhs: Operand::Register(Register::R1),
-                    set_flags: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), -50isize as u64);
-        }
-
-        #[test]
-        fn test_mul_reg_overflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, 80);
-            processor.registers.set_reg(Register::R1, 2);
-            let _ = IS::execute(
-                Instruction::Mul {
-                    acc: Register::R0,
-                    rhs: Operand::Register(Register::R1),
-                    set_flags: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), -96isize as u64);
-        }
-
-        #[test]
-        fn test_mul_reg_underflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, -80isize as u64);
-            processor.registers.set_reg(Register::R1, 2);
-            let _ = IS::execute(
-                Instruction::Mul {
-                    acc: Register::R0,
-                    rhs: Operand::Register(Register::R1),
-                    set_flags: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), 96);
-        }
-
-        #[test]
-        fn test_mul_val() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, 5);
-            let _ = IS::execute(
-                Instruction::Mul {
-                    acc: Register::R0,
-                    rhs: Operand::Value(10),
-                    set_flags: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), 50);
-
-            processor.registers.set_reg(Register::R0, -5isize as u64);
-            let _ = IS::execute(
-                Instruction::Mul {
-                    acc: Register::R0,
-                    rhs: Operand::Value(10),
-                    set_flags: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), -50isize as u64);
-        }
-
-        #[test]
-        fn test_mul_val_overflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, 80);
-            let _ = IS::execute(
-                Instruction::Mul {
-                    acc: Register::R0,
-                    rhs: Operand::Value(2),
-                    set_flags: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), -96isize as u64);
-        }
-
-        #[test]
-        fn test_mul_val_underflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, -80isize as u64);
-            let _ = IS::execute(
-                Instruction::Mul {
-                    acc: Register::R0,
-                    rhs: Operand::Value(2),
-                    set_flags: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), 96);
-        }
-    }
-
-    mod div {
-        use super::{super::*, Bytes, IS, MEM_SIZE, P, assert_eq};
-
-        #[test]
-        fn test_div_reg() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, 10);
-            processor.registers.set_reg(Register::R1, 5);
-            let _ = IS::execute(
-                Instruction::Div {
-                    acc: Register::R0,
-                    rhs: Operand::Register(Register::R1),
-                    set_flags: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), 2);
-
-            processor.registers.set_reg(Register::R0, -10isize as u64);
-            processor.registers.set_reg(Register::R1, 5);
-            let _ = IS::execute(
-                Instruction::Div {
-                    acc: Register::R0,
-                    rhs: Operand::Register(Register::R1),
-                    set_flags: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), -2isize as u64);
-        }
-
-        #[test]
-        fn test_div_reg_truncate() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, 3);
-            processor.registers.set_reg(Register::R1, 2);
-            let _ = IS::execute(
-                Instruction::Div {
-                    acc: Register::R0,
-                    rhs: Operand::Register(Register::R1),
-                    set_flags: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), 1);
-        }
-
-        #[test]
-        fn test_div_reg_overflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, u64::MIN);
-            processor.registers.set_reg(Register::R1, -1isize as u64);
-            let _ = IS::execute(
-                Instruction::Div {
-                    acc: Register::R0,
-                    rhs: Operand::Register(Register::R1),
-                    set_flags: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), u64::MIN);
-        }
-
-        #[test]
-        fn test_div_val() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, 10);
-            let _ = IS::execute(
-                Instruction::Div {
-                    acc: Register::R0,
-                    rhs: Operand::Value(5),
-                    set_flags: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), 2);
-
-            processor.registers.set_reg(Register::R0, -10isize as u64);
-            let _ = IS::execute(
-                Instruction::Div {
-                    acc: Register::R0,
-                    rhs: Operand::Value(5),
-                    set_flags: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), -2isize as u64);
-        }
-
-        #[test]
-        fn test_div_val_truncate() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, 3);
-            let _ = IS::execute(
-                Instruction::Div {
-                    acc: Register::R0,
-                    rhs: Operand::Value(4),
-                    set_flags: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), 0);
-
-            processor.registers.set_reg(Register::R0, 3);
-            let _ = IS::execute(
-                Instruction::Div {
-                    acc: Register::R0,
-                    rhs: Operand::Value(2),
-                    set_flags: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), 1);
-        }
-
-        #[test]
-        fn test_div_val_overflow() {
-            let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            processor.registers.set_reg(Register::R0, u64::MIN);
-            let _ = IS::execute(
-                Instruction::Div {
-                    acc: Register::R0,
-                    rhs: Operand::Value(-1isize as u64),
-                    set_flags: false,
-                },
-                &mut processor,
-            );
-            assert_eq!(processor.registers.get_reg(Register::R0), u64::MIN);
+            #[test]
+            fn test_div_val_overflow() {
+                let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
+                processor.registers.set_reg(Register::R0, u64::MIN);
+                let _ = IS::execute(
+                    Instruction::Div {
+                        acc: Register::R0,
+                        rhs: Operand::Value(-1isize as u64),
+                        set_flags: false,
+                    },
+                    &mut processor,
+                );
+                assert_eq!(processor.registers.get_reg(Register::R0), u64::MIN);
+            }
         }
     }
 

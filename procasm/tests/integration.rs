@@ -44,7 +44,7 @@ fn simple_5x2_multiplication() {
                 Instruction::Add {
                     acc: Register::R1,
                     rhs: Operand::Register(Register::R0),
-                    signed: false
+                    set_flags: false
                 },
                 Instruction::Jump {
                     to: 0,
