@@ -17,7 +17,13 @@ impl MemoryLocation {
     ) -> u64 {
         match self {
             Self::Labeled(addr) => addr,
-            Self::Offset { base, offset } => processor.registers.get_reg(base) + offset.resolve(processor),
+            Self::Offset { base, offset } => {
+                processor
+                    .registers
+                    .get_reg(base)
+                    .overflowing_add(offset.resolve(processor))
+                    .0
+            }
         }
     }
 }

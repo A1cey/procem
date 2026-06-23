@@ -93,7 +93,7 @@ pub type AssembledProgram<const MEM_SIZE: usize> = Program<MEM_SIZE, Instruction
 /// assert_eq!(
 ///     program,
 ///     AssembledProgram::<MEM_SIZE>::new(
-///         Header::new(0, MEM_SIZE - 1),
+///         Header::new(0, MEM_SIZE as u64 - 1),
 ///         Data::default(),
 ///         Bss::default(),
 ///         Code::from(
@@ -105,7 +105,7 @@ pub type AssembledProgram<const MEM_SIZE: usize> = Program<MEM_SIZE, Instruction
 ///                  Instruction::Add {
 ///                      acc: Register::R1,
 ///                      rhs: Operand::Register(Register::R0),
-///                      signed: false
+///                      set_flags: false
 ///                  },
 ///                  Instruction::Jump {
 ///                      to: 0,

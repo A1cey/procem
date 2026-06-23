@@ -10,19 +10,21 @@ use thiserror::Error;
 /// # Example
 ///
 /// ```
+/// use procem::counted_enum;
+///
 /// counted_enum!(
 ///     #[doc = "Doc comment via attribute."]
 ///     #[derive(Debug, Clone, Copy, Default)]
 ///     pub enum Foo {
 ///         #[doc = "Variant doc comment."]
-///         #[defaul]
+///         #[default]
 ///         Bar,
 ///         Baz(usize, usize),
 ///         Bat { foo: char }
 ///     }
 /// );
 ///
-/// assert_eq!(Foo::COUNT, 2);
+/// assert_eq!(Foo::COUNT, 3);
 /// ```
 #[macro_export]
 macro_rules! counted_enum {
@@ -114,13 +116,13 @@ impl Registers {
     /// Increment the value in a register by one.
     #[inline]
     pub fn inc(&mut self, reg: Register) {
-        self.registers[reg] += 1;
+        self.registers[reg] = self.registers[reg].overflowing_add(1).0;
     }
 
     /// Decrement the value in a register by one.
     #[inline]
     pub fn dec(&mut self, reg: Register) {
-        self.registers[reg] -= 1;
+        self.registers[reg] = self.registers[reg].overflowing_sub(1).0;
     }
 
     /// Get the value of a flag.

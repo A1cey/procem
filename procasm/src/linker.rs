@@ -86,10 +86,80 @@ impl<'input, const MEM_SIZE: usize> Linker<'input, MEM_SIZE> {
                 from: *from,
                 to: MemoryLocation::Labeled(addr),
             },
+            Instruction::Strb {
+                from,
+                to: MemoryLocation::Labeled(_),
+            } => Instruction::Strb {
+                from: *from,
+                to: MemoryLocation::Labeled(addr),
+            },
+            Instruction::Strh {
+                from,
+                to: MemoryLocation::Labeled(_),
+            } => Instruction::Strh {
+                from: *from,
+                to: MemoryLocation::Labeled(addr),
+            },
+            Instruction::Strw {
+                from,
+                to: MemoryLocation::Labeled(_),
+            } => Instruction::Strw {
+                from: *from,
+                to: MemoryLocation::Labeled(addr),
+            },
+            Instruction::Strd {
+                from,
+                to: MemoryLocation::Labeled(_),
+            } => Instruction::Strd {
+                from: *from,
+                to: MemoryLocation::Labeled(addr),
+            },
+            Instruction::Strq {
+                from,
+                to: MemoryLocation::Labeled(_),
+            } => Instruction::Strq {
+                from: *from,
+                to: MemoryLocation::Labeled(addr),
+            },
             Instruction::Ldr {
                 to,
                 from: MemoryLocation::Labeled(_),
             } => Instruction::Ldr {
+                to: *to,
+                from: MemoryLocation::Labeled(addr),
+            },
+            Instruction::Ldrb {
+                to,
+                from: MemoryLocation::Labeled(_),
+            } => Instruction::Ldrb {
+                to: *to,
+                from: MemoryLocation::Labeled(addr),
+            },
+            Instruction::Ldrh {
+                to,
+                from: MemoryLocation::Labeled(_),
+            } => Instruction::Ldrh {
+                to: *to,
+                from: MemoryLocation::Labeled(addr),
+            },
+            Instruction::Ldrw {
+                to,
+                from: MemoryLocation::Labeled(_),
+            } => Instruction::Ldrw {
+                to: *to,
+                from: MemoryLocation::Labeled(addr),
+            },
+            Instruction::Ldrd {
+                to,
+                from: MemoryLocation::Labeled(_),
+            } => Instruction::Ldrd {
+                to: *to,
+                from: MemoryLocation::Labeled(addr),
+            },
+            Instruction::Ldrq {
+                to,
+                from: MemoryLocation::Labeled(_),
+            } => Instruction::Ldrq {
                 to: *to,
                 from: MemoryLocation::Labeled(addr),
             },

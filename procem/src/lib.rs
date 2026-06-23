@@ -13,7 +13,7 @@
 //! ```
 //! # use procem::register::{Flag, Register};
 //! # use procem::processor::Processor;
-//! # use procem::instruction::Instruction;
+//! # use procem::instruction::{Instruction, InstructionResult};
 //! # use core::marker::PhantomData;
 //! # use core::ops::Deref;
 //! #
@@ -24,7 +24,7 @@
 //! #     fn execute<const MEM_SIZE: usize, Insts, Bytes>(
 //! #         instruction: Self,
 //! #         processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>
-//! #     ) {}
+//! #     ) -> InstructionResult { Ok(()) }
 //! # }
 //! #
 //! # let mut processor = Processor::<2048, _, Vec<Inst>, Vec<_>>::new();

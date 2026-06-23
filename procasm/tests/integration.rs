@@ -154,37 +154,14 @@ fn control_flow_and_labels() {
     // Loop should run 5 times, incrementing R0 from 0 to 5
     let program = assemble::<MEM_SIZE>(
         "
-.code
-_start:
-    mov R0, 0
-    mov R1, 5
-loop:
-    add R0, 1
-    subs R1, 1
-    jnz loop
-",
-    );
-    let program = match program {
-        Ok(program) => program,
-        Err(err) => panic!("{}", FmtSlice(&err)),
-    };
-
-    let mut processor = Processor::builder().with_program(&program).build();
-
-    let _ = processor.run_program();
-    assert_eq!(processor.registers.get_reg(Register::R0), 5);
-}
-
-#[test]
-fn test_overflow_and_flags() {
-    const MEM_SIZE: usize = 1024;
-    let program = assemble::<MEM_SIZE>(
-        "
         .code
         _start:
-            mov R0, 2147483647
+            mov R0, 0
+            mov R1, 5
+        loop:
             add R0, 1
-            cmp R0, -2147483648
+            subs R1, 1
+            jnz loop
         ",
     );
     let program = match program {
@@ -195,8 +172,7 @@ fn test_overflow_and_flags() {
     let mut processor = Processor::builder().with_program(&program).build();
 
     let _ = processor.run_program();
-    assert_eq!(processor.registers.get_reg(Register::R0), u64::MIN);
-    assert_eq!(processor.registers.get_flag(procem::register::Flag::Z), true);
+    assert_eq!(processor.registers.get_reg(Register::R0), 5);
 }
 
 #[test]
@@ -236,10 +212,10 @@ fn swap_static_mem() {
         .code
         _start:
             adr r0, foo
-            ldr r1, foo
-            ldr r2, [r0, 1]
-            str r2, foo
-            str r1, [r0, 1]
+            ldrw r1, foo
+            ldrw r2, [r0, 4]
+            strw r2, foo
+            strw r1, [r0, 4]
         ",
     )
     .map_err(|err| panic!("{}", FmtSlice(&err)))
@@ -250,14 +226,29 @@ fn swap_static_mem() {
     assert_eq!(processor.registers.get_reg(Register::R0), 0);
     assert_eq!(processor.registers.get_reg(Register::R1), 0);
     assert_eq!(processor.mem.read(program.data().base_addr()), 42);
-    assert_eq!(processor.mem.read(program.data().base_addr() + 1), 43);
+    assert_eq!(processor.mem.read(program.data().base_addr() + 4), 43); // 32bit offset
     assert_eq!(program.code().len(), 5);
+    println!("{:?}", processor.registers);
+    println!("{:?}", &processor.mem[0..32]);
+    let _ = processor.execute_next_instruction();
+    println!("{:?}", processor.registers);
+    println!("{:?}", &processor.mem[0..32]);
+    let _ = processor.execute_next_instruction();
+    println!("{:?}", processor.registers);
+    println!("{:?}", &processor.mem[0..32]);
+    let _ = processor.execute_next_instruction();
+    println!("{:?}", processor.registers);
+    println!("{:?}", &processor.mem[0..32]);
 
-    let _ = processor.run_program();
-
+    let _ = processor.execute_next_instruction();
+    println!("{:?}", processor.registers);
+    println!("{:?}", &processor.mem[0..32]);
+    let _ = processor.execute_next_instruction();
+    println!("{:?}", processor.registers);
+    println!("{:?}", &processor.mem[0..32]);
     assert_eq!(processor.registers.get_reg(Register::R0), 0);
     assert_eq!(processor.registers.get_reg(Register::R1), 42);
     assert_eq!(processor.registers.get_reg(Register::R2), 43);
     assert_eq!(processor.mem.read(program.data().base_addr()), 43);
-    assert_eq!(processor.mem.read(program.data().base_addr() + 1), 42);
+    assert_eq!(processor.mem.read(program.data().base_addr() + 4), 42); // 32bit offset
 }

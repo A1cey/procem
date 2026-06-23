@@ -419,6 +419,43 @@ impl<'input, Section> InnerParser<'input, Section> {
         }
     }
 
+    /// Parse an `ImmediateLiteral` into a `u32`.
+    fn u32_from_literal(&self, lit: ImmediateLiteral) -> Result<u32, ParserError> {
+        match lit {
+            ImmediateLiteral::Char(c) => Ok(u32::from(c)),
+            ImmediateLiteral::Binary(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                u32::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
+            }
+            ImmediateLiteral::Decimal(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                lit.parse::<i32>() // first parse as i32 to include negative nums
+                    .map(|val| val as u32) // then cast to u32
+                    .map_err(|err| ParserError::LiteralParsing {
+                        lit: lit.to_string(),
+                        err,
+                    })
+            }
+            ImmediateLiteral::Hexadecimal(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                u32::from_str_radix(&lit, 16).map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
+            }
+            ImmediateLiteral::Octal(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                u32::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
+            }
+        }
+    }
+
     fn expect_immediate_literal(&mut self) -> Result<ImmediateLiteral, ParserError> {
         self.idx += 1; // manual, to enable borrow of self inside match
         match self.tokens.get(self.idx) {
@@ -700,7 +737,7 @@ impl InnerParser<'_, Code> {
     }
 
     fn expect_load_or_store_instruction(&mut self, instr: ASMLoadOrStoreInstruction) {
-        let register = match self.expect_register() {
+        let reg = match self.expect_register() {
             Ok(reg) => reg,
             Err(err) => return self.add_error(err),
         };
@@ -730,16 +767,7 @@ impl InnerParser<'_, Code> {
             None => return self.add_error(ParserError::TokenNotFound { idx: self.idx }),
         };
 
-        let instr = match instr {
-            ASMLoadOrStoreInstruction::Ldr => Instruction::Ldr {
-                to: register,
-                from: mem_location,
-            },
-            ASMLoadOrStoreInstruction::Str => Instruction::Str {
-                from: register,
-                to: mem_location,
-            },
-        };
+        let instr = Instruction::from_ldr_or_str_instruction(instr, reg, mem_location);
 
         self.instructions.push(instr);
     }
@@ -822,8 +850,8 @@ impl InnerParser<'_, Data> {
     #[inline]
     fn expect_word(&mut self) {
         match self.expect_immediate_literal() {
-            Ok(lit) => match self.u64_from_literal(lit) {
-                Ok(word) => self.data.push(word as u8), // TODO: How to cast this
+            Ok(lit) => match self.u32_from_literal(lit) {
+                Ok(word) => self.data.extend_from_slice(&word.to_le_bytes()), // TODO: How to cast this
                 Err(err) => self.add_error(err),
             },
             Err(err) => self.add_error(err),
@@ -1056,13 +1084,13 @@ mod test {
         assert_eq!(parsed.instructions.len(), 0);
         assert_eq!(parsed.unlinked_instructions.len(), 0);
         assert_eq!(parsed.bss(), 0);
-        assert_eq!(parsed.data.len(), 1 + 1 + b"Hello World!".len() + b"\0".len() + 1 + 1);
+        assert_eq!(parsed.data.len(), 4 + 4 + b"Hello World!".len() + b"\0".len() + 4 + 4); // 4 32bit allocations and 2 string allocations
         assert_eq!(parsed.labels.len(), 3);
         assert_eq!(parsed.labels[b"a".as_slice()], 0);
-        assert_eq!(parsed.labels[b"b".as_slice()], 1 + 1);
+        assert_eq!(parsed.labels[b"b".as_slice()], 4 + 4);
         assert_eq!(
             parsed.labels[b"c".as_slice()],
-            1 + 1 + b"Hello World!".len() as u64 + b"\0".len() as u64
+            4 + 4 + b"Hello World!".len() as u64 + b"\0".len() as u64
         );
     }
 
@@ -1095,7 +1123,7 @@ mod test {
                 .word 8
 
             .code
-            g:
+            f:
                 add R1, 0o1
                 jmp c
             ";
@@ -1104,15 +1132,18 @@ mod test {
 
         assert_eq!(parsed.instructions.len(), 6);
         assert_eq!(parsed.labels().len(), 6);
-        assert_eq!(parsed.data().len(), 1 + 1);
+        assert_eq!(parsed.data().len(), 4 + 4); // 2 32bit allocations
         assert_eq!(parsed.bss(), 5 + 10 + 5);
 
+        // code
         assert_eq!(parsed.labels()[b"a".as_slice()], 0);
         assert_eq!(parsed.labels()[b"c".as_slice()], 2);
-        assert_eq!(parsed.labels()[b"g".as_slice()], 4);
-        assert_eq!(parsed.labels()[b"d".as_slice()], 0);
-        assert_eq!(parsed.labels()[b"e".as_slice()], 1);
+        assert_eq!(parsed.labels()[b"f".as_slice()], 4);
+        // bss
         assert_eq!(parsed.labels()[b"b".as_slice()], 0);
+        // data
+        assert_eq!(parsed.labels()[b"d".as_slice()], 0);
+        assert_eq!(parsed.labels()[b"e".as_slice()], 4);
     }
 
     #[test]

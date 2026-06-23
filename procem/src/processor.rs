@@ -233,6 +233,8 @@ pub enum ProcessorError {
     },
     #[error("Invalid slice size when trying to write to a memory range. Expected: {expected}, Got: {got}.")]
     InvalidSliceSize { expected: usize, got: usize },
+    #[error("Attempted division by zero.")]
+    DivisionByZero,
 }
 
 #[cfg(test)]
