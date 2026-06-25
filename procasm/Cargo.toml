@@ -1,6 +1,6 @@
 [package]
 name = "procasm"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 repository = "https://github.com/A1cey/procem/tree/main/procasm"
 license = "MIT"
@@ -8,7 +8,7 @@ description = "procasm is the default implementation of an instruction set for t
 keywords = ["processor", "emulator", "simulator", "cpu", "procem"]
 
 [dependencies]
-procem = { path = "../procem", features = ["alloc"], version = "0.2.0" }
+procem = { path = "../procem", features = ["alloc"], version = "0.3.0" }
 thiserror = { workspace = true }
 ars = {workspace= true, features= ["alloc"]}
 

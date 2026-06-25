@@ -432,7 +432,7 @@ dependencies = [
 
 [[package]]
 name = "procasm"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "ars",
  "criterion",
@@ -444,7 +444,7 @@ dependencies = [
 
 [[package]]
 name = "procem"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "ars",
  "thiserror",
