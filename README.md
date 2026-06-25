@@ -1,6 +1,6 @@
 # procem
 
-**procem** is a toy Rust library that provides a flexible processor emulator, loosely inspired by the ARM architecture. It allows you to define and execute custom instruction sets, manage registers, flags, and memory, and run assembly-like programs.
+**procem** is a Rust library that provides a flexible processor emulator, loosely inspired by the ARM architecture. It allows you to define and execute custom instruction sets, manage registers, flags, and memory, and run assembly-like programs.
 
 ## Features
 
@@ -21,7 +21,7 @@ You can implement your own instruction set by implementing the `Instruction` tra
 use procem::{processor::Processor, register::Register, word::I32};
 use procasm::assemble;
 
-// Assemble program from asm
+// Assemble program from procasm
 const MEM_SIZE: usize = 1024;
 let program = assemble::<MEM_SIZE, I32>(
     "
