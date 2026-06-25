@@ -228,27 +228,61 @@ fn swap_static_mem() {
     assert_eq!(processor.mem.read(program.data().base_addr()), 42);
     assert_eq!(processor.mem.read(program.data().base_addr() + 4), 43); // 32bit offset
     assert_eq!(program.code().len(), 5);
-    println!("{:?}", processor.registers);
-    println!("{:?}", &processor.mem[0..32]);
-    let _ = processor.execute_next_instruction();
-    println!("{:?}", processor.registers);
-    println!("{:?}", &processor.mem[0..32]);
-    let _ = processor.execute_next_instruction();
-    println!("{:?}", processor.registers);
-    println!("{:?}", &processor.mem[0..32]);
-    let _ = processor.execute_next_instruction();
-    println!("{:?}", processor.registers);
-    println!("{:?}", &processor.mem[0..32]);
 
-    let _ = processor.execute_next_instruction();
-    println!("{:?}", processor.registers);
-    println!("{:?}", &processor.mem[0..32]);
-    let _ = processor.execute_next_instruction();
-    println!("{:?}", processor.registers);
-    println!("{:?}", &processor.mem[0..32]);
+    let _ = processor.run_program();
+
     assert_eq!(processor.registers.get_reg(Register::R0), 0);
     assert_eq!(processor.registers.get_reg(Register::R1), 42);
     assert_eq!(processor.registers.get_reg(Register::R2), 43);
     assert_eq!(processor.mem.read(program.data().base_addr()), 43);
     assert_eq!(processor.mem.read(program.data().base_addr() + 4), 42); // 32bit offset
+}
+
+#[test]
+fn parse_data_multi_alloc() {
+    const MEM_SIZE: usize = 128;
+    let program = assemble::<MEM_SIZE>(
+        "
+        .data
+        a:
+            .byte -1,2
+            .hword 3, 4
+            .word 5, 6,7
+            .dword 8, 9
+            .qword 10, 11
+        _start:
+        ",
+    )
+    .map_err(|err| panic!("{}", FmtSlice(&err)))
+    .unwrap();
+
+    let mut processor = Processor::builder().with_program(&program).build();
+
+    let mut offset = 0;
+    assert_eq!(processor.mem.read(program.data().base_addr() + offset), -1i8 as u8);
+    offset += 1; // byte offset
+    assert_eq!(processor.mem.read(program.data().base_addr() + offset), 2);
+    offset += 1; // byte offset
+    assert_eq!(processor.mem.read(program.data().base_addr() + offset), 3);
+    offset += 2; // hword offset
+    assert_eq!(processor.mem.read(program.data().base_addr() + offset), 4);
+    offset += 2; // hword offset
+    assert_eq!(processor.mem.read(program.data().base_addr() + offset), 5);
+    offset += 4; // word offset
+    assert_eq!(processor.mem.read(program.data().base_addr() + offset), 6);
+    offset += 4; // word offset
+    assert_eq!(processor.mem.read(program.data().base_addr() + offset), 7);
+    offset += 4; // word offset
+    assert_eq!(processor.mem.read(program.data().base_addr() + offset), 8);
+    offset += 8; // dword offset
+    assert_eq!(processor.mem.read(program.data().base_addr() + offset), 9);
+    offset += 8; // dword offset
+    assert_eq!(processor.mem.read(program.data().base_addr() + offset), 10);
+    offset += 16; // qword offset
+    assert_eq!(processor.mem.read(program.data().base_addr() + offset), 11);
+
+    assert_eq!(program.code().len(), 0);
+    assert_eq!(program.data().len(), 1 + 1 + 2 + 2 + 4 + 4 + 4 + 8 + 8 + 16 + 16); // 2 byte, 2 hword, 3 word, 2 dword, 2 qword
+
+    let _ = processor.run_program();
 }

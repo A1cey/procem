@@ -382,21 +382,21 @@ impl<'input, Section> InnerParser<'input, Section> {
         self.errors.get_or_insert_default().push(err);
     }
 
-    /// Parse an `ImmediateLiteral` into a `u64`.
-    fn u64_from_literal(&self, lit: ImmediateLiteral) -> Result<u64, ParserError> {
+    /// Parse an `ImmediateLiteral` into a `u8`.
+    fn u8_from_literal(&self, lit: ImmediateLiteral) -> Result<u8, ParserError> {
         match lit {
-            ImmediateLiteral::Char(c) => Ok(u64::from(c)),
+            ImmediateLiteral::Char(c) => Ok(c),
             ImmediateLiteral::Binary(range) => {
                 let lit = String::from_utf8_lossy(&self.input[range]);
-                u64::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
+                u8::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
                     lit: lit.to_string(),
                     err,
                 })
             }
             ImmediateLiteral::Decimal(range) => {
                 let lit = String::from_utf8_lossy(&self.input[range]);
-                lit.parse::<i64>() // first parse as i64 to include negative nums
-                    .map(|val| val as u64) // then cast to u64
+                lit.parse::<i8>() // first parse as i8 to include negative nums
+                    .map(|val| val as u8) // then cast to u8
                     .map_err(|err| ParserError::LiteralParsing {
                         lit: lit.to_string(),
                         err,
@@ -404,14 +404,51 @@ impl<'input, Section> InnerParser<'input, Section> {
             }
             ImmediateLiteral::Hexadecimal(range) => {
                 let lit = String::from_utf8_lossy(&self.input[range]);
-                u64::from_str_radix(&lit, 16).map_err(|err| ParserError::LiteralParsing {
+                u8::from_str_radix(&lit, 16).map_err(|err| ParserError::LiteralParsing {
                     lit: lit.to_string(),
                     err,
                 })
             }
             ImmediateLiteral::Octal(range) => {
                 let lit = String::from_utf8_lossy(&self.input[range]);
-                u64::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
+                u8::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
+            }
+        }
+    }
+
+    /// Parse an `ImmediateLiteral` into a `u16`.
+    fn u16_from_literal(&self, lit: ImmediateLiteral) -> Result<u16, ParserError> {
+        match lit {
+            ImmediateLiteral::Char(c) => Ok(u16::from(c)),
+            ImmediateLiteral::Binary(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                u16::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
+            }
+            ImmediateLiteral::Decimal(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                lit.parse::<i16>() // first parse as i16 to include negative nums
+                    .map(|val| val as u16) // then cast to u16
+                    .map_err(|err| ParserError::LiteralParsing {
+                        lit: lit.to_string(),
+                        err,
+                    })
+            }
+            ImmediateLiteral::Hexadecimal(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                u16::from_str_radix(&lit, 16).map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
+            }
+            ImmediateLiteral::Octal(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                u16::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
                     lit: lit.to_string(),
                     err,
                 })
@@ -449,6 +486,80 @@ impl<'input, Section> InnerParser<'input, Section> {
             ImmediateLiteral::Octal(range) => {
                 let lit = String::from_utf8_lossy(&self.input[range]);
                 u32::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
+            }
+        }
+    }
+
+    /// Parse an `ImmediateLiteral` into a `u64`.
+    fn u64_from_literal(&self, lit: ImmediateLiteral) -> Result<u64, ParserError> {
+        match lit {
+            ImmediateLiteral::Char(c) => Ok(u64::from(c)),
+            ImmediateLiteral::Binary(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                u64::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
+            }
+            ImmediateLiteral::Decimal(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                lit.parse::<i64>() // first parse as i64 to include negative nums
+                    .map(|val| val as u64) // then cast to u64
+                    .map_err(|err| ParserError::LiteralParsing {
+                        lit: lit.to_string(),
+                        err,
+                    })
+            }
+            ImmediateLiteral::Hexadecimal(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                u64::from_str_radix(&lit, 16).map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
+            }
+            ImmediateLiteral::Octal(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                u64::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
+            }
+        }
+    }
+
+    /// Parse an `ImmediateLiteral` into a `u128`.
+    fn u128_from_literal(&self, lit: ImmediateLiteral) -> Result<u128, ParserError> {
+        match lit {
+            ImmediateLiteral::Char(c) => Ok(u128::from(c)),
+            ImmediateLiteral::Binary(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                u128::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
+            }
+            ImmediateLiteral::Decimal(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                lit.parse::<i128>() // first parse as i128 to include negative nums
+                    .map(|val| val as u128) // then cast to u128
+                    .map_err(|err| ParserError::LiteralParsing {
+                        lit: lit.to_string(),
+                        err,
+                    })
+            }
+            ImmediateLiteral::Hexadecimal(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                u128::from_str_radix(&lit, 16).map_err(|err| ParserError::LiteralParsing {
+                    lit: lit.to_string(),
+                    err,
+                })
+            }
+            ImmediateLiteral::Octal(range) => {
+                let lit = String::from_utf8_lossy(&self.input[range]);
+                u128::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
                     lit: lit.to_string(),
                     err,
                 })
@@ -827,13 +938,38 @@ impl InnerParser<'_, Data> {
 
     fn parse_directive(&mut self, directive: &[u8]) {
         match directive {
+            directive if directive.eq_ignore_ascii_case(b"byte") => self.parse_bytes(),
+            directive if directive.eq_ignore_ascii_case(b"hword") => self.parse_hwords(),
             directive if directive.eq_ignore_ascii_case(b"word") => self.parse_words(),
+            directive if directive.eq_ignore_ascii_case(b"dword") => self.parse_dwords(),
+            directive if directive.eq_ignore_ascii_case(b"qword") => self.parse_qwords(),
             directive if directive.eq_ignore_ascii_case(b"ascii") => self.parse_ascii(),
             directive => self.add_error(ParserError::InvalidDirective {
                 idx: self.idx,
                 directive: string_from_u8_slice(directive),
-                expected: "Only .word and .ascii are allowed in .data sections.".to_string(),
+                expected: "Only .byte, .hword, .word, .dword, .qword and .ascii are allowed in .data sections."
+                    .to_string(),
             }),
+        }
+    }
+
+    #[inline]
+    fn parse_bytes(&mut self) {
+        self.expect_byte();
+
+        while let Some(Token::Comma) = self.peak_token() {
+            self.idx += 1;
+            self.expect_byte();
+        }
+    }
+
+    #[inline]
+    fn parse_hwords(&mut self) {
+        self.expect_hword();
+
+        while let Some(Token::Comma) = self.peak_token() {
+            self.idx += 1;
+            self.expect_hword();
         }
     }
 
@@ -848,10 +984,74 @@ impl InnerParser<'_, Data> {
     }
 
     #[inline]
+    fn parse_dwords(&mut self) {
+        self.expect_dword();
+
+        while let Some(Token::Comma) = self.peak_token() {
+            self.idx += 1;
+            self.expect_dword();
+        }
+    }
+
+    #[inline]
+    fn parse_qwords(&mut self) {
+        self.expect_qword();
+
+        while let Some(Token::Comma) = self.peak_token() {
+            self.idx += 1;
+            self.expect_qword();
+        }
+    }
+
+    #[inline]
+    fn expect_byte(&mut self) {
+        match self.expect_immediate_literal() {
+            Ok(lit) => match self.u8_from_literal(lit) {
+                Ok(word) => self.data.extend_from_slice(&word.to_le_bytes()),
+                Err(err) => self.add_error(err),
+            },
+            Err(err) => self.add_error(err),
+        }
+    }
+
+    #[inline]
+    fn expect_hword(&mut self) {
+        match self.expect_immediate_literal() {
+            Ok(lit) => match self.u16_from_literal(lit) {
+                Ok(word) => self.data.extend_from_slice(&word.to_le_bytes()),
+                Err(err) => self.add_error(err),
+            },
+            Err(err) => self.add_error(err),
+        }
+    }
+
+    #[inline]
     fn expect_word(&mut self) {
         match self.expect_immediate_literal() {
             Ok(lit) => match self.u32_from_literal(lit) {
-                Ok(word) => self.data.extend_from_slice(&word.to_le_bytes()), // TODO: How to cast this
+                Ok(word) => self.data.extend_from_slice(&word.to_le_bytes()),
+                Err(err) => self.add_error(err),
+            },
+            Err(err) => self.add_error(err),
+        }
+    }
+
+    #[inline]
+    fn expect_dword(&mut self) {
+        match self.expect_immediate_literal() {
+            Ok(lit) => match self.u64_from_literal(lit) {
+                Ok(word) => self.data.extend_from_slice(&word.to_le_bytes()),
+                Err(err) => self.add_error(err),
+            },
+            Err(err) => self.add_error(err),
+        }
+    }
+
+    #[inline]
+    fn expect_qword(&mut self) {
+        match self.expect_immediate_literal() {
+            Ok(lit) => match self.u128_from_literal(lit) {
+                Ok(word) => self.data.extend_from_slice(&word.to_le_bytes()),
                 Err(err) => self.add_error(err),
             },
             Err(err) => self.add_error(err),
@@ -1071,8 +1271,11 @@ mod test {
         let input = b"
             .data
                 a:
+                    .byte 5
+                    .hword 5
                     .word 5
-                    .word 10
+                    .dword 5
+                    .qword 5
                 b:
                     .ascii \"Hello World!\", \"\0\"
                 c:
@@ -1084,13 +1287,43 @@ mod test {
         assert_eq!(parsed.instructions.len(), 0);
         assert_eq!(parsed.unlinked_instructions.len(), 0);
         assert_eq!(parsed.bss(), 0);
-        assert_eq!(parsed.data.len(), 4 + 4 + b"Hello World!".len() + b"\0".len() + 4 + 4); // 4 32bit allocations and 2 string allocations
+        assert_eq!(
+            parsed.data.len(),
+            1 + 2 + 4 + 8 + 16 + b"Hello World!".len() + b"\0".len() + 4 + 4
+        ); // byte, hword, word, dword, qword, 2 ascii, 2 word allocations
         assert_eq!(parsed.labels.len(), 3);
         assert_eq!(parsed.labels[b"a".as_slice()], 0);
-        assert_eq!(parsed.labels[b"b".as_slice()], 4 + 4);
+        assert_eq!(parsed.labels[b"b".as_slice()], 1 + 2 + 4 + 8 + 16);
         assert_eq!(
             parsed.labels[b"c".as_slice()],
-            4 + 4 + b"Hello World!".len() as u64 + b"\0".len() as u64
+            1 + 2 + 4 + 8 + 16 + b"Hello World!".len() as u64 + b"\0".len() as u64
+        );
+    }
+
+    #[test]
+    fn parse_data_multi_alloc() {
+        let input = b"
+            .data
+                a:
+                    .byte 5,5
+                    .hword 5, 5
+                    .word 5, 5,5
+                    .dword 5, 5
+                    .qword 5, 5
+                b:
+            ";
+        let tokens = Tokenizer::tokenize(input).unwrap();
+        let parsed = Parser::parse(&tokens, input).unwrap();
+
+        assert_eq!(parsed.instructions.len(), 0);
+        assert_eq!(parsed.unlinked_instructions.len(), 0);
+        assert_eq!(parsed.bss(), 0);
+        assert_eq!(parsed.data.len(), 1 + 1 + 2 + 2 + 4 + 4 + 4 + 8 + 8 + 16 + 16); // 2 byte, 2 hword, 3 word, 2 dword, 2 qword
+        assert_eq!(parsed.labels.len(), 2);
+        assert_eq!(parsed.labels[b"a".as_slice()], 0);
+        assert_eq!(
+            parsed.labels[b"b".as_slice()],
+            1 + 1 + 2 + 2 + 4 + 4 + 4 + 8 + 8 + 16 + 16
         );
     }
 
