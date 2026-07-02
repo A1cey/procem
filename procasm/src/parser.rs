@@ -295,6 +295,47 @@ impl<'input> Parser<'input> {
     }
 }
 
+macro_rules! from_literal {
+    ($unsigned:ty, $signed:ty, $fn_name: ident) => {
+        #[doc = concat!("Parse an `ImmediateLiteral` into an `", stringify!($unsigned), "`.")]
+        fn $fn_name(&self, lit: ImmediateLiteral) -> Result<$unsigned, ParserError> {
+            match lit {
+                ImmediateLiteral::Char(c) => Ok(<$unsigned>::from(c)),
+                ImmediateLiteral::Binary(range) => {
+                    let lit = String::from_utf8_lossy(&self.input[range]);
+                    <$unsigned>::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
+                        lit: lit.to_string(),
+                        err,
+                    })
+                }
+                ImmediateLiteral::Decimal(range) => {
+                    let lit = String::from_utf8_lossy(&self.input[range]);
+                    lit.parse::<$signed>() // first parse as signed to include negative nums
+                        .map(|val| val as $unsigned) // then cast to unsigned
+                        .map_err(|err| ParserError::LiteralParsing {
+                            lit: lit.to_string(),
+                            err,
+                        })
+                }
+                ImmediateLiteral::Hexadecimal(range) => {
+                    let lit = String::from_utf8_lossy(&self.input[range]);
+                    <$unsigned>::from_str_radix(&lit, 16).map_err(|err| ParserError::LiteralParsing {
+                        lit: lit.to_string(),
+                        err,
+                    })
+                }
+                ImmediateLiteral::Octal(range) => {
+                    let lit = String::from_utf8_lossy(&self.input[range]);
+                    <$unsigned>::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
+                        lit: lit.to_string(),
+                        err,
+                    })
+                }
+            }
+        }
+    };
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InnerParser<'input, Section = Undefined> {
     tokens: &'input [Token],
@@ -382,190 +423,11 @@ impl<'input, Section> InnerParser<'input, Section> {
         self.errors.get_or_insert_default().push(err);
     }
 
-    /// Parse an `ImmediateLiteral` into a `u8`.
-    fn u8_from_literal(&self, lit: ImmediateLiteral) -> Result<u8, ParserError> {
-        match lit {
-            ImmediateLiteral::Char(c) => Ok(c),
-            ImmediateLiteral::Binary(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                u8::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
-            }
-            ImmediateLiteral::Decimal(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                lit.parse::<i8>() // first parse as i8 to include negative nums
-                    .map(|val| val as u8) // then cast to u8
-                    .map_err(|err| ParserError::LiteralParsing {
-                        lit: lit.to_string(),
-                        err,
-                    })
-            }
-            ImmediateLiteral::Hexadecimal(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                u8::from_str_radix(&lit, 16).map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
-            }
-            ImmediateLiteral::Octal(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                u8::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
-            }
-        }
-    }
-
-    /// Parse an `ImmediateLiteral` into a `u16`.
-    fn u16_from_literal(&self, lit: ImmediateLiteral) -> Result<u16, ParserError> {
-        match lit {
-            ImmediateLiteral::Char(c) => Ok(u16::from(c)),
-            ImmediateLiteral::Binary(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                u16::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
-            }
-            ImmediateLiteral::Decimal(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                lit.parse::<i16>() // first parse as i16 to include negative nums
-                    .map(|val| val as u16) // then cast to u16
-                    .map_err(|err| ParserError::LiteralParsing {
-                        lit: lit.to_string(),
-                        err,
-                    })
-            }
-            ImmediateLiteral::Hexadecimal(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                u16::from_str_radix(&lit, 16).map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
-            }
-            ImmediateLiteral::Octal(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                u16::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
-            }
-        }
-    }
-
-    /// Parse an `ImmediateLiteral` into a `u32`.
-    fn u32_from_literal(&self, lit: ImmediateLiteral) -> Result<u32, ParserError> {
-        match lit {
-            ImmediateLiteral::Char(c) => Ok(u32::from(c)),
-            ImmediateLiteral::Binary(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                u32::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
-            }
-            ImmediateLiteral::Decimal(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                lit.parse::<i32>() // first parse as i32 to include negative nums
-                    .map(|val| val as u32) // then cast to u32
-                    .map_err(|err| ParserError::LiteralParsing {
-                        lit: lit.to_string(),
-                        err,
-                    })
-            }
-            ImmediateLiteral::Hexadecimal(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                u32::from_str_radix(&lit, 16).map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
-            }
-            ImmediateLiteral::Octal(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                u32::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
-            }
-        }
-    }
-
-    /// Parse an `ImmediateLiteral` into a `u64`.
-    fn u64_from_literal(&self, lit: ImmediateLiteral) -> Result<u64, ParserError> {
-        match lit {
-            ImmediateLiteral::Char(c) => Ok(u64::from(c)),
-            ImmediateLiteral::Binary(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                u64::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
-            }
-            ImmediateLiteral::Decimal(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                lit.parse::<i64>() // first parse as i64 to include negative nums
-                    .map(|val| val as u64) // then cast to u64
-                    .map_err(|err| ParserError::LiteralParsing {
-                        lit: lit.to_string(),
-                        err,
-                    })
-            }
-            ImmediateLiteral::Hexadecimal(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                u64::from_str_radix(&lit, 16).map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
-            }
-            ImmediateLiteral::Octal(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                u64::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
-            }
-        }
-    }
-
-    /// Parse an `ImmediateLiteral` into a `u128`.
-    fn u128_from_literal(&self, lit: ImmediateLiteral) -> Result<u128, ParserError> {
-        match lit {
-            ImmediateLiteral::Char(c) => Ok(u128::from(c)),
-            ImmediateLiteral::Binary(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                u128::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
-            }
-            ImmediateLiteral::Decimal(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                lit.parse::<i128>() // first parse as i128 to include negative nums
-                    .map(|val| val as u128) // then cast to u128
-                    .map_err(|err| ParserError::LiteralParsing {
-                        lit: lit.to_string(),
-                        err,
-                    })
-            }
-            ImmediateLiteral::Hexadecimal(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                u128::from_str_radix(&lit, 16).map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
-            }
-            ImmediateLiteral::Octal(range) => {
-                let lit = String::from_utf8_lossy(&self.input[range]);
-                u128::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
-                    lit: lit.to_string(),
-                    err,
-                })
-            }
-        }
-    }
+    from_literal! {u8, i8, u8_from_literal}
+    from_literal! {u16, i16, u16_from_literal}
+    from_literal! {u32, i32, u32_from_literal}
+    from_literal! {u64, i64, u64_from_literal}
+    from_literal! {u128, i128, u128_from_literal}
 
     fn expect_immediate_literal(&mut self) -> Result<ImmediateLiteral, ParserError> {
         self.idx += 1; // manual, to enable borrow of self inside match
@@ -582,8 +444,6 @@ impl<'input, Section> InnerParser<'input, Section> {
         }
     }
 }
-
-impl InnerParser<'_, Undefined> {}
 
 impl InnerParser<'_, Code> {
     fn parse_next_token(&mut self) {
@@ -861,7 +721,7 @@ impl InnerParser<'_, Code> {
 
         let mem_location = match self.tokens.get(self.idx) {
             Some(token) => match *token {
-                Token::Identifier(range) => self.expect_label_mem_location(range),
+                Token::Identifier(range) => self.expect_labeled_mem_location(range),
                 Token::OpenBracket => match self.expect_direct_mem_location() {
                     Ok(memory_location) => memory_location,
                     Err(err) => return self.add_error(err),
@@ -883,7 +743,7 @@ impl InnerParser<'_, Code> {
         self.instructions.push(instr);
     }
 
-    fn expect_label_mem_location(&mut self, range: Range) -> MemoryLocation {
+    fn expect_labeled_mem_location(&mut self, range: Range) -> MemoryLocation {
         self.unlinked_instructions
             .push(UnlinkedInstruction::new(self.instructions.len(), range));
         MemoryLocation::Labeled(u64::MAX)
