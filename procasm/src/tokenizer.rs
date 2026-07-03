@@ -16,6 +16,7 @@ pub enum Token {
     ClosedBracket,
     End,
     Directive(Range),
+    Newline,
 }
 
 impl Display for Token {
@@ -30,6 +31,7 @@ impl Display for Token {
             Self::ClosedBracket => write!(f, "ClosedBracket"),
             Self::End => write!(f, "End"),
             Self::Directive(range) => write!(f, "Section: {range:?}"),
+            Self::Newline => write!(f, "Newline"),
         }
     }
 }
@@ -108,6 +110,7 @@ impl Tokenizer<'_> {
             b':' => self.expect_colon(),
             b'[' => self.expect_open_bracket(),
             b']' => self.expect_closed_bracket(),
+            b'\n' => self.expect_newline(),
             b if b == b'-' || b.is_ascii_digit() => self.expect_numeric_literal(),
             b if Self::is_valid_char(b) => self.expect_identifier(),
             b if b.is_ascii_whitespace() => self.curr_idx += 1,
@@ -119,6 +122,12 @@ impl Tokenizer<'_> {
                 });
             }
         }
+    }
+
+    #[inline]
+    fn expect_newline(&mut self) {
+        self.tokens.push(Token::Newline);
+        self.curr_idx += 1;
     }
 
     /// Valid chars in labels and instructions
@@ -239,7 +248,7 @@ impl Tokenizer<'_> {
 
     fn expect_numeric_literal(&mut self) {
         let literal = if self.get_curr_byte() == b'0' && self.curr_idx + 1 != self.input_len {
-            self.curr_idx += 1; // skip uninteressting '0'
+            self.curr_idx += 1; // skip uninteresting '0'
             self.token_start_idx = self.curr_idx; // token_start can be moved, beginning '0' can be ignored
             match self.get_curr_byte() {
                 b'B' | b'b' => {
@@ -321,7 +330,7 @@ pub enum TokenizerError {
 mod test {
     use super::*;
     use pretty_assertions_sorted::assert_eq;
-    use std::panic;
+    use std::{panic, slice::Iter};
 
     #[test]
     fn test_run() {
@@ -339,10 +348,19 @@ mod test {
 
         let mut tokens = t.tokens.iter().into_iter();
 
+        fn expect_newline(tokens: &mut Iter<Token>) {
+            match tokens.next().unwrap() {
+                Token::Newline => {}
+                t => panic!("expected Newline, got {t}"),
+            }
+        }
+
+        expect_newline(&mut tokens);
         match tokens.next().unwrap() {
             Token::Directive(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "code"),
             t => panic!("expected Directive, got {t}"),
         }
+        expect_newline(&mut tokens);
         match tokens.next().unwrap() {
             Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "main"),
             t => panic!("expected Identifier (Label), got {t}"),
@@ -351,6 +369,7 @@ mod test {
             Token::Colon => {}
             t => panic!("expected Colon, got {t}"),
         }
+        expect_newline(&mut tokens);
         match tokens.next().unwrap() {
             Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "MOV"),
             t => panic!("expected Identifier (Instruction), got {t}"),
@@ -370,10 +389,12 @@ mod test {
             },
             t => panic!("expected ImmediateLiteral, got {t}"),
         }
+        expect_newline(&mut tokens);
         match tokens.next().unwrap() {
             Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("nop")),
             t => panic!("expected Identifier (Instruction), got {t}"),
         }
+        expect_newline(&mut tokens);
         match tokens.next().unwrap() {
             Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("MOV")),
             t => panic!("expected Identifier (Instruction), got {t}"),
@@ -393,6 +414,7 @@ mod test {
             },
             t => panic!("expected ImmediateLiteral, got {t}"),
         }
+        expect_newline(&mut tokens);
         match tokens.next().unwrap() {
             Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("Mul")),
             t => panic!("expected Identifier (Instruction), got {t}"),
@@ -409,6 +431,7 @@ mod test {
             Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("r256")),
             t => panic!("expected Identifier (Register), got {t}"),
         }
+        expect_newline(&mut tokens);
         match tokens.next().unwrap() {
             Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("JMP")),
             t => panic!("expected Identifier (Instruction), got {t}"),

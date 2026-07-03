@@ -88,6 +88,7 @@ pub struct Data;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Undefined;
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum Section {
     Code,
     Data,
@@ -142,11 +143,30 @@ impl<'input> Parser<'input> {
             Self::Code(p) => p.get_token().copied(),
             Self::Data(p) => p.get_token().copied(),
             Self::Bss(p) => p.get_token().copied(),
-        };
+        }
+        .expect("This function is never called with an invalid idx {}");
 
         match current_token {
-            Some(Token::Directive(range)) => self.change_section(range),
-            Some(t) => match self {
+            Token::Directive(range) => self.change_section(range),
+            Token::Newline => match self {
+                Self::Undefined(mut p) => {
+                    p.idx += 1;
+                    Self::Undefined(p)
+                }
+                Self::Code(mut p) => {
+                    p.idx += 1;
+                    Self::Code(p)
+                }
+                Self::Data(mut p) => {
+                    p.idx += 1;
+                    Self::Data(p)
+                }
+                Self::Bss(mut p) => {
+                    p.idx += 1;
+                    Self::Bss(p)
+                }
+            },
+            t => match self {
                 Self::Undefined(mut p) => {
                     p.add_error(ParserError::InvalidToken {
                         idx: p.idx,
@@ -172,7 +192,6 @@ impl<'input> Parser<'input> {
                     Self::Bss(p)
                 }
             },
-            None => unreachable!("This function is never called with an invalid idx"),
         }
     }
 
@@ -223,8 +242,8 @@ impl<'input> Parser<'input> {
     #[must_use]
     fn change_section(self, range: Range) -> Self {
         macro_rules! change_and_advance {
-            ($parser:expr, $variant:ident, $method:ident) => {{
-                let mut next = $parser.$method();
+            ($parser:expr, $variant:ident) => {{
+                let mut next = $parser.transition();
                 next.idx += 1;
 
                 Self::$variant(next)
@@ -243,12 +262,12 @@ impl<'input> Parser<'input> {
         }
 
         macro_rules! change_section {
-            ($variant:ident, $method:ident) => {
+            ($variant:ident) => {
                 match self {
-                    Self::Undefined(p) => change_and_advance!(p, $variant, $method),
-                    Self::Code(p) => change_and_advance!(p, $variant, $method),
-                    Self::Data(p) => change_and_advance!(p, $variant, $method),
-                    Self::Bss(p) => change_and_advance!(p, $variant, $method),
+                    Self::Undefined(p) => change_and_advance!(p, $variant),
+                    Self::Code(p) => change_and_advance!(p, $variant),
+                    Self::Data(p) => change_and_advance!(p, $variant),
+                    Self::Bss(p) => change_and_advance!(p, $variant),
                 }
             };
         }
@@ -261,9 +280,9 @@ impl<'input> Parser<'input> {
         };
 
         match section {
-            Section::Code => change_section!(Code, into_code),
-            Section::Data => change_section!(Data, into_data),
-            Section::Bss => change_section!(Bss, into_bss),
+            Section::Code => change_section!(Code),
+            Section::Data => change_section!(Data),
+            Section::Bss => change_section!(Bss),
             Section::Invalid(directive) => match self {
                 Self::Undefined(mut p) => error_and_advance!(p, Undefined, directive), // No directives other then sections allowed when section is still undefined
                 Self::Code(mut p) => error_and_advance!(p, Code, directive), // No directives allowed inside code sections
@@ -296,7 +315,7 @@ impl<'input> Parser<'input> {
 }
 
 macro_rules! from_literal {
-    ($unsigned:ty, $signed:ty, $fn_name: ident) => {
+    ($unsigned:ty, $fn_name: ident) => {
         #[doc = concat!("Parse an `ImmediateLiteral` into an `", stringify!($unsigned), "`.")]
         fn $fn_name(&self, lit: ImmediateLiteral) -> Result<$unsigned, ParserError> {
             match lit {
@@ -310,12 +329,15 @@ macro_rules! from_literal {
                 }
                 ImmediateLiteral::Decimal(range) => {
                     let lit = String::from_utf8_lossy(&self.input[range]);
-                    lit.parse::<$signed>() // first parse as signed to include negative nums
-                        .map(|val| val as $unsigned) // then cast to unsigned
-                        .map_err(|err| ParserError::LiteralParsing {
-                            lit: lit.to_string(),
-                            err,
-                        })
+                    if let Some(lit) = lit.strip_prefix('-') {
+                        lit.parse::<$unsigned>().map(<$unsigned>::wrapping_neg)
+                    } else {
+                        lit.parse()
+                    }
+                    .map_err(|err| ParserError::LiteralParsing {
+                        lit: lit.to_string(),
+                        err,
+                    })
                 }
                 ImmediateLiteral::Hexadecimal(range) => {
                     let lit = String::from_utf8_lossy(&self.input[range]);
@@ -352,45 +374,8 @@ pub struct InnerParser<'input, Section = Undefined> {
 }
 
 impl<'input, Section> InnerParser<'input, Section> {
-    #[inline]
     #[must_use]
-    fn into_code(self) -> InnerParser<'input, Code> {
-        InnerParser {
-            tokens: self.tokens,
-            instructions: self.instructions,
-            labels: self.labels,
-            unlinked_instructions: self.unlinked_instructions,
-            data: self.data,
-            bss: self.bss,
-            errors: self.errors,
-            idx: self.idx,
-            input: self.input,
-            end_parsing: self.end_parsing,
-            _current_section: PhantomData,
-        }
-    }
-
-    #[inline]
-    #[must_use]
-    fn into_data(self) -> InnerParser<'input, Data> {
-        InnerParser {
-            tokens: self.tokens,
-            instructions: self.instructions,
-            labels: self.labels,
-            unlinked_instructions: self.unlinked_instructions,
-            data: self.data,
-            bss: self.bss,
-            errors: self.errors,
-            idx: self.idx,
-            input: self.input,
-            end_parsing: self.end_parsing,
-            _current_section: PhantomData,
-        }
-    }
-
-    #[inline]
-    #[must_use]
-    fn into_bss(self) -> InnerParser<'input, Bss> {
+    fn transition<S>(self) -> InnerParser<'input, S> {
         InnerParser {
             tokens: self.tokens,
             instructions: self.instructions,
@@ -414,20 +399,37 @@ impl<'input, Section> InnerParser<'input, Section> {
 
     /// Returns the next token if available.
     #[inline]
-    fn peak_token(&self) -> Option<&'_ Token> {
+    fn peek_token(&self) -> Option<&'_ Token> {
         self.tokens.get(self.idx + 1)
     }
 
     #[inline]
     fn add_error(&mut self, err: ParserError) {
         self.errors.get_or_insert_default().push(err);
+        self.skip_to_next_line();
     }
 
-    from_literal! {u8, i8, u8_from_literal}
-    from_literal! {u16, i16, u16_from_literal}
-    from_literal! {u32, i32, u32_from_literal}
-    from_literal! {u64, i64, u64_from_literal}
-    from_literal! {u128, i128, u128_from_literal}
+    #[inline]
+    fn skip_to_next_line(&mut self) {
+        self.idx += 1;
+        while let Some(token) = self.get_token() {
+            match token {
+                Token::Newline => break,
+                Token::End => {
+                    self.end_parsing = true;
+                    break;
+                }
+                _ => {}
+            }
+            self.idx += 1;
+        }
+    }
+
+    from_literal! {u8,  u8_from_literal}
+    from_literal! {u16, u16_from_literal}
+    from_literal! {u32, u32_from_literal}
+    from_literal! {u64, u64_from_literal}
+    from_literal! {u128, u128_from_literal}
 
     fn expect_immediate_literal(&mut self) -> Result<ImmediateLiteral, ParserError> {
         self.idx += 1; // manual, to enable borrow of self inside match
@@ -451,14 +453,18 @@ impl InnerParser<'_, Code> {
             Some(t) => match t {
                 Token::Identifier(range) => {
                     // At the start of a new line only labels and instructions are valid identifiers
-                    if let Some(token) = self.peak_token()
+                    let res = if let Some(token) = self.peek_token()
                         && *token == Token::Colon
                     {
-                        self.parse_label(*range);
+                        self.parse_label(*range)
                     } else {
-                        self.parse_instruction(&self.input[range]);
+                        self.parse_instruction(&self.input[range])
+                    };
+                    if let Err(err) = res {
+                        self.add_error(err);
                     }
                 }
+                Token::Newline => {}
                 Token::End => self.end_parsing = true,
                 token => self.add_error(ParserError::InvalidToken {
                     idx: self.idx,
@@ -470,41 +476,43 @@ impl InnerParser<'_, Code> {
         }
     }
 
-    fn parse_label(&mut self, range: Range) {
+    fn parse_label(&mut self, range: Range) -> Result<(), ParserError> {
         if let Some(old_instruction_idx) = self.labels.insert(&self.input[range], self.instructions.len() as u64) {
-            self.add_error(ParserError::DuplicateLabel {
+            Err(ParserError::DuplicateLabel {
                 idx: self.instructions.len(),
                 old_idx: old_instruction_idx,
-            });
+            })?;
         }
         self.idx += 1; // Skip the colon after label
+        Ok(())
     }
 
-    fn parse_instruction(&mut self, instruction: &[u8]) {
-        match instruction.try_into() {
-            Ok(inst) => match inst {
-                ASMInstruction::NoArg(inst) => self.instructions.push(match inst {
+    fn parse_instruction(&mut self, instruction: &[u8]) -> Result<(), ParserError> {
+        let inst = instruction.try_into().map_err(|_| ParserError::UnknownInstruction {
+            idx: self.idx,
+            inst: string_from_u8_slice(instruction),
+        })?;
+        match inst {
+            ASMInstruction::NoArg(inst) => {
+                self.instructions.push(match inst {
                     ASMNoArgInstruction::Nop => Instruction::Nop,
                     ASMNoArgInstruction::Ret => Instruction::Ret,
-                }),
-                ASMInstruction::RegLabel(inst) => self.expect_reg_label_instruction(inst),
-                ASMInstruction::RegOperand(inst) => self.expect_reg_operand_instruction(inst),
-                ASMInstruction::Jump(inst) => self.expect_destination(inst),
-                ASMInstruction::TwoOperand(inst) => self.expect_two_operand_instruction(inst),
-                ASMInstruction::SingleOperand(inst) => self.expect_single_operand_instruction(inst),
-                ASMInstruction::SingleReg(inst) => self.expect_single_reg_instruction(inst),
-                ASMInstruction::Rotate(inst) => self.expect_rotate_instruction(inst),
-                ASMInstruction::Shift(inst) => self.expect_shift_instruction(inst),
-                ASMInstruction::LoadOrStore(inst) => self.expect_load_or_store_instruction(inst),
-            },
-            Err(()) => self.add_error(ParserError::UnknownInstruction {
-                idx: self.idx,
-                inst: string_from_u8_slice(instruction),
-            }),
+                });
+                Ok(())
+            }
+            ASMInstruction::RegLabel(inst) => self.expect_reg_label_instruction(inst),
+            ASMInstruction::RegOperand(inst) => self.expect_reg_operand_instruction(inst),
+            ASMInstruction::Jump(inst) => self.expect_destination(inst),
+            ASMInstruction::TwoOperand(inst) => self.expect_two_operand_instruction(inst),
+            ASMInstruction::SingleOperand(inst) => self.expect_single_operand_instruction(inst),
+            ASMInstruction::SingleReg(inst) => self.expect_single_reg_instruction(inst),
+            ASMInstruction::Rotate(inst) => self.expect_rotate_instruction(inst),
+            ASMInstruction::Shift(inst) => self.expect_shift_instruction(inst),
+            ASMInstruction::LoadOrStore(inst) => self.expect_load_or_store_instruction(inst),
         }
     }
 
-    fn expect_destination(&mut self, instr: ASMJumpInstruction) {
+    fn expect_destination(&mut self, instr: ASMJumpInstruction) -> Result<(), ParserError> {
         self.idx += 1;
 
         match self.tokens.get(self.idx) {
@@ -513,13 +521,14 @@ impl InnerParser<'_, Code> {
                     .push(UnlinkedInstruction::new(self.instructions.len(), *range));
                 self.instructions
                     .push(Instruction::from_jump_instruction(instr, u64::MAX));
+                Ok(())
             }
-            Some(token) => self.add_error(ParserError::InvalidToken {
+            Some(token) => Err(ParserError::InvalidToken {
                 idx: self.idx,
                 expected: "Identifier (Label)",
                 got: *token,
             }),
-            None => self.add_error(ParserError::TokenNotFound { idx: self.idx }),
+            None => Err(ParserError::TokenNotFound { idx: self.idx }),
         }
     }
 
@@ -569,16 +578,9 @@ impl InnerParser<'_, Code> {
     }
 
     // _isntr may be used in future if there are other instructions like adr
-    fn expect_reg_label_instruction(&mut self, _instr: ASMRegLabelInstruction) {
-        let reg = match self.expect_register() {
-            Ok(reg) => reg,
-            Err(err) => return self.add_error(err),
-        };
-
-        if let Err(err) = self.expect_comma() {
-            return self.add_error(err);
-        }
-
+    fn expect_reg_label_instruction(&mut self, _instr: ASMRegLabelInstruction) -> Result<(), ParserError> {
+        let reg = self.expect_register()?;
+        self.expect_comma()?;
         self.idx += 1;
 
         match self.tokens.get(self.idx) {
@@ -586,164 +588,98 @@ impl InnerParser<'_, Code> {
                 self.unlinked_instructions
                     .push(UnlinkedInstruction::new(self.instructions.len(), *range));
                 self.instructions.push(Instruction::Adr { reg, addr: u64::MAX });
+                Ok(())
             }
-            Some(token) => self.add_error(ParserError::InvalidToken {
+            Some(token) => Err(ParserError::InvalidToken {
                 idx: self.idx,
                 expected: "Identifier (Label)",
                 got: *token,
             }),
-            None => self.add_error(ParserError::TokenNotFound { idx: self.idx }),
+            None => Err(ParserError::TokenNotFound { idx: self.idx }),
         }
     }
 
-    fn expect_reg_operand_instruction(&mut self, instr: ASMRegOperandInstruction) {
-        let acc = match self.expect_register() {
-            Ok(reg) => reg,
-            Err(err) => return self.add_error(err),
-        };
-
-        if let Err(err) = self.expect_comma() {
-            return self.add_error(err);
-        }
-
-        let operand = match self.expect_operand() {
-            Ok(op) => op,
-            Err(err) => return self.add_error(err),
-        };
-
+    fn expect_reg_operand_instruction(&mut self, instr: ASMRegOperandInstruction) -> Result<(), ParserError> {
+        let acc = self.expect_register()?;
+        self.expect_comma()?;
+        let operand = self.expect_operand()?;
         self.instructions
             .push(Instruction::from_reg_operand_instruction(instr, acc, operand));
+        Ok(())
     }
 
-    fn expect_single_reg_instruction(&mut self, instr: ASMSingleRegInstruction) {
-        let reg = match self.expect_register() {
-            Ok(reg) => reg,
-            Err(err) => return self.add_error(err),
-        };
-
+    fn expect_single_reg_instruction(&mut self, instr: ASMSingleRegInstruction) -> Result<(), ParserError> {
+        let reg = self.expect_register()?;
         self.instructions
             .push(Instruction::from_single_reg_instruction(instr, reg));
+        Ok(())
     }
 
-    fn expect_single_operand_instruction(&mut self, instr: ASMSingleOperandInstruction) {
-        let operand = match self.expect_operand() {
-            Ok(op) => op,
-            Err(err) => return self.add_error(err),
-        };
-
+    fn expect_single_operand_instruction(&mut self, instr: ASMSingleOperandInstruction) -> Result<(), ParserError> {
+        let operand = self.expect_operand()?;
         self.instructions
             .push(Instruction::from_single_operand_instruction(instr, operand));
+        Ok(())
     }
 
-    fn expect_two_operand_instruction(&mut self, instr: ASMTwoOperandInstruction) {
-        let lhs = match self.expect_operand() {
-            Ok(op) => op,
-            Err(err) => return self.add_error(err),
-        };
-
-        if let Err(err) = self.expect_comma() {
-            return self.add_error(err);
-        }
-
-        let rhs = match self.expect_operand() {
-            Ok(op) => op,
-            Err(err) => return self.add_error(err),
-        };
-
+    fn expect_two_operand_instruction(&mut self, instr: ASMTwoOperandInstruction) -> Result<(), ParserError> {
+        let lhs = self.expect_operand()?;
+        self.expect_comma()?;
+        let rhs = self.expect_operand()?;
         self.instructions
             .push(Instruction::from_two_operand_instruction(instr, lhs, rhs));
+        Ok(())
     }
 
-    fn expect_shift_instruction(&mut self, instr: ASMShiftInstruction) {
-        let register = match self.expect_register() {
-            Ok(reg) => reg,
-            Err(err) => return self.add_error(err),
-        };
-
-        if let Err(err) = self.expect_comma() {
-            return self.add_error(err);
-        }
-
-        let literal = match self.expect_immediate_literal() {
-            Ok(lit) => lit,
-            Err(err) => return self.add_error(err),
-        };
-
-        let word = match self.u64_from_literal(literal) {
-            Ok(word) => word,
-            Err(err) => return self.add_error(err),
-        };
-
+    fn expect_shift_instruction(&mut self, instr: ASMShiftInstruction) -> Result<(), ParserError> {
+        let register = self.expect_register()?;
+        self.expect_comma()?;
+        let literal = self.expect_immediate_literal()?;
+        let word = self.u64_from_literal(literal)?;
         self.instructions
             .push(Instruction::from_shift_instruction(instr, register, word));
+        Ok(())
     }
 
-    fn expect_rotate_instruction(&mut self, instr: ASMRotateInstruction) {
-        let register = match self.expect_register() {
-            Ok(reg) => reg,
-            Err(err) => return self.add_error(err),
-        };
-
-        if let Err(err) = self.expect_comma() {
-            return self.add_error(err);
-        }
-
-        let literal = match self.expect_immediate_literal() {
-            Ok(lit) => lit,
-            Err(err) => return self.add_error(err),
-        };
-
-        let literal = match self.u64_from_literal(literal) {
-            Ok(word) => word,
-            Err(err) => return self.add_error(err),
-        };
-
-        let literal: u32 = match literal.try_into() {
-            Ok(lit) => lit,
-            Err(err) => return self.add_error(ParserError::CannotConvertLiteralToU32 { literal, err }),
-        };
+    fn expect_rotate_instruction(&mut self, instr: ASMRotateInstruction) -> Result<(), ParserError> {
+        let register = self.expect_register()?;
+        self.expect_comma()?;
+        let literal = self.expect_immediate_literal()?;
+        let literal = self.u64_from_literal(literal)?;
+        let literal: u32 = literal
+            .try_into()
+            .map_err(|err| ParserError::CannotConvertLiteralToU32 { literal, err })?;
 
         self.instructions
             .push(Instruction::from_rotate_instruction(instr, register, literal));
+        Ok(())
     }
 
-    fn expect_load_or_store_instruction(&mut self, instr: ASMLoadOrStoreInstruction) {
-        let reg = match self.expect_register() {
-            Ok(reg) => reg,
-            Err(err) => return self.add_error(err),
-        };
-
-        if let Err(err) = self.expect_comma() {
-            return self.add_error(err);
-        }
-
+    fn expect_load_or_store_instruction(&mut self, instr: ASMLoadOrStoreInstruction) -> Result<(), ParserError> {
+        let reg = self.expect_register()?;
+        self.expect_comma()?;
         self.idx += 1;
 
         let mem_location = match self.tokens.get(self.idx) {
             Some(token) => match *token {
-                Token::Identifier(range) => self.expect_labeled_mem_location(range),
-                Token::OpenBracket => match self.expect_direct_mem_location() {
-                    Ok(memory_location) => memory_location,
-                    Err(err) => return self.add_error(err),
-                },
-                token => {
-                    return self.add_error(ParserError::InvalidToken {
-                        idx: self.idx,
-                        expected: "Label or Memory Location",
-                        got: token,
-                    });
-                }
-            },
-
-            None => return self.add_error(ParserError::TokenNotFound { idx: self.idx }),
+                Token::Identifier(range) => Ok(self.create_labeled_mem_location(range)),
+                Token::OpenBracket => self.expect_direct_mem_location(),
+                token => Err(ParserError::InvalidToken {
+                    idx: self.idx,
+                    expected: "Label or Memory Location",
+                    got: token,
+                }),
+            }?,
+            None => Err(ParserError::TokenNotFound { idx: self.idx })?,
         };
 
         let instr = Instruction::from_ldr_or_str_instruction(instr, reg, mem_location);
 
         self.instructions.push(instr);
+        Ok(())
     }
 
-    fn expect_labeled_mem_location(&mut self, range: Range) -> MemoryLocation {
+    fn create_labeled_mem_location(&mut self, range: Range) -> MemoryLocation {
         self.unlinked_instructions
             .push(UnlinkedInstruction::new(self.instructions.len(), range));
         MemoryLocation::Labeled(u64::MAX)
@@ -752,7 +688,7 @@ impl InnerParser<'_, Code> {
     fn expect_direct_mem_location(&mut self) -> Result<MemoryLocation, ParserError> {
         let base = self.expect_register()?;
 
-        let offset = if let Some(Token::Comma) = self.peak_token() {
+        let offset = if let Some(Token::Comma) = self.peek_token() {
             self.idx += 1; // skip comma
             self.expect_operand()?
         } else {
@@ -786,7 +722,12 @@ impl InnerParser<'_, Data> {
                 }
                 self.idx += 1; // Skip colon after label
             }
-            Token::Directive(directive) => self.parse_directive(&self.input[directive]),
+            Token::Directive(directive) => {
+                if let Err(err) = self.parse_directive(&self.input[directive]) {
+                    self.add_error(err);
+                }
+            }
+            Token::Newline => {}
             Token::End => self.end_parsing = true,
             token => self.add_error(ParserError::InvalidToken {
                 idx: self.idx,
@@ -796,7 +737,7 @@ impl InnerParser<'_, Data> {
         }
     }
 
-    fn parse_directive(&mut self, directive: &[u8]) {
+    fn parse_directive(&mut self, directive: &[u8]) -> Result<(), ParserError> {
         match directive {
             directive if directive.eq_ignore_ascii_case(b"byte") => self.parse_bytes(),
             directive if directive.eq_ignore_ascii_case(b"hword") => self.parse_hwords(),
@@ -804,7 +745,7 @@ impl InnerParser<'_, Data> {
             directive if directive.eq_ignore_ascii_case(b"dword") => self.parse_dwords(),
             directive if directive.eq_ignore_ascii_case(b"qword") => self.parse_qwords(),
             directive if directive.eq_ignore_ascii_case(b"ascii") => self.parse_ascii(),
-            directive => self.add_error(ParserError::InvalidDirective {
+            directive => Err(ParserError::InvalidDirective {
                 idx: self.idx,
                 directive: string_from_u8_slice(directive),
                 expected: "Only .byte, .hword, .word, .dword, .qword and .ascii are allowed in .data sections."
@@ -814,121 +755,112 @@ impl InnerParser<'_, Data> {
     }
 
     #[inline]
-    fn parse_bytes(&mut self) {
-        self.expect_byte();
+    fn parse_bytes(&mut self) -> Result<(), ParserError> {
+        self.expect_byte()?;
 
-        while let Some(Token::Comma) = self.peak_token() {
+        while let Some(Token::Comma) = self.peek_token() {
             self.idx += 1;
-            self.expect_byte();
+            self.expect_byte()?;
         }
+        Ok(())
     }
 
     #[inline]
-    fn parse_hwords(&mut self) {
-        self.expect_hword();
+    fn parse_hwords(&mut self) -> Result<(), ParserError> {
+        self.expect_hword()?;
 
-        while let Some(Token::Comma) = self.peak_token() {
+        while let Some(Token::Comma) = self.peek_token() {
             self.idx += 1;
-            self.expect_hword();
+            self.expect_hword()?;
         }
+        Ok(())
     }
 
     #[inline]
-    fn parse_words(&mut self) {
-        self.expect_word();
+    fn parse_words(&mut self) -> Result<(), ParserError> {
+        self.expect_word()?;
 
-        while let Some(Token::Comma) = self.peak_token() {
+        while let Some(Token::Comma) = self.peek_token() {
             self.idx += 1;
-            self.expect_word();
+            self.expect_word()?;
         }
+        Ok(())
     }
 
     #[inline]
-    fn parse_dwords(&mut self) {
-        self.expect_dword();
+    fn parse_dwords(&mut self) -> Result<(), ParserError> {
+        self.expect_dword()?;
 
-        while let Some(Token::Comma) = self.peak_token() {
+        while let Some(Token::Comma) = self.peek_token() {
             self.idx += 1;
-            self.expect_dword();
+            self.expect_dword()?;
         }
+        Ok(())
     }
 
     #[inline]
-    fn parse_qwords(&mut self) {
-        self.expect_qword();
+    fn parse_qwords(&mut self) -> Result<(), ParserError> {
+        self.expect_qword()?;
 
-        while let Some(Token::Comma) = self.peak_token() {
+        while let Some(Token::Comma) = self.peek_token() {
             self.idx += 1;
-            self.expect_qword();
+            self.expect_qword()?;
         }
+        Ok(())
     }
 
     #[inline]
-    fn expect_byte(&mut self) {
-        match self.expect_immediate_literal() {
-            Ok(lit) => match self.u8_from_literal(lit) {
-                Ok(word) => self.data.extend_from_slice(&word.to_le_bytes()),
-                Err(err) => self.add_error(err),
-            },
-            Err(err) => self.add_error(err),
-        }
+    fn expect_byte(&mut self) -> Result<(), ParserError> {
+        let lit = self.expect_immediate_literal()?;
+        let byte = self.u8_from_literal(lit)?;
+        self.data.extend_from_slice(&byte.to_le_bytes());
+        Ok(())
     }
 
     #[inline]
-    fn expect_hword(&mut self) {
-        match self.expect_immediate_literal() {
-            Ok(lit) => match self.u16_from_literal(lit) {
-                Ok(word) => self.data.extend_from_slice(&word.to_le_bytes()),
-                Err(err) => self.add_error(err),
-            },
-            Err(err) => self.add_error(err),
-        }
+    fn expect_hword(&mut self) -> Result<(), ParserError> {
+        let lit = self.expect_immediate_literal()?;
+        let hword = self.u16_from_literal(lit)?;
+        self.data.extend_from_slice(&hword.to_le_bytes());
+        Ok(())
     }
 
     #[inline]
-    fn expect_word(&mut self) {
-        match self.expect_immediate_literal() {
-            Ok(lit) => match self.u32_from_literal(lit) {
-                Ok(word) => self.data.extend_from_slice(&word.to_le_bytes()),
-                Err(err) => self.add_error(err),
-            },
-            Err(err) => self.add_error(err),
-        }
+    fn expect_word(&mut self) -> Result<(), ParserError> {
+        let lit = self.expect_immediate_literal()?;
+        let word = self.u32_from_literal(lit)?;
+        self.data.extend_from_slice(&word.to_le_bytes());
+        Ok(())
     }
 
     #[inline]
-    fn expect_dword(&mut self) {
-        match self.expect_immediate_literal() {
-            Ok(lit) => match self.u64_from_literal(lit) {
-                Ok(word) => self.data.extend_from_slice(&word.to_le_bytes()),
-                Err(err) => self.add_error(err),
-            },
-            Err(err) => self.add_error(err),
-        }
+    fn expect_dword(&mut self) -> Result<(), ParserError> {
+        let lit = self.expect_immediate_literal()?;
+        let dword = self.u64_from_literal(lit)?;
+        self.data.extend_from_slice(&dword.to_le_bytes());
+        Ok(())
     }
 
     #[inline]
-    fn expect_qword(&mut self) {
-        match self.expect_immediate_literal() {
-            Ok(lit) => match self.u128_from_literal(lit) {
-                Ok(word) => self.data.extend_from_slice(&word.to_le_bytes()),
-                Err(err) => self.add_error(err),
-            },
-            Err(err) => self.add_error(err),
-        }
+    fn expect_qword(&mut self) -> Result<(), ParserError> {
+        let lit = self.expect_immediate_literal()?;
+        let qword = self.u128_from_literal(lit)?;
+        self.data.extend_from_slice(&qword.to_le_bytes());
+        Ok(())
     }
 
     #[inline]
-    fn parse_ascii(&mut self) {
-        self.expect_string_literal();
+    fn parse_ascii(&mut self) -> Result<(), ParserError> {
+        self.expect_string_literal()?;
 
-        while let Some(Token::Comma) = self.peak_token() {
+        while let Some(Token::Comma) = self.peek_token() {
             self.idx += 1;
-            self.expect_string_literal();
+            self.expect_string_literal()?;
         }
+        Ok(())
     }
 
-    fn expect_string_literal(&mut self) {
+    fn expect_string_literal(&mut self) -> Result<(), ParserError> {
         self.idx += 1;
         let token = self.tokens.get(self.idx);
 
@@ -936,14 +868,15 @@ impl InnerParser<'_, Data> {
             Some(token) => match token {
                 Token::StringLiteral(lit) => {
                     self.data.extend(self.input[lit].iter().copied());
+                    Ok(())
                 }
-                token => self.add_error(ParserError::InvalidToken {
+                token => Err(ParserError::InvalidToken {
                     idx: self.idx,
                     expected: "ImmediateLiteral",
                     got: *token,
                 }),
             },
-            None => self.add_error(ParserError::TokenNotFound { idx: self.idx }),
+            None => Err(ParserError::TokenNotFound { idx: self.idx }),
         }
     }
 }
@@ -960,7 +893,12 @@ impl InnerParser<'_, Bss> {
                 }
                 self.idx += 1; // Skip colon after label
             }
-            Token::Directive(section) => self.parse_directive(&self.input[section]),
+            Token::Directive(section) => {
+                if let Err(err) = self.parse_directive(&self.input[section]) {
+                    self.add_error(err);
+                }
+            }
+            Token::Newline => {}
             Token::End => self.end_parsing = true,
             token => self.add_error(ParserError::InvalidToken {
                 idx: self.idx,
@@ -971,10 +909,10 @@ impl InnerParser<'_, Bss> {
     }
 
     #[inline]
-    fn parse_directive(&mut self, directive: &[u8]) {
+    fn parse_directive(&mut self, directive: &[u8]) -> Result<(), ParserError> {
         match directive {
             directive if directive.eq_ignore_ascii_case(b"space") => self.parse_space(),
-            directive => self.add_error(ParserError::InvalidDirective {
+            directive => Err(ParserError::InvalidDirective {
                 idx: self.idx,
                 directive: string_from_u8_slice(directive),
                 expected: "Only .space is allowed in .bss sections.".to_string(),
@@ -983,24 +921,22 @@ impl InnerParser<'_, Bss> {
     }
 
     #[inline]
-    fn parse_space(&mut self) {
-        self.expect_space();
+    fn parse_space(&mut self) -> Result<(), ParserError> {
+        self.expect_space()?;
 
-        while let Some(Token::Comma) = self.peak_token() {
+        while let Some(Token::Comma) = self.peek_token() {
             self.idx += 1;
-            self.expect_space();
+            self.expect_space()?;
         }
+        Ok(())
     }
 
     #[inline]
-    fn expect_space(&mut self) {
-        match self.expect_immediate_literal() {
-            Ok(lit) => match self.u64_from_literal(lit) {
-                Ok(space) => self.bss += space,
-                Err(err) => self.add_error(err),
-            },
-            Err(err) => self.add_error(err),
-        }
+    fn expect_space(&mut self) -> Result<(), ParserError> {
+        let lit = self.expect_immediate_literal()?;
+        let space = self.u64_from_literal(lit)?;
+        self.bss += space;
+        Ok(())
     }
 }
 
@@ -1020,9 +956,9 @@ pub enum ParserError {
         expected: &'static str,
         got: Token,
     },
-    #[error("Duplicate lable: First occurrence: {old_idx}, second occurrence {idx}")]
+    #[error("Duplicate label: First occurrence: {old_idx}, second occurrence {idx}")]
     DuplicateLabel { idx: usize, old_idx: u64 },
-    #[error("Unkown instruction at idx {idx}: {inst}")]
+    #[error("Unknown instruction at idx {idx}: {inst}")]
     UnknownInstruction { idx: usize, inst: String },
     #[error("Error while parsing register: {err}")]
     RegisterParsing {
@@ -1081,24 +1017,29 @@ mod test {
         }
 
         check!(Undefined, p);
+        p = p.step(); // skip Newline
         p = p.step();
         check!(Code, p);
+        p = p.step(); // skip Newline
         p = p.step();
         check!(Bss, p);
+        p = p.step(); // skip Newline
         p = p.step();
         check!(Data, p);
+        p = p.step(); // skip Newline
         p = p.step();
         check!(Bss, p);
+        p = p.step(); // skip Newline
         p = p.step();
         check!(Code, p);
+        p = p.step(); // skip Newline
         p = p.step();
         check!(Code, p);
-
         match p {
             Parser::Code(p) => assert_eq!(
                 p.errors.unwrap()[0],
                 ParserError::InvalidSection {
-                    idx: 5,
+                    idx: 11,
                     identifier: "Invalid".to_string()
                 }
             ),
