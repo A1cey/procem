@@ -1,0 +1,157 @@
+use ars::range::Range;
+
+use crate::{
+    instruction::directive::Directive,
+    parser::{
+        ParserError, ParserInput, ParserState,
+        combinators::{Error, Parser},
+    },
+    tokenizer::{ImmediateLiteral, Token},
+};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub(crate) struct IdentParser;
+
+impl<'input> Parser<'input> for IdentParser {
+    type Output = Range;
+
+    fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
+        match input.tokens.get(state.idx) {
+            Some(Token::Identifier(range)) => {
+                state.idx += 1;
+                Ok(*range)
+            }
+            Some(token) => Err(ParserError::InvalidToken {
+                idx: state.idx,
+                expected: "Mnemonic",
+                got: token.resolve(input.raw),
+            }),
+            None => Err(ParserError::TokenNotFound { idx: state.idx }),
+        }
+        .map_err(Error::NoMatch)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub(crate) struct EndParser;
+
+impl<'input> Parser<'input> for EndParser {
+    type Output = ();
+
+    fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
+        match input.tokens.get(state.idx) {
+            Some(Token::End) => {
+                state.idx += 1;
+                state.end = true;
+                Ok(())
+            }
+            Some(token) => Err(ParserError::InvalidToken {
+                idx: state.idx,
+                expected: "End",
+                got: token.resolve(input.raw),
+            }),
+            None => Err(ParserError::TokenNotFound { idx: state.idx }),
+        }
+        .map_err(Error::NoMatch)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub(crate) struct ImmediateLiteralParser;
+
+impl<'input> Parser<'input> for ImmediateLiteralParser {
+    type Output = ImmediateLiteral;
+
+    fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
+        match input.tokens.get(state.idx) {
+            Some(Token::ImmediateLiteral(lit)) => {
+                state.idx += 1;
+                Ok(*lit)
+            }
+            Some(token) => Err(ParserError::InvalidToken {
+                idx: state.idx,
+                expected: "ImmediateLiteral",
+                got: token.resolve(input.raw),
+            }),
+            None => Err(ParserError::TokenNotFound { idx: state.idx }),
+        }
+        .map_err(Error::NoMatch)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub(crate) struct StringLiteralParser;
+
+impl<'input> Parser<'input> for StringLiteralParser {
+    type Output = Range;
+
+    fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
+        match input.tokens.get(state.idx) {
+            Some(Token::StringLiteral(lit)) => {
+                state.idx += 1;
+                Ok(*lit)
+            }
+            Some(token) => Err(ParserError::InvalidToken {
+                idx: state.idx,
+                expected: "StringLiteral",
+                got: token.resolve(input.raw),
+            }),
+            None => Err(ParserError::TokenNotFound { idx: state.idx }),
+        }
+        .map_err(Error::NoMatch)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub(crate) struct DirectiveParser;
+
+impl<'input> Parser<'input> for DirectiveParser {
+    type Output = Directive;
+
+    fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
+        match input.tokens.get(state.idx) {
+            Some(Token::Directive(range)) => Directive::try_from(&input.raw[range])
+                .inspect(|_| state.idx += 1)
+                .map_err(Error::IncompleteMatch),
+            Some(token) => Err(Error::NoMatch(ParserError::InvalidToken {
+                idx: state.idx,
+                expected: stringify!($token),
+                got: token.resolve(input.raw),
+            })),
+            None => Err(Error::NoMatch(ParserError::TokenNotFound { idx: state.idx })),
+        }
+    }
+}
+
+macro_rules! simple_token_parser {
+    ($name: ident, $token: ident) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+        pub(crate) struct $name;
+
+        impl<'input> Parser<'input> for $name {
+            type Output = ();
+
+            fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
+                match input.tokens.get(state.idx) {
+                    Some(Token::$token) => {
+                        state.idx += 1;
+                        Ok(())
+                    }
+                    Some(token) => Err(ParserError::InvalidToken {
+                        idx: state.idx,
+                        expected: stringify!($token),
+                        got: token.resolve(input.raw),
+                    }),
+                    None => Err(ParserError::TokenNotFound { idx: state.idx }),
+                }
+                .map_err(Error::NoMatch)
+            }
+        }
+    };
+}
+
+simple_token_parser!(ColonParser, Colon);
+simple_token_parser!(CommaParser, Comma);
+simple_token_parser!(OpenBracketParser, OpenBracket);
+simple_token_parser!(ClosedBracketParser, ClosedBracket);
+simple_token_parser!(NewlineParser, Newline);

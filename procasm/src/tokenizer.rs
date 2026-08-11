@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 use thiserror::Error;
 
 use ars::range::Range;
@@ -19,19 +17,20 @@ pub enum Token {
     Newline,
 }
 
-impl Display for Token {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Token {
+    #[inline]
+    pub(crate) fn resolve(self, input: &[u8]) -> String {
         match self {
-            Self::Identifier(range) => write!(f, "Identifier: {range:?}"),
-            Self::ImmediateLiteral(literal) => write!(f, "Literal: {literal}"),
-            Self::StringLiteral(range) => write!(f, "String: {range:?}"),
-            Self::Comma => write!(f, "Comma"),
-            Self::Colon => write!(f, "Colon"),
-            Self::OpenBracket => write!(f, "OpenBracket"),
-            Self::ClosedBracket => write!(f, "ClosedBracket"),
-            Self::End => write!(f, "End"),
-            Self::Directive(range) => write!(f, "Section: {range:?}"),
-            Self::Newline => write!(f, "Newline"),
+            Self::Identifier(range) => format!("Identifier: '{}'", String::from_utf8_lossy(&input[range])),
+            Self::ImmediateLiteral(literal) => format!("ImmediateLiteral: {}", literal.resolve(input)),
+            Self::StringLiteral(range) => format!("StringLiteral: '{}'", String::from_utf8_lossy(&input[range])),
+            Self::Comma => "Comma".to_string(),
+            Self::Colon => "Colon".to_string(),
+            Self::OpenBracket => "OpenBracket".to_string(),
+            Self::ClosedBracket => "ClosedBracket".to_string(),
+            Self::End => "End".to_string(),
+            Self::Directive(range) => format!("Directive: '{}'", String::from_utf8_lossy(&input[range])),
+            Self::Newline => "Newline".to_string(),
         }
     }
 }
@@ -46,14 +45,15 @@ pub enum ImmediateLiteral {
     Char(u8),
 }
 
-impl Display for ImmediateLiteral {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl ImmediateLiteral {
+    #[inline]
+    pub(crate) fn resolve(self, input: &[u8]) -> String {
         match self {
-            Self::Decimal(range) => write!(f, "Decimal: {range:?}"),
-            Self::Binary(range) => write!(f, "Binary: {range:?}"),
-            Self::Hexadecimal(range) => write!(f, "Hexadecimal: {range:?}"),
-            Self::Octal(range) => write!(f, "Octal: {range:?}"),
-            Self::Char(c) => write!(f, "Char: {c}"),
+            Self::Decimal(range) => format!("Decimal: '{}'", String::from_utf8_lossy(&input[range])),
+            Self::Binary(range) => format!("Binary: '{}'", String::from_utf8_lossy(&input[range])),
+            Self::Hexadecimal(range) => format!("Hexadecimal: '{}'", String::from_utf8_lossy(&input[range])),
+            Self::Octal(range) => format!("Octal: '{}'", String::from_utf8_lossy(&input[range])),
+            Self::Char(c) => format!("Char: '{c}'"),
         }
     }
 }
@@ -65,10 +65,11 @@ pub struct Tokenizer<'input> {
     token_start_idx: usize,
     input: &'input [u8],
     input_len: usize,
-    errors: Option<Vec<TokenizerError>>,
+    errors: Vec<TokenizerError>,
 }
 
 impl Tokenizer<'_> {
+    #[inline]
     fn from(input: &[u8]) -> Tokenizer<'_> {
         Tokenizer {
             tokens: Vec::with_capacity(input.len()),
@@ -76,7 +77,7 @@ impl Tokenizer<'_> {
             token_start_idx: 0,
             input_len: input.len(),
             input,
-            errors: None,
+            errors: Vec::new(),
         }
     }
 
@@ -86,10 +87,25 @@ impl Tokenizer<'_> {
 
         tokenizer.run();
 
-        match tokenizer.errors {
-            Some(errors) => Err(errors),
-            None => Ok(tokenizer.tokens),
+        tokenizer.finalize()
+    }
+
+    fn finalize(mut self) -> Result<Vec<Token>, Vec<TokenizerError>> {
+        if !self.errors.is_empty() {
+            Err(self.errors)?
         }
+
+        // last token must be `End`
+        match self.tokens.last() {
+            Some(Token::End) => {}
+            Some(Token::Newline) => self.tokens.push(Token::End),
+            // Add the `End` on a new line
+            Some(_) => self.tokens.extend_from_slice(&[Token::Newline, Token::End]),
+            // If there is no input just a simple `End`
+            None => self.tokens.push(Token::End),
+        };
+
+        Ok(self.tokens)
     }
 
     fn run(&mut self) {
@@ -138,7 +154,7 @@ impl Tokenizer<'_> {
 
     #[inline]
     fn add_error(&mut self, err: TokenizerError) {
-        self.errors.get_or_insert_default().push(err);
+        self.errors.push(err);
     }
 
     fn get_curr_byte(&self) -> u8 {
@@ -283,11 +299,19 @@ impl Tokenizer<'_> {
                         self.curr_idx + 1,        // exclusive
                     ))
                 }
-                b if b.is_ascii_whitespace() || b.is_ascii_digit() => {
+                b if b.is_ascii_whitespace() => {
+                    self.curr_idx -= 1;
+                    // space immediately behind starting 0
+                    ImmediateLiteral::Decimal(Range(
+                        self.curr_idx,
+                        self.curr_idx + 1, // exclusive
+                    ))
+                }
+                b if b.is_ascii_digit() => {
                     self.set_curr_idx_to_immediate_literal_end();
                     ImmediateLiteral::Decimal(Range(
                         self.token_start_idx - 1, // if only '0' then we need to include it for '042' the '0' could have been ignored
-                        self.curr_idx,
+                        self.curr_idx + 1,        // exclusive
                     ))
                 }
 
@@ -295,7 +319,7 @@ impl Tokenizer<'_> {
             }
         } else {
             if self.get_curr_byte() == b'-' {
-                self.curr_idx += 1; // skip '-'
+                self.curr_idx += 1; // skip starting '-'
             }
 
             self.set_curr_idx_to_immediate_literal_end();
@@ -333,7 +357,7 @@ mod test {
     use std::{panic, slice::Iter};
 
     #[test]
-    fn test_run() {
+    fn some_code() {
         let asm = b"
         .code
         main:
@@ -348,112 +372,271 @@ mod test {
 
         let mut tokens = t.tokens.iter().into_iter();
 
-        fn expect_newline(tokens: &mut Iter<Token>) {
+        fn expect_newline(asm: &[u8], tokens: &mut Iter<Token>) {
             match tokens.next().unwrap() {
                 Token::Newline => {}
-                t => panic!("expected Newline, got {t}"),
+                t => panic!("expected Newline, got {}", t.resolve(asm)),
             }
         }
 
-        expect_newline(&mut tokens);
+        expect_newline(asm, &mut tokens);
         match tokens.next().unwrap() {
             Token::Directive(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "code"),
-            t => panic!("expected Directive, got {t}"),
+            t => panic!("expected Directive, got {}", t.resolve(asm)),
         }
-        expect_newline(&mut tokens);
+        expect_newline(asm, &mut tokens);
         match tokens.next().unwrap() {
             Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "main"),
-            t => panic!("expected Identifier (Label), got {t}"),
+            t => panic!("expected Identifier (Label), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
             Token::Colon => {}
-            t => panic!("expected Colon, got {t}"),
+            t => panic!("expected Colon, got {}", t.resolve(asm)),
         }
-        expect_newline(&mut tokens);
+        expect_newline(asm, &mut tokens);
         match tokens.next().unwrap() {
             Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "MOV"),
-            t => panic!("expected Identifier (Instruction), got {t}"),
+            t => panic!("expected Identifier (Instruction), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
             Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("R0")),
-            t => panic!("expected Identifier (Register), got {t}"),
+            t => panic!("expected Identifier (Register), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
             Token::Comma => {}
-            t => panic!("expected Comma, got {t}"),
+            t => panic!("expected Comma, got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
             Token::ImmediateLiteral(l) => match l {
                 ImmediateLiteral::Decimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "5"),
-                t => panic!("expected Decimal, got {t}"),
+                t => panic!("expected Decimal, got {}", t.resolve(asm)),
             },
-            t => panic!("expected ImmediateLiteral, got {t}"),
+            t => panic!("expected ImmediateLiteral, got {}", t.resolve(asm)),
         }
-        expect_newline(&mut tokens);
+        expect_newline(asm, &mut tokens);
         match tokens.next().unwrap() {
             Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("nop")),
-            t => panic!("expected Identifier (Instruction), got {t}"),
+            t => panic!("expected Identifier (Instruction), got {}", t.resolve(asm)),
         }
-        expect_newline(&mut tokens);
+        expect_newline(asm, &mut tokens);
         match tokens.next().unwrap() {
             Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("MOV")),
-            t => panic!("expected Identifier (Instruction), got {t}"),
+            t => panic!("expected Identifier (Instruction), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
             Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("R256")),
-            t => panic!("expected Identifier (Register), got {t}"),
+            t => panic!("expected Identifier (Register), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
             Token::Comma => {}
-            t => panic!("expected Comma, got {t}"),
+            t => panic!("expected Comma, got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
             Token::ImmediateLiteral(l) => match l {
                 ImmediateLiteral::Hexadecimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("Bc2a")),
-                t => panic!("expected Hexadecimal, got {t}"),
+                t => panic!("expected Hexadecimal, got {}", t.resolve(asm)),
             },
-            t => panic!("expected ImmediateLiteral, got {t}"),
+            t => panic!("expected ImmediateLiteral, got {}", t.resolve(asm)),
         }
-        expect_newline(&mut tokens);
+        expect_newline(asm, &mut tokens);
         match tokens.next().unwrap() {
             Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("Mul")),
-            t => panic!("expected Identifier (Instruction), got {t}"),
+            t => panic!("expected Identifier (Instruction), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
             Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("R0")),
-            t => panic!("expected Identifier (Register), got {t}"),
+            t => panic!("expected Identifier (Register), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
             Token::Comma => {}
-            t => panic!("expected Comma, got {t}"),
+            t => panic!("expected Comma, got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
             Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("r256")),
-            t => panic!("expected Identifier (Register), got {t}"),
+            t => panic!("expected Identifier (Register), got {}", t.resolve(asm)),
         }
-        expect_newline(&mut tokens);
+        expect_newline(asm, &mut tokens);
         match tokens.next().unwrap() {
             Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("JMP")),
-            t => panic!("expected Identifier (Instruction), got {t}"),
+            t => panic!("expected Identifier (Instruction), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
             Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "main"),
-            t => panic!("expected Identifier (Label), got {t}"),
+            t => panic!("expected Identifier (Label), got {}", t.resolve(asm)),
         }
     }
 
     #[test]
-    fn test_add_error() {
-        let asm: [u8; 0] = [];
-        let mut t = Tokenizer::from(asm.as_slice());
-        let err = TokenizerError::TokenStart { start: ' ', idx: 0 };
-        assert!(t.errors.is_none());
-        t.add_error(err);
-        assert_eq!(t.errors.unwrap(), vec![err.into()]);
+    fn some_code_2() {
+        let asm = b"
+        .code
+        _start:
+            mov R0, 0
+            mov R1, 5
+        loop:
+            add R0, 1
+            subs R1, 1
+            jnz loop
+        ";
+
+        let tokens = Tokenizer::tokenize(asm.as_slice()).unwrap();
+
+        println!("{tokens:?}");
+
+        let mut tokens = tokens.iter().into_iter();
+
+        fn expect_newline(asm: &[u8], tokens: &mut Iter<Token>) {
+            match tokens.next().unwrap() {
+                Token::Newline => {}
+                t => panic!("expected Newline, got {}", t.resolve(asm)),
+            }
+        }
+
+        expect_newline(asm, &mut tokens);
+
+        match tokens.next().unwrap() {
+            Token::Directive(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "code"),
+            t => panic!("expected Directive, got {}", t.resolve(asm)),
+        }
+        expect_newline(asm, &mut tokens);
+
+        match tokens.next().unwrap() {
+            Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "_start"),
+            t => panic!("expected Identifier (Label), got {}", t.resolve(asm)),
+        }
+        match tokens.next().unwrap() {
+            Token::Colon => {}
+            t => panic!("expected Colon, got {}", t.resolve(asm)),
+        }
+        println!("{}", tokens.clone().next().unwrap().resolve(asm));
+        expect_newline(asm, &mut tokens);
+        println!("{}", tokens.clone().next().unwrap().resolve(asm));
+        match tokens.next().unwrap() {
+            Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "mov"),
+            t => panic!("expected Identifier (Instruction), got {}", t.resolve(asm)),
+        }
+        println!("{}", tokens.clone().next().unwrap().resolve(asm));
+        match tokens.next().unwrap() {
+            Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("R0")),
+            t => panic!("expected Identifier (Register), got {}", t.resolve(asm)),
+        }
+        println!("{}", tokens.clone().next().unwrap().resolve(asm));
+        match tokens.next().unwrap() {
+            Token::Comma => {}
+            t => panic!("expected Comma, got {}", t.resolve(asm)),
+        }
+        println!("3: {}", tokens.clone().next().unwrap().resolve(asm));
+        match tokens.next().unwrap() {
+            Token::ImmediateLiteral(l) => match l {
+                ImmediateLiteral::Decimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "0"),
+                t => panic!("expected Decimal, got {}", t.resolve(asm)),
+            },
+            t => panic!("expected ImmediateLiteral, got {}", t.resolve(asm)),
+        }
+        println!("2: {}", tokens.clone().next().unwrap().resolve(asm));
+        expect_newline(asm, &mut tokens);
+        println!("1: {}", tokens.clone().next().unwrap().resolve(asm));
+        match tokens.next().unwrap() {
+            Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "mov"),
+            t => panic!("expected Identifier (Instruction), got {}", t.resolve(asm)),
+        }
+        match tokens.next().unwrap() {
+            Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("R1")),
+            t => panic!("expected Identifier (Register), got {}", t.resolve(asm)),
+        }
+        match tokens.next().unwrap() {
+            Token::Comma => {}
+            t => panic!("expected Comma, got {}", t.resolve(asm)),
+        }
+        match tokens.next().unwrap() {
+            Token::ImmediateLiteral(l) => match l {
+                ImmediateLiteral::Decimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "5"),
+                t => panic!("expected Decimal, got {}", t.resolve(asm)),
+            },
+            t => panic!("expected ImmediateLiteral, got {}", t.resolve(asm)),
+        }
+        expect_newline(asm, &mut tokens);
+
+        match tokens.next().unwrap() {
+            Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "loop"),
+            t => panic!("expected Identifier (Label), got {}", t.resolve(asm)),
+        }
+        match tokens.next().unwrap() {
+            Token::Colon => {}
+            t => panic!("expected Colon, got {}", t.resolve(asm)),
+        }
+        expect_newline(asm, &mut tokens);
+
+        match tokens.next().unwrap() {
+            Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "add"),
+            t => panic!("expected Identifier (Instruction), got {}", t.resolve(asm)),
+        }
+        match tokens.next().unwrap() {
+            Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("R0")),
+            t => panic!("expected Identifier (Register), got {}", t.resolve(asm)),
+        }
+        match tokens.next().unwrap() {
+            Token::Comma => {}
+            t => panic!("expected Comma, got {}", t.resolve(asm)),
+        }
+        match tokens.next().unwrap() {
+            Token::ImmediateLiteral(l) => match l {
+                ImmediateLiteral::Decimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "1"),
+                t => panic!("expected Decimal, got {}", t.resolve(asm)),
+            },
+            t => panic!("expected ImmediateLiteral, got {}", t.resolve(asm)),
+        }
+        expect_newline(asm, &mut tokens);
+
+        match tokens.next().unwrap() {
+            Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "subs"),
+            t => panic!("expected Identifier (Instruction), got {}", t.resolve(asm)),
+        }
+        match tokens.next().unwrap() {
+            Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("R1")),
+            t => panic!("expected Identifier (Register), got {}", t.resolve(asm)),
+        }
+        match tokens.next().unwrap() {
+            Token::Comma => {}
+            t => panic!("expected Comma, got {}", t.resolve(asm)),
+        }
+        match tokens.next().unwrap() {
+            Token::ImmediateLiteral(l) => match l {
+                ImmediateLiteral::Decimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), "1"),
+                t => panic!("expected Decimal, got {}", t.resolve(asm)),
+            },
+            t => panic!("expected ImmediateLiteral, got {}", t.resolve(asm)),
+        }
+        expect_newline(asm, &mut tokens);
+
+        match tokens.next().unwrap() {
+            Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("jnz")),
+            t => panic!("expected Identifier (Instruction), got {}", t.resolve(asm)),
+        }
+        match tokens.next().unwrap() {
+            Token::Identifier(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("loop")),
+            t => panic!("expected Identifier (Instruction), got {}", t.resolve(asm)),
+        }
+        expect_newline(asm, &mut tokens);
+
+        match tokens.next().unwrap() {
+            Token::End => {}
+            t => panic!("expected End, got {}", t.resolve(asm)),
+        }
     }
 
     #[test]
-    fn test_get_curr_byte() {
+    fn add_error() {
+        let asm: [u8; 0] = [];
+        let mut t = Tokenizer::from(asm.as_slice());
+        let err = TokenizerError::TokenStart { start: ' ', idx: 0 };
+        assert!(t.errors.is_empty());
+        t.add_error(err);
+        assert_eq!(t.errors, vec![err.into()]);
+    }
+
+    #[test]
+    fn get_curr_byte() {
         let asm = b".main mov";
         let t = Tokenizer::from(asm.as_slice());
         assert_eq!(t.get_curr_byte(), b'.');
@@ -461,7 +644,7 @@ mod test {
 
     #[test]
     #[should_panic]
-    fn test_get_curr_byte_out_of_bounds() {
+    fn get_curr_byte_out_of_bounds() {
         let asm = b"main:";
         let mut t = Tokenizer::from(asm.as_slice());
         assert_eq!(t.get_curr_byte(), b'm');
@@ -470,7 +653,7 @@ mod test {
     }
 
     #[test]
-    fn test_expect_label() {
+    fn expect_label() {
         let asm = b"main:";
         let mut t = Tokenizer::from(asm.as_slice());
         t.run();
@@ -496,7 +679,7 @@ mod test {
     }
 
     #[test]
-    fn test_expect_directive() {
+    fn expect_directive() {
         let asm = b".code";
         let mut t = Tokenizer::from(asm.as_slice());
         t.expect_directive();
@@ -514,7 +697,7 @@ mod test {
     }
 
     #[test]
-    fn test_expect_end() {
+    fn expect_end() {
         let asm = b"end";
         let mut t = Tokenizer::from(asm.as_slice());
         t.expect_identifier();
@@ -526,7 +709,7 @@ mod test {
     }
 
     #[test]
-    fn test_expect_instruction() {
+    fn expect_instruction() {
         let asm = b"mov";
         let mut t = Tokenizer::from(asm.as_slice());
         t.expect_identifier();
@@ -544,7 +727,7 @@ mod test {
     }
 
     #[test]
-    fn test_expect_register() {
+    fn expect_register() {
         let asm = b"R0";
         let mut t = Tokenizer::from(asm.as_slice());
         t.expect_identifier();
@@ -562,7 +745,7 @@ mod test {
     }
 
     #[test]
-    fn test_expect_comma() {
+    fn expect_comma() {
         let asm = b",";
         let mut t = Tokenizer::from(asm.as_slice());
         t.expect_comma();
@@ -570,7 +753,7 @@ mod test {
     }
 
     #[test]
-    fn test_expect_literal() {
+    fn expect_literal() {
         let asm = b"42";
         let mut t = Tokenizer::from(asm.as_slice());
         t.process_next_token();
@@ -579,7 +762,7 @@ mod test {
                 ImmediateLiteral::Decimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("42")),
                 l => panic!("Expected Decimal got {l:?}"),
             },
-            t => panic!("Expected ImmediateLiteral got {t}"),
+            t => panic!("Expected ImmediateLiteral got {}", t.resolve(asm)),
         }
         let asm = b"0x4F";
         let mut t = Tokenizer::from(asm.as_slice());
@@ -589,7 +772,7 @@ mod test {
                 ImmediateLiteral::Hexadecimal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("4F")),
                 l => panic!("Expected Hexadecimal got {l:?}"),
             },
-            t => panic!("Expected ImmediateLiteral got {t}"),
+            t => panic!("Expected ImmediateLiteral got {}", t.resolve(asm)),
         }
         let asm = b"0b010110";
         let mut t = Tokenizer::from(asm.as_slice());
@@ -599,7 +782,7 @@ mod test {
                 ImmediateLiteral::Binary(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("010110")),
                 l => panic!("Expected Binary got {l:?}"),
             },
-            t => panic!("Expected ImmediateLiteral got {t}"),
+            t => panic!("Expected ImmediateLiteral got {}", t.resolve(asm)),
         }
         let asm = b"0o743";
         let mut t = Tokenizer::from(asm.as_slice());
@@ -609,7 +792,7 @@ mod test {
                 ImmediateLiteral::Octal(r) => assert_eq!(String::from_utf8_lossy(&asm[r]), ("743")),
                 l => panic!("Expected Octal got {l:?}"),
             },
-            t => panic!("Expected ImmediateLiteral got {t}"),
+            t => panic!("Expected ImmediateLiteral got {}", t.resolve(asm)),
         }
         let asm = b"\"Hello, there\"";
         let mut t = Tokenizer::from(asm.as_slice());
@@ -625,7 +808,7 @@ mod test {
     }
 
     #[test]
-    fn test_expect_char_literal() {
+    fn expect_char_literal() {
         let asm = b"\'B\'";
         let mut t = Tokenizer::from(asm.as_slice());
         t.process_next_token();
@@ -633,7 +816,7 @@ mod test {
     }
 
     #[test]
-    fn test_expect_string_literal() {
+    fn expect_string_literal() {
         let asm = b"\"Jajajajaja2498291849102+#amfl929r2jlsamfa3\"";
         let mut t = Tokenizer::from(asm.as_slice());
         t.process_next_token();
@@ -647,7 +830,7 @@ mod test {
     }
 
     #[test]
-    fn test_expect_numeric_literal() {
+    fn expect_numeric_literal() {
         let asm = b"42";
         let mut t = Tokenizer::from(asm.as_slice());
         t.process_next_token();
@@ -711,7 +894,7 @@ mod test {
     }
 
     #[test]
-    fn test_expect_zero_decimal_literal() {
+    fn expect_zero_decimal_literal() {
         let asm = b"0";
         let mut t = Tokenizer::from(asm.as_slice());
         t.process_next_token();
@@ -740,5 +923,38 @@ mod test {
         let mut t = Tokenizer::from(asm.as_slice());
         t.process_next_token();
         assert_eq!(t.tokens[0], Token::Colon);
+    }
+
+    #[test]
+    fn newline_after_number_immediate_literal() {
+        let asm = b"0
+            1
+            -1
+            01
+            0xF
+            0o7
+            0d1
+            0b1
+            ";
+
+        let mut t = Tokenizer::from(asm.as_slice());
+        t.run();
+        println!("{:?}", t.tokens);
+        assert_eq!(t.tokens[0].resolve(asm), "ImmediateLiteral: Decimal: '0'");
+        assert_eq!(t.tokens[1], Token::Newline);
+        assert_eq!(t.tokens[2].resolve(asm), "ImmediateLiteral: Decimal: '1'");
+        assert_eq!(t.tokens[3], Token::Newline);
+        assert_eq!(t.tokens[4].resolve(asm), "ImmediateLiteral: Decimal: '-1'");
+        assert_eq!(t.tokens[5], Token::Newline);
+        assert_eq!(t.tokens[6].resolve(asm), "ImmediateLiteral: Decimal: '01'");
+        assert_eq!(t.tokens[7], Token::Newline);
+        assert_eq!(t.tokens[8].resolve(asm), "ImmediateLiteral: Hexadecimal: 'F'");
+        assert_eq!(t.tokens[9], Token::Newline);
+        assert_eq!(t.tokens[10].resolve(asm), "ImmediateLiteral: Octal: '7'");
+        assert_eq!(t.tokens[11], Token::Newline);
+        assert_eq!(t.tokens[12].resolve(asm), "ImmediateLiteral: Decimal: '1'");
+        assert_eq!(t.tokens[13], Token::Newline);
+        assert_eq!(t.tokens[14].resolve(asm), "ImmediateLiteral: Binary: '1'");
+        assert_eq!(t.tokens[15], Token::Newline);
     }
 }

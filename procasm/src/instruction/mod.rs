@@ -1,6 +1,7 @@
-pub(crate) mod asm_instruction;
+pub(crate) mod directive;
 pub mod jump_condition;
 pub mod memory_location;
+pub(crate) mod mnemonics;
 pub mod operand;
 pub mod unlinked;
 
@@ -12,12 +13,12 @@ use procem::{
 };
 
 use crate::instruction::{
-    asm_instruction::{
-        ASMJumpInstruction, ASMLoadOrStoreInstruction, ASMRegOperandInstruction, ASMRotateInstruction,
-        ASMShiftInstruction, ASMSingleOperandInstruction, ASMSingleRegInstruction, ASMTwoOperandInstruction,
-    },
     jump_condition::JumpCondition,
     memory_location::MemoryLocation,
+    mnemonics::{
+        JumpMnemonic, LoadOrStoreMnemonic, RegOperandMnemonic, RotateMnemonic, ShiftMnemonic, SingleOperandMnemonic,
+        SingleRegMnemonic, TwoOperandMnemonic,
+    },
     operand::Operand,
 };
 
@@ -183,156 +184,119 @@ impl InstructionTrait for Instruction {
 impl Instruction {
     // skips forrmatting the match
     #[rustfmt::skip]
-    pub(crate) const fn from_reg_operand_instruction(
-        instr: ASMRegOperandInstruction,
+    pub(crate) const fn from_reg_operand_mnemonic(
+        mnemonic: RegOperandMnemonic,
         lhs: Register,
         rhs: Operand
     ) -> Self {
-        use ASMRegOperandInstruction::{Mov, Add, AddS, Sub, SubS, Mul, MulS, Div, DivS, Or, And, Xor,Sdiv,SdivS};
-        match instr {
-            Mov => Self::Mov { to: lhs, from: rhs },
-            Add => Self::Add { acc: lhs, rhs, set_flags: false },
-            AddS => Self::Add { acc: lhs, rhs, set_flags: true },
-            Sub => Self::Sub { acc: lhs, rhs, set_flags: false },
-            SubS => Self::Sub { acc: lhs, rhs, set_flags: true },
-            Mul => Self::Mul { acc: lhs, rhs, set_flags: false },
-            MulS => Self::Mul { acc: lhs, rhs, set_flags: true },
-            Div => Self::Div { acc: lhs, rhs, set_flags: false },
-            DivS => Self::Div { acc: lhs, rhs, set_flags: true },
-            Sdiv => Self::Sdiv { acc: lhs, rhs, set_flags: false },
-            SdivS => Self::Sdiv { acc: lhs, rhs, set_flags: true },
-            Or => Self::Or { reg: lhs, rhs },
-            And => Self::And { reg: lhs, rhs },
-            Xor => Self::Xor { reg: lhs, rhs },
+        use RegOperandMnemonic as M;
+        match mnemonic {
+            M::Mov => Self::Mov { to: lhs, from: rhs },
+            M::Add => Self::Add { acc: lhs, rhs, set_flags: false },
+            M::AddS => Self::Add { acc: lhs, rhs, set_flags: true },
+            M::Sub => Self::Sub { acc: lhs, rhs, set_flags: false },
+            M::SubS => Self::Sub { acc: lhs, rhs, set_flags: true },
+            M::Mul => Self::Mul { acc: lhs, rhs, set_flags: false },
+            M::MulS => Self::Mul { acc: lhs, rhs, set_flags: true },
+            M::Div => Self::Div { acc: lhs, rhs, set_flags: false },
+            M::DivS => Self::Div { acc: lhs, rhs, set_flags: true },
+            M::Sdiv => Self::Sdiv { acc: lhs, rhs, set_flags: false },
+            M::SdivS => Self::Sdiv { acc: lhs, rhs, set_flags: true },
+            M::Or => Self::Or { reg: lhs, rhs },
+            M::And => Self::And { reg: lhs, rhs },
+            M::Xor => Self::Xor { reg: lhs, rhs },
         }
     }
 
-    pub(crate) const fn from_single_reg_instruction(instr: ASMSingleRegInstruction, reg: Register) -> Self {
-        use ASMSingleRegInstruction::{Dec, DecS, Inc, IncS, Not, Pop};
+    pub(crate) const fn from_single_reg_mnemonic(instr: SingleRegMnemonic, reg: Register) -> Self {
+        use SingleRegMnemonic as M;
         match instr {
-            Inc => Self::Inc { reg, set_flags: false },
-            IncS => Self::Inc { reg, set_flags: true },
-            Dec => Self::Dec { reg, set_flags: false },
-            DecS => Self::Dec { reg, set_flags: true },
-            Not => Self::Not { reg },
-            Pop => Self::Pop { to: reg },
+            M::Inc => Self::Inc { reg, set_flags: false },
+            M::IncS => Self::Inc { reg, set_flags: true },
+            M::Dec => Self::Dec { reg, set_flags: false },
+            M::DecS => Self::Dec { reg, set_flags: true },
+            M::Not => Self::Not { reg },
+            M::Pop => Self::Pop { to: reg },
         }
     }
 
-    pub(crate) const fn from_single_operand_instruction(instr: ASMSingleOperandInstruction, operand: Operand) -> Self {
-        use ASMSingleOperandInstruction::{Call, Push};
+    pub(crate) const fn from_single_operand_mnemonic(instr: SingleOperandMnemonic, operand: Operand) -> Self {
+        use SingleOperandMnemonic as M;
 
         match instr {
-            Call => Self::Call { addr: operand },
-            Push => Self::Push { from: operand },
+            M::Call => Self::Call { addr: operand },
+            M::Push => Self::Push { from: operand },
         }
     }
 
-    pub(crate) const fn from_two_operand_instruction(
-        instr: ASMTwoOperandInstruction,
-        lhs: Operand,
-        rhs: Operand,
-    ) -> Self {
-        use ASMTwoOperandInstruction::Cmp;
+    pub(crate) const fn from_two_operand_mnemonic(instr: TwoOperandMnemonic, lhs: Operand, rhs: Operand) -> Self {
+        use TwoOperandMnemonic as M;
 
         match instr {
-            Cmp => Self::Cmp { lhs, rhs },
+            M::Cmp => Self::Cmp { lhs, rhs },
         }
     }
 
-    pub(crate) const fn from_shift_instruction(instr: ASMShiftInstruction, reg: Register, val: u64) -> Self {
-        use ASMShiftInstruction::{Shl, Shr};
+    pub(crate) const fn from_shift_mnemonic(instr: ShiftMnemonic, reg: Register, val: u64) -> Self {
+        use ShiftMnemonic as M;
 
         match instr {
-            Shl => Self::Shl { reg, val },
-            Shr => Self::Shr { reg, val },
+            M::Shl => Self::Shl { reg, val },
+            M::Shr => Self::Shr { reg, val },
         }
     }
 
-    pub(crate) const fn from_rotate_instruction(instr: ASMRotateInstruction, reg: Register, val: u32) -> Self {
-        use ASMRotateInstruction::{Rol, Ror};
+    pub(crate) const fn from_rotate_mnemonic(instr: RotateMnemonic, reg: Register, val: u32) -> Self {
+        use RotateMnemonic as M;
 
         match instr {
-            Ror => Self::Ror { reg, val },
-            Rol => Self::Rol { reg, val },
+            M::Ror => Self::Ror { reg, val },
+            M::Rol => Self::Rol { reg, val },
         }
     }
 
-    pub(crate) const fn from_jump_instruction(instr: ASMJumpInstruction, dest: u64) -> Self {
-        use ASMJumpInstruction::{Jc, Jg, Jge, Jl, Jle, Jmp, Jnc, Jns, Jnz, Js, Jz};
+    pub(crate) const fn from_jump_mnemonic(instr: JumpMnemonic, dest: u64) -> Self {
+        use JumpMnemonic as M;
+
         let condition = match instr {
-            Jmp => JumpCondition::Unconditional,
-            Jz => JumpCondition::Zero,
-            Jnz => JumpCondition::NotZero,
-            Jc => JumpCondition::Carry,
-            Jnc => JumpCondition::NotCarry,
-            Js => JumpCondition::Signed,
-            Jns => JumpCondition::NotSigned,
-            Jg => JumpCondition::Greater,
-            Jl => JumpCondition::Less,
-            Jge => JumpCondition::GreaterOrEq,
-            Jle => JumpCondition::LessOrEq,
+            M::Jmp => JumpCondition::Unconditional,
+            M::Jz => JumpCondition::Zero,
+            M::Jnz => JumpCondition::NotZero,
+            M::Jc => JumpCondition::Carry,
+            M::Jnc => JumpCondition::NotCarry,
+            M::Js => JumpCondition::Signed,
+            M::Jns => JumpCondition::NotSigned,
+            M::Jg => JumpCondition::Greater,
+            M::Jl => JumpCondition::Less,
+            M::Jge => JumpCondition::GreaterOrEq,
+            M::Jle => JumpCondition::LessOrEq,
         };
 
         Self::Jump { to: dest, condition }
     }
 
-    pub(crate) const fn from_ldr_or_str_instruction(
-        instr: ASMLoadOrStoreInstruction,
+    // skips forrmatting the match
+    #[rustfmt::skip]
+    pub(crate) const fn from_ldr_or_str_mnemonic(
+        instr: LoadOrStoreMnemonic,
         reg: Register,
         mem_location: MemoryLocation,
     ) -> Self {
-        use ASMLoadOrStoreInstruction::{Ldr, Ldrb, Ldrd, Ldrh, Ldrq, Ldrw, Str, Strb, Strd, Strh, Strq, Strw};
+        use LoadOrStoreMnemonic as M;
 
         match instr {
-            Ldr => Self::Ldr {
-                to: reg,
-                from: mem_location,
-            },
-            Ldrb => Self::Ldrb {
-                to: reg,
-                from: mem_location,
-            },
-            Ldrh => Self::Ldrh {
-                to: reg,
-                from: mem_location,
-            },
-            Ldrw => Self::Ldrw {
-                to: reg,
-                from: mem_location,
-            },
-            Ldrd => Self::Ldrd {
-                to: reg,
-                from: mem_location,
-            },
-            Ldrq => Self::Ldrq {
-                to: reg,
-                from: mem_location,
-            },
-            Str => Self::Str {
-                from: reg,
-                to: mem_location,
-            },
-            Strb => Self::Strb {
-                to: mem_location,
-                from: reg,
-            },
-            Strh => Self::Strh {
-                to: mem_location,
-                from: reg,
-            },
-            Strw => Self::Strw {
-                to: mem_location,
-                from: reg,
-            },
-            Strd => Self::Strd {
-                to: mem_location,
-                from: reg,
-            },
-            Strq => Self::Strq {
-                to: mem_location,
-                from: reg,
-            },
+            M::Ldr => Self::Ldr { to: reg, from: mem_location },
+            M::Ldrb => Self::Ldrb { to: reg, from: mem_location },
+            M::Ldrh => Self::Ldrh { to: reg, from: mem_location },
+            M::Ldrw => Self::Ldrw { to: reg, from: mem_location },
+            M::Ldrd => Self::Ldrd { to: reg, from: mem_location },
+            M::Ldrq => Self::Ldrq { to: reg, from: mem_location },
+            M::Str => Self::Str { to: mem_location, from: reg },
+            M::Strb => Self::Strb { to: mem_location, from: reg },
+            M::Strh => Self::Strh { to: mem_location, from: reg },
+            M::Strw => Self::Strw { to: mem_location, from: reg },
+            M::Strd => Self::Strd { to: mem_location, from: reg },
+            M::Strq => Self::Strq { to: mem_location, from: reg },
         }
     }
 }

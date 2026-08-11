@@ -5,6 +5,7 @@ use pretty_assertions_sorted::assert_eq;
 use procasm::{
     AssembledProgram, assemble,
     instruction::{Instruction, jump_condition::JumpCondition, operand::Operand},
+    tokenizer,
 };
 use procem::{
     processor::Processor,
@@ -151,6 +152,7 @@ fn parse_and_execute_arithmetic() {
 #[test]
 fn control_flow_and_labels() {
     const MEM_SIZE: usize = 1024;
+
     // Loop should run 5 times, incrementing R0 from 0 to 5
     let program = assemble::<MEM_SIZE>(
         "

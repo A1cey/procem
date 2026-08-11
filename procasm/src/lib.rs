@@ -52,10 +52,10 @@
 //! // Inspect register values
 //! assert_eq!(processor.registers.get_reg(Register::R0), 6);
 //! ```
-//!
+
 use crate::instruction::Instruction;
 use crate::linker::{Linker, LinkerError};
-use crate::parser::{Parser, ParserError};
+use crate::parser::{ParserError, parse};
 use crate::tokenizer::{Tokenizer, TokenizerError};
 use procem::program::Program;
 use thiserror::Error;
@@ -124,8 +124,8 @@ pub fn assemble<const MEM_SIZE: usize>(
     let tokens =
         Tokenizer::tokenize(input).map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())?;
 
-    let parsed = Parser::parse(&tokens, input)
-        .map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())?;
+    let parsed =
+        parse(&tokens, input).map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())?;
 
     Linker::<'_, MEM_SIZE>::link(input, parsed)
         .map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())
