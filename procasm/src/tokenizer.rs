@@ -98,11 +98,11 @@ impl Tokenizer<'_> {
         // last token must be `End`
         match self.tokens.last() {
             Some(Token::End) => {}
-            Some(Token::Newline) => self.tokens.push(Token::End),
+            Some(Token::Newline)
+            // If there is no input just a simple `End`
+            | None => self.tokens.push(Token::End),
             // Add the `End` on a new line
             Some(_) => self.tokens.extend_from_slice(&[Token::Newline, Token::End]),
-            // If there is no input just a simple `End`
-            None => self.tokens.push(Token::End),
         }
 
         Ok(self.tokens)

@@ -152,7 +152,7 @@ impl InstructionTrait for Instruction {
             Self::Ldrw { to, from } => Self::ldrw(to, from, processor)?,
             Self::Ldrh { to, from } => Self::ldrh(to, from, processor)?,
             Self::Ldrd { to, from } => Self::ldrd(to, from, processor)?,
-            Self::Ldrq { to, from } => Self::ldrq(to, from, processor)?,
+            Self::Ldrq { to, from } => Self::ldrq(to, from, processor),
             Self::Ldr { to, from } => Self::ldr(to, from, processor)?,
             Self::Push { from } => Self::push(from, processor)?,
             Self::Pop { to } => Self::pop(to, processor)?,
@@ -301,6 +301,7 @@ impl Instruction {
     }
 }
 
+#[expect(clippy::cast_possible_truncation)]
 impl Instruction {
     /// Move a memory address into a register.
     #[inline]
@@ -471,13 +472,12 @@ impl Instruction {
         to: Register,
         from: MemoryLocation,
         processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
-    ) -> InstructionResult {
+    ) {
         let from_addr = from.resolve(processor);
         let bytes = processor.mem.read_slice(from_addr, size_of::<u128>());
         let val = u128::from_le_bytes(*bytes.as_array().expect("Just read sixteen bytes."));
 
         processor.registers.set_reg(to, val as u64); // Discards the upper bytes
-        Ok(())
     }
 
     /// Load a 64-bit value from a memory location into a register.
@@ -579,13 +579,13 @@ impl Instruction {
 
         if set_flags {
             // i64::overflowing_add returns res and signed wrap (overflow)
-            let (_, overflow) = (a as i64).overflowing_add(b as i64);
+            let (_, overflow) = a.cast_signed().overflowing_add(b.cast_signed());
 
             processor.registers.set_reg(acc, res);
 
             processor.registers.set_flag(Flag::V, overflow);
             processor.registers.set_flag(Flag::C, carry);
-            Self::set_signed_and_zero_flags(res as i64, processor);
+            Self::set_signed_and_zero_flags(res.cast_signed(), processor);
         } else {
             processor.registers.set_reg(acc, res);
         }
@@ -607,13 +607,13 @@ impl Instruction {
 
         if set_flags {
             // i64::overflowing_sub returns res and signed wrap (overflow)
-            let (_, overflow) = (a as i64).overflowing_sub(b as i64);
+            let (_, overflow) = a.cast_signed().overflowing_sub(b.cast_signed());
 
             processor.registers.set_reg(acc, res);
 
             processor.registers.set_flag(Flag::V, overflow);
             processor.registers.set_flag(Flag::C, carry);
-            Self::set_signed_and_zero_flags(res as i64, processor);
+            Self::set_signed_and_zero_flags(res.cast_signed(), processor);
         } else {
             processor.registers.set_reg(acc, res);
         }
@@ -636,13 +636,13 @@ impl Instruction {
 
         if set_flags {
             // i64::overflowing_sub returns res and signed wrap (overflow)
-            let (_, overflow) = (a as i64).overflowing_mul(b as i64);
+            let (_, overflow) = a.cast_signed().overflowing_mul(b.cast_signed());
 
             processor.registers.set_reg(acc, res);
 
             processor.registers.set_flag(Flag::V, overflow);
             processor.registers.set_flag(Flag::C, carry);
-            Self::set_signed_and_zero_flags(res as i64, processor);
+            Self::set_signed_and_zero_flags(res.cast_signed(), processor);
         } else {
             processor.registers.set_reg(acc, a * b);
         }
@@ -670,7 +670,7 @@ impl Instruction {
             processor.registers.set_reg(acc, res);
             processor.registers.set_flag(Flag::V, false); // unsigned div cannot overflow
             processor.registers.set_flag(Flag::C, false); // division never carries
-            Self::set_signed_and_zero_flags(res as i64, processor);
+            Self::set_signed_and_zero_flags(res.cast_signed(), processor);
         } else {
             processor.registers.set_reg(acc, res);
         }
@@ -687,8 +687,8 @@ impl Instruction {
         set_flags: bool,
         processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) -> InstructionResult {
-        let a = processor.registers.get_reg(acc) as i64;
-        let b = rhs.resolve(processor) as i64;
+        let a = processor.registers.get_reg(acc).cast_signed();
+        let b = rhs.resolve(processor).cast_signed();
 
         if b == 0 {
             return Err(ProcessorError::DivisionByZero);
@@ -697,13 +697,13 @@ impl Instruction {
         let (res, overflow) = a.overflowing_div(b);
 
         if set_flags {
-            processor.registers.set_reg(acc, res as u64);
+            processor.registers.set_reg(acc, res.cast_unsigned());
             processor.registers.set_flag(Flag::V, overflow);
             processor.registers.set_flag(Flag::C, false); // division never carries
 
             Self::set_signed_and_zero_flags(res, processor);
         } else {
-            processor.registers.set_reg(acc, res as u64);
+            processor.registers.set_reg(acc, res.cast_unsigned());
         }
 
         Ok(())
@@ -773,11 +773,11 @@ impl Instruction {
         let (res, carry) = a.overflowing_sub(b);
 
         // i64::overflowing_sub returns res and signed wrap (overflow)
-        let (_, overflow) = (a as i64).overflowing_sub(b as i64);
+        let (_, overflow) = a.cast_signed().overflowing_sub(b.cast_signed());
 
         processor.registers.set_flag(Flag::V, overflow);
         processor.registers.set_flag(Flag::C, carry);
-        Self::set_signed_and_zero_flags(res as i64, processor);
+        Self::set_signed_and_zero_flags(res.cast_signed(), processor);
     }
 
     /// Perform an xor operation on the value in the register with the value of the operand. (XOR)

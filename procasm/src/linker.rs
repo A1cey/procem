@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use crate::{
     AssembledProgram,
-    instruction::{Instruction, memory_location::MemoryLocation, unlinked::UnlinkedInstruction},
+    instruction::{Instruction as Inst, memory_location::MemoryLocation as MemLoc, unlinked::UnlinkedInstruction},
     parser::Parsed,
 };
 
@@ -73,96 +73,23 @@ impl<'input, const MEM_SIZE: usize> Linker<'input, MEM_SIZE> {
             .get_mut(unlinked_instruction.instr_idx())
             .expect("The instruction index is always in range of the instructions.");
 
-        let linked_instruction: Instruction = match instruction {
-            Instruction::Jump { to: _, condition } => Instruction::Jump {
-                to: addr,
-                condition: *condition,
-            },
-            Instruction::Adr { reg, addr: _ } => Instruction::Adr { reg: *reg, addr },
-            Instruction::Str {
-                from,
-                to: MemoryLocation::Labeled(_),
-            } => Instruction::Str {
-                from: *from,
-                to: MemoryLocation::Labeled(addr),
-            },
-            Instruction::Strb {
-                from,
-                to: MemoryLocation::Labeled(_),
-            } => Instruction::Strb {
-                from: *from,
-                to: MemoryLocation::Labeled(addr),
-            },
-            Instruction::Strh {
-                from,
-                to: MemoryLocation::Labeled(_),
-            } => Instruction::Strh {
-                from: *from,
-                to: MemoryLocation::Labeled(addr),
-            },
-            Instruction::Strw {
-                from,
-                to: MemoryLocation::Labeled(_),
-            } => Instruction::Strw {
-                from: *from,
-                to: MemoryLocation::Labeled(addr),
-            },
-            Instruction::Strd {
-                from,
-                to: MemoryLocation::Labeled(_),
-            } => Instruction::Strd {
-                from: *from,
-                to: MemoryLocation::Labeled(addr),
-            },
-            Instruction::Strq {
-                from,
-                to: MemoryLocation::Labeled(_),
-            } => Instruction::Strq {
-                from: *from,
-                to: MemoryLocation::Labeled(addr),
-            },
-            Instruction::Ldr {
-                to,
-                from: MemoryLocation::Labeled(_),
-            } => Instruction::Ldr {
-                to: *to,
-                from: MemoryLocation::Labeled(addr),
-            },
-            Instruction::Ldrb {
-                to,
-                from: MemoryLocation::Labeled(_),
-            } => Instruction::Ldrb {
-                to: *to,
-                from: MemoryLocation::Labeled(addr),
-            },
-            Instruction::Ldrh {
-                to,
-                from: MemoryLocation::Labeled(_),
-            } => Instruction::Ldrh {
-                to: *to,
-                from: MemoryLocation::Labeled(addr),
-            },
-            Instruction::Ldrw {
-                to,
-                from: MemoryLocation::Labeled(_),
-            } => Instruction::Ldrw {
-                to: *to,
-                from: MemoryLocation::Labeled(addr),
-            },
-            Instruction::Ldrd {
-                to,
-                from: MemoryLocation::Labeled(_),
-            } => Instruction::Ldrd {
-                to: *to,
-                from: MemoryLocation::Labeled(addr),
-            },
-            Instruction::Ldrq {
-                to,
-                from: MemoryLocation::Labeled(_),
-            } => Instruction::Ldrq {
-                to: *to,
-                from: MemoryLocation::Labeled(addr),
-            },
+        // skips forrmatting the match
+        #[rustfmt::skip]
+        let linked_instruction = match instruction {
+            Inst::Jump { to: _, condition } => Inst::Jump { to: addr, condition: *condition },
+            Inst::Adr { reg, addr: _ } => Inst::Adr { reg: *reg, addr },
+            Inst::Str { from, to: MemLoc::Labeled(_) } => Inst::Str { from: *from, to: MemLoc::Labeled(addr) },
+            Inst::Strb { from, to: MemLoc::Labeled(_) } => Inst::Strb { from: *from, to: MemLoc::Labeled(addr) },
+            Inst::Strh { from, to: MemLoc::Labeled(_) } => Inst::Strh { from: *from, to: MemLoc::Labeled(addr) },
+            Inst::Strw { from, to: MemLoc::Labeled(_) } => Inst::Strw { from: *from, to: MemLoc::Labeled(addr) },
+            Inst::Strd { from, to: MemLoc::Labeled(_) } => Inst::Strd { from: *from, to: MemLoc::Labeled(addr) },
+            Inst::Strq { from, to: MemLoc::Labeled(_) } => Inst::Strq { from: *from, to: MemLoc::Labeled(addr) },
+            Inst::Ldr { to, from: MemLoc::Labeled(_) } => Inst::Ldr { to: *to, from: MemLoc::Labeled(addr) },
+            Inst::Ldrb { to, from: MemLoc::Labeled(_) } => Inst::Ldrb { to: *to, from: MemLoc::Labeled(addr) },
+            Inst::Ldrh { to, from: MemLoc::Labeled(_) } => Inst::Ldrh { to: *to, from: MemLoc::Labeled(addr) },
+            Inst::Ldrw { to, from: MemLoc::Labeled(_) } => Inst::Ldrw { to: *to, from: MemLoc::Labeled(addr) },
+            Inst::Ldrd { to, from: MemLoc::Labeled(_) } => Inst::Ldrd { to: *to, from: MemLoc::Labeled(addr) },
+            Inst::Ldrq { to, from: MemLoc::Labeled(_) } => Inst::Ldrq { to: *to, from: MemLoc::Labeled(addr) },
             instruction => unreachable!("This instruction cannot be linked: {instruction:?}."),
         };
 
@@ -238,7 +165,7 @@ impl<'input, const MEM_SIZE: usize> Linker<'input, MEM_SIZE> {
 
     #[must_use]
     #[inline]
-    fn create_code(&mut self) -> Code<Instruction, Vec<Instruction>> {
+    fn create_code(&mut self) -> Code<Inst, Vec<Inst>> {
         Code::new(mem::take(self.parsed.mut_instructions()))
     }
 }
