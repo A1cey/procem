@@ -51,6 +51,7 @@ where
     ///
     /// # Errors
     /// Returns `PCOutOfBounds` error if the program counter is not in bounds.
+    #[expect(clippy::cast_possible_truncation, reason = "Not more than usize is addressable")]
     #[inline]
     pub fn try_fetch(&self, pc: u64) -> Result<Inst, ProcessorError> {
         self.code
@@ -88,6 +89,7 @@ where
     ///
     /// # Safety
     /// Calling this method with an out-of-bounds program counter value is undefined behavior even if the resulting value is not used.
+    #[expect(clippy::cast_possible_truncation, reason = "Not more than usize is addressable")]
     #[inline]
     #[must_use]
     pub unsafe fn fetch_unchecked(&self, pc: u64) -> Inst {

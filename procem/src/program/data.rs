@@ -45,7 +45,7 @@ where
     #[inline]
     pub fn len(&self) -> u64 {
         debug_assert!(
-            self.data.len() as u128 <= u64::MAX as u128,
+            self.data.len() as u128 <= u128::from(u64::MAX),
             "Cannot address more then {} values.",
             u64::MAX
         );

@@ -92,7 +92,7 @@ impl Tokenizer<'_> {
 
     fn finalize(mut self) -> Result<Vec<Token>, Vec<TokenizerError>> {
         if !self.errors.is_empty() {
-            Err(self.errors)?
+            Err(self.errors)?;
         }
 
         // last token must be `End`
@@ -103,7 +103,7 @@ impl Tokenizer<'_> {
             Some(_) => self.tokens.extend_from_slice(&[Token::Newline, Token::End]),
             // If there is no input just a simple `End`
             None => self.tokens.push(Token::End),
-        };
+        }
 
         Ok(self.tokens)
     }

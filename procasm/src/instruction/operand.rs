@@ -12,6 +12,7 @@ pub enum Operand {
 impl Operand {
     /// Resolve the operand to a value.
     #[inline]
+    #[must_use]
     pub fn resolve<const MEM_SIZE: usize, Insts, Bytes>(
         self,
         processor: &Processor<MEM_SIZE, Instruction, Insts, Bytes>,

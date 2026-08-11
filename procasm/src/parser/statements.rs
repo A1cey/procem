@@ -201,7 +201,7 @@ impl<'input> Parser<'input> for BssParser {
                     expected: "Only .space is allowed in .bss section.".to_string(),
                 }));
             }
-        };
+        }
 
         // Every line must end with a newline, because the tokenizer adds one to the last line in the file if its missing
         NewlineParser.parse(input, state).map_err(Error::into_incomplete_match)
@@ -255,7 +255,7 @@ impl<'input> Parser<'input> for LabelParser {
             Err(Error::IncompleteMatch(ParserError::DuplicateLabel {
                 idx: state.idx,
                 old_idx,
-            }))?
+            }))?;
         }
 
         // Every line must end with a newline, because the tokenizer adds one to the last line in the file if its missing

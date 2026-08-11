@@ -62,6 +62,7 @@ impl<const MEM_SIZE: usize> Index<u64> for Memory<MEM_SIZE> {
     ///
     /// # Panics
     /// Panics if the address is out of bounds.
+    #[expect(clippy::cast_possible_truncation, reason = "Not more than usize is addressable")]
     fn index(&self, addr: u64) -> &Self::Output {
         self.0
             .get(
@@ -85,6 +86,7 @@ impl<const MEM_SIZE: usize> IndexMut<u64> for Memory<MEM_SIZE> {
     ///
     /// # Panics
     /// Panics if the address is out of bounds.
+    #[expect(clippy::cast_possible_truncation, reason = "Not more than usize is addressable")]
     fn index_mut(&mut self, addr: u64) -> &mut Self::Output {
         self.0
             .get_mut(
@@ -110,6 +112,7 @@ impl<const MEM_SIZE: usize> Index<Range<u64>> for Memory<MEM_SIZE> {
     ///
     /// # Panics
     /// Panics if the address range is out of bounds.
+    #[expect(clippy::cast_possible_truncation, reason = "Not more than usize is addressable")]
     fn index(&self, addr_range: Range<u64>) -> &Self::Output {
         self.0
             .get(
@@ -136,6 +139,7 @@ impl<const MEM_SIZE: usize> IndexMut<Range<u64>> for Memory<MEM_SIZE> {
     ///
     /// # Panics
     /// Panics if the address range is out of bounds.
+    #[expect(clippy::cast_possible_truncation, reason = "Not more than usize is addressable")]
     fn index_mut(&mut self, addr_range: Range<u64>) -> &mut Self::Output {
         self.0
             .get_mut(
@@ -180,6 +184,7 @@ impl<const MEM_SIZE: usize> Index<RangeInclusive<u64>> for Memory<MEM_SIZE> {
     ///
     /// # Panics
     /// Panics if the address range is out of bounds.
+    #[expect(clippy::cast_possible_truncation, reason = "Not more than usize is addressable")]
     fn index(&self, addr_range: RangeInclusive<u64>) -> &Self::Output {
         self.0
             .get(
@@ -206,6 +211,7 @@ impl<const MEM_SIZE: usize> IndexMut<RangeInclusive<u64>> for Memory<MEM_SIZE> {
     ///
     /// # Panics
     /// Panics if the address range is out of bounds.
+    #[expect(clippy::cast_possible_truncation, reason = "Not more than usize is addressable")]
     fn index_mut(&mut self, addr_range: RangeInclusive<u64>) -> &mut Self::Output {
         self.0
             .get_mut(
@@ -247,6 +253,7 @@ impl<const MEM_SIZE: usize> Memory<MEM_SIZE> {
     ///
     /// # Panics
     /// Panics if the address is out of bounds.
+    #[must_use]
     pub fn read(&self, addr: u64) -> u8 {
         self[addr]
     }
@@ -255,6 +262,7 @@ impl<const MEM_SIZE: usize> Memory<MEM_SIZE> {
     ///
     /// # Errors
     /// Returns an [`OutOfBoundsMemoryAccess`](ProcessorError::OutOfBoundsMemoryAccess) error if the address is out of bounds.
+    #[expect(clippy::cast_possible_truncation, reason = "Not more than usize is addressable")]
     pub fn try_read(&self, addr: u64) -> Result<u8, ProcessorError> {
         self.0
             .get(
@@ -274,6 +282,8 @@ impl<const MEM_SIZE: usize> Memory<MEM_SIZE> {
     ///
     /// # Safety
     /// Calling this method with an out-of-bounds address value is undefined behavior.
+    #[expect(clippy::cast_possible_truncation, reason = "Not more than usize is addressable")]
+    #[must_use]
     pub unsafe fn read_unchecked(&self, addr: u64) -> u8 {
         // Not more than usize is addressable
         let addr = addr as usize;
@@ -290,6 +300,8 @@ impl<const MEM_SIZE: usize> Memory<MEM_SIZE> {
     ///
     /// # Panics
     /// Panics if the address range exceeds the memory bounds.
+    #[expect(clippy::cast_possible_truncation, reason = "Not more than usize is addressable")]
+    #[must_use]
     pub fn read_slice(&mut self, start_addr: u64, len: usize) -> &[u8] {
         // Not more than usize is addressable
         let start_addr = start_addr as usize;
@@ -302,6 +314,7 @@ impl<const MEM_SIZE: usize> Memory<MEM_SIZE> {
     ///
     /// # Errors
     /// Returns an [`OutOfBoundsMemoryAccess`](ProcessorError::OutOfBoundsMemoryAccess) error if the address range is out of bounds.
+    #[expect(clippy::cast_possible_truncation, reason = "Not more than usize is addressable")]
     pub fn try_read_slice(&mut self, start_addr: u64, len: usize) -> Result<&[u8], ProcessorError> {
         self.0
             .get(
@@ -323,6 +336,7 @@ impl<const MEM_SIZE: usize> Memory<MEM_SIZE> {
     ///
     /// # Safety
     /// Calling this method is undefined behavior if the `start_addr` or `start_addr + len` is out of bounds.
+    #[expect(clippy::cast_possible_truncation, reason = "Not more than usize is addressable")]
     pub unsafe fn write_read_unchecked(&mut self, start_addr: u64, len: usize) -> &[u8] {
         // Not more than usize is addressable
         let start_addr = start_addr as usize;
@@ -345,6 +359,7 @@ impl<const MEM_SIZE: usize> Memory<MEM_SIZE> {
     ///
     /// # Errors
     /// Returns an [`OutOfBoundsMemoryAccess`](ProcessorError::OutOfBoundsMemoryAccess) error if the address is out of bounds.
+    #[expect(clippy::cast_possible_truncation, reason = "Not more than usize is addressable")]
     pub fn try_write(&mut self, addr: u64, value: u8) -> Result<(), ProcessorError> {
         *self
             .0
@@ -366,6 +381,7 @@ impl<const MEM_SIZE: usize> Memory<MEM_SIZE> {
     ///
     /// # Safety
     /// Calling this method with an out-of-bounds address value is undefined behavior.
+    #[expect(clippy::cast_possible_truncation, reason = "Not more than usize is addressable")]
     pub unsafe fn write_unchecked(&mut self, addr: u64, value: u8) {
         // Not more than usize is addressable
         let addr = addr as usize;
@@ -384,7 +400,7 @@ impl<const MEM_SIZE: usize> Memory<MEM_SIZE> {
     /// Panics if the address range exceeds the memory bounds.
     pub fn write_slice(&mut self, start_addr: u64, values: &[u8]) {
         // slices with more than u64
-        debug_assert!(values.len() as u128 <= u64::MAX as u128);
+        debug_assert!(values.len() as u128 <= u128::from(u64::MAX));
         let end_addr = start_addr + values.len() as u64;
 
         self[start_addr..end_addr].copy_from_slice(values);
@@ -396,6 +412,7 @@ impl<const MEM_SIZE: usize> Memory<MEM_SIZE> {
     ///
     /// # Errors
     /// Returns an [`OutOfBoundsMemoryAccess`](ProcessorError::OutOfBoundsMemoryAccess) error if the address range is out of bounds.
+    #[expect(clippy::cast_possible_truncation, reason = "Not more than usize is addressable")]
     pub fn try_write_slice(&mut self, start_addr: u64, values: &[u8]) -> Result<(), ProcessorError> {
         let slice = self
             .0
@@ -432,6 +449,7 @@ impl<const MEM_SIZE: usize> Memory<MEM_SIZE> {
     /// Calling this method is undefined behavior if:
     /// * The `start_addr` or `start_addr + values.len()` is out of bounds.
     /// * The address range in memory overlaps with the address range of `values`.
+    #[expect(clippy::cast_possible_truncation, reason = "Not more than usize is addressable")]
     pub unsafe fn write_slice_unchecked(&mut self, start_addr: u64, values: &[u8]) {
         // Not more than usize is addressable
         let start_addr = start_addr as usize;

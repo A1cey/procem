@@ -64,6 +64,7 @@ where
     ///
     /// # Panics
     /// Panics if the program counter is out of bounds.
+    #[expect(clippy::cast_possible_truncation, reason = "Not more than usize is addressable")]
     #[inline]
     fn index(&self, pc: u64) -> &Self::Output {
         // Not more than usize addressable

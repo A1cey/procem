@@ -38,7 +38,7 @@ impl<'input> Parser<'input> for MnemonicParser {
         let ident = &input.raw[range];
         ident
             .try_into()
-            .map_err(|_| ParserError::UnknownMnemonic {
+            .map_err(|()| ParserError::UnknownMnemonic {
                 idx: state.idx,
                 inst: string_from_u8_slice(ident),
             })

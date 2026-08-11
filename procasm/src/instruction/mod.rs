@@ -386,7 +386,7 @@ impl Instruction {
     ) -> InstructionResult {
         let to_addr = to.resolve(processor);
         let val = processor.registers.get_reg(from);
-        let bytes = (val as u128).to_le_bytes(); // Fills the upper bytes with 0
+        let bytes = u128::from(val).to_le_bytes(); // Fills the upper bytes with 0
 
         processor.mem.try_write_slice(to_addr, &bytes)
     }

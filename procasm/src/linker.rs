@@ -202,7 +202,7 @@ impl<'input, const MEM_SIZE: usize> Linker<'input, MEM_SIZE> {
     fn get_init_sp(&mut self) -> Option<u64> {
         // Stack starts at highest value in memory
 
-        if MEM_SIZE as u128 - 1 > u64::MAX as u128 {
+        if MEM_SIZE as u128 - 1 > u128::from(u64::MAX) {
             self.errors.push(LinkerError::MemoryTooLarge { requested: MEM_SIZE });
             None
         } else {
@@ -224,7 +224,7 @@ impl<'input, const MEM_SIZE: usize> Linker<'input, MEM_SIZE> {
 
         let base_addr = self.parsed.data().len();
 
-        if base_addr as u128 > u64::MAX as u128 {
+        if base_addr as u128 > u128::from(u64::MAX) {
             self.errors
                 .push(LinkerError::DataSectionTooLarge { requested: base_addr });
             return None;

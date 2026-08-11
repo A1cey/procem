@@ -12,6 +12,9 @@ pub type InstructionResult = Result<(), ProcessorError>;
 /// Its [`execute`](Instruction::execute) method is used by the processor to execute the instruction.
 pub trait Instruction: Debug + Copy {
     /// This function is called when an instruction is executed by the processor.
+    ///
+    /// # Errors
+    /// Returns a [`ProcessorError`] if an error occured during instruction execution.
     fn execute<const MEM_SIZE: usize, Insts, Words>(
         instruction: Self,
         processor: &mut Processor<MEM_SIZE, Self, Insts, Words>,

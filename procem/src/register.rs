@@ -12,17 +12,17 @@ use alloc::string::{String, ToString};
 /// a program counter, a stack pointer and flags.
 ///
 /// There are 16 general purpose registers (R1 - Rn).
-/// They can be accessed with the [`get_reg`](Registers::get_reg and [`set_reg`](Registers::set_reg) methods by providing the corresponding [`Register`] value.
+/// They can be accessed with the [`get_reg`](`Registers::get_reg` and [`set_reg`](`Registers::set_reg`) methods by providing the corresponding [`Register`] value.
 ///
 /// The program counter (pc) can be read with the [`pc`](Registers::pc) method and the stack pointer (sp) can be read with the [`sp`](Registers::sp) method.
-/// Both of these registers can also be accessed with the [`get_reg`](Registers::get_reg and [`set_reg`](Registers::set_reg) methods.
+/// Both of these registers can also be accessed with the [`get_reg`](`Registers::get_reg` and [`set_reg`](Registers::set_reg) methods.
 ///
 /// Note: [`sp`](Registers::sp) is a bare register. A stack is not directly provided by this emulator. The instruction set defines how the memory is used.
 ///
 /// All registers are 64bit.
 ///
 /// The flags are carry flag ([`C`](Flag::C)), signed flag ([`S`](Flag::S)), overflow flag ([`V`](Flag::V)) and zero condition flag ([`Z`](Flag::Z)).
-/// They can be accessed with the [`get_flag`](Registers::get_flag and [`set_flag`](Registers::set_flag) methods by providing the corresponding [`Flag`] value.
+/// They can be accessed with the [`get_flag`](`Registers::get_flag` and [`set_flag`](Registers::set_flag) methods by providing the corresponding [`Flag`] value.
 ///
 /// There are two convenience methods for incrementing and decrementing registers: [`inc`](Registers::inc) and [`dec`](Registers::dec).
 #[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, Ord, Default)]
@@ -45,18 +45,21 @@ impl Registers {
 
     /// Get the value of a register.
     #[inline]
+    #[must_use]
     pub fn get_reg(&self, reg: Register) -> u64 {
         self.registers[reg]
     }
 
     /// Get the value of the program counter register.
     #[inline]
+    #[must_use]
     pub fn pc(&self) -> u64 {
         self.registers[Register::PC]
     }
 
     /// Get the value of the stack pointer register.
     #[inline]
+    #[must_use]
     pub fn sp(&self) -> u64 {
         self.registers[Register::SP]
     }
@@ -81,6 +84,7 @@ impl Registers {
 
     /// Get the value of a flag.
     #[inline]
+    #[must_use]
     pub fn get_flag(&self, flag: Flag) -> bool {
         self.flags[flag]
     }

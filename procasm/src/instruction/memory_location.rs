@@ -11,6 +11,7 @@ pub enum MemoryLocation {
 impl MemoryLocation {
     /// Resolve the memory location to a value.
     #[inline]
+    #[must_use]
     pub fn resolve<const MEM_SIZE: usize, Insts, Bytes>(
         self,
         processor: &Processor<MEM_SIZE, Instruction, Insts, Bytes>,
