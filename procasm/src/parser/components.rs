@@ -183,8 +183,14 @@ impl<'input> Parser<'input> for SpaceParser {
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
         let range = ImmediateLiteralParser.parse(input, state)?;
         let space = u64_from_literal(range, input.raw).map_err(Error::IncompleteMatch)?;
-        println!("Space: {space}");
-        state.bss += space;
+        state.bss = state
+            .bss
+            .checked_add(space)
+            .ok_or(Error::IncompleteMatch(ParserError::BssOverflow {
+                idx: state.idx,
+                prev_bss: state.bss,
+                additional_bss: space,
+            }))?;
         Ok(())
     }
 }

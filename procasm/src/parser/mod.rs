@@ -21,10 +21,10 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Parsed<'input> {
-    instructions: Vec<Instruction>,
+    pub instructions: Vec<Instruction>,
     labels: HashMap<&'input [u8], u64>,
-    unlinked_instructions: Vec<UnlinkedInstruction>,
-    data: Vec<u8>,
+    pub unlinked_instructions: Vec<UnlinkedInstruction>,
+    pub data: Vec<u8>,
     bss: u64,
 }
 
@@ -59,36 +59,10 @@ struct ParserState<'input> {
 }
 
 impl Parsed<'_> {
-    // Returns vec because linker uses size attribute
-    #[inline]
-    #[must_use]
-    pub(crate) const fn mut_instructions(&mut self) -> &mut Vec<Instruction> {
-        &mut self.instructions
-    }
-
     #[inline]
     #[must_use]
     pub(crate) const fn labels(&self) -> &HashMap<&[u8], u64> {
         &self.labels
-    }
-
-    // Returns vec because linker uses the size attribute
-    #[inline]
-    #[must_use]
-    pub(crate) const fn mut_unlinked_instructions(&mut self) -> &mut Vec<UnlinkedInstruction> {
-        &mut self.unlinked_instructions
-    }
-
-    #[inline]
-    #[must_use]
-    pub(crate) fn data(&self) -> &[u8] {
-        &self.data
-    }
-
-    #[inline]
-    #[must_use]
-    pub(crate) const fn mut_data(&mut self) -> &mut Vec<u8> {
-        &mut self.data
     }
 
     #[inline]

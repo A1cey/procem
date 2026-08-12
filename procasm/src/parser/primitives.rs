@@ -23,7 +23,7 @@ impl<'input> Parser<'input> for IdentParser {
             }
             Some(token) => Err(ParserError::InvalidToken {
                 idx: state.idx,
-                expected: "Mnemonic",
+                expected: "Identifier",
                 got: token.resolve(input.raw),
             }),
             None => Err(ParserError::TokenNotFound { idx: state.idx }),
@@ -115,7 +115,7 @@ impl<'input> Parser<'input> for DirectiveParser {
                 .map_err(Error::IncompleteMatch),
             Some(token) => Err(Error::NoMatch(ParserError::InvalidToken {
                 idx: state.idx,
-                expected: stringify!($token),
+                expected: "Directive",
                 got: token.resolve(input.raw),
             })),
             None => Err(Error::NoMatch(ParserError::TokenNotFound { idx: state.idx })),

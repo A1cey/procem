@@ -34,7 +34,7 @@ impl<'input, const MEM_SIZE: usize> Linker<'input, MEM_SIZE> {
     }
 
     fn run(&mut self) -> Option<AssembledProgram<MEM_SIZE>> {
-        let unlinked_instructions = mem::take(self.parsed.mut_unlinked_instructions());
+        let unlinked_instructions = mem::take(&mut self.parsed.unlinked_instructions);
 
         for unlinked_instruction in unlinked_instructions {
             self.link_instruction(unlinked_instruction);
@@ -69,7 +69,7 @@ impl<'input, const MEM_SIZE: usize> Linker<'input, MEM_SIZE> {
 
         let instruction = self
             .parsed
-            .mut_instructions()
+            .instructions
             .get_mut(unlinked_instruction.instr_idx())
             .expect("The instruction index is always in range of the instructions.");
 
@@ -140,7 +140,7 @@ impl<'input, const MEM_SIZE: usize> Linker<'input, MEM_SIZE> {
     #[must_use]
     #[inline]
     fn create_data(&mut self) -> Data<Vec<u8>> {
-        Data::new(0, mem::take(self.parsed.mut_data()))
+        Data::new(0, mem::take(&mut self.parsed.data))
     }
 
     #[must_use]
@@ -149,7 +149,7 @@ impl<'input, const MEM_SIZE: usize> Linker<'input, MEM_SIZE> {
             return Some(Bss::new(0, 0));
         }
 
-        let base_addr = self.parsed.data().len();
+        let base_addr = self.parsed.data.len();
 
         if base_addr as u128 > u128::from(u64::MAX) {
             self.errors
@@ -166,7 +166,7 @@ impl<'input, const MEM_SIZE: usize> Linker<'input, MEM_SIZE> {
     #[must_use]
     #[inline]
     fn create_code(&mut self) -> Code<Inst, Vec<Inst>> {
-        Code::new(mem::take(self.parsed.mut_instructions()))
+        Code::new(mem::take(&mut self.parsed.instructions))
     }
 }
 

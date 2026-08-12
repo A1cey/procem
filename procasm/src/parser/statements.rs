@@ -157,8 +157,7 @@ impl<'input> Parser<'input> for DataParser {
             Directive::Space => Err(Error::IncompleteMatch(ParserError::WrongDirective {
                 idx: state.idx,
                 got: directive.to_string(),
-                expected: "Only .byte, .hword, .word, .dword, .qword and .ascii are allowed in .data sections."
-                    .to_string(),
+                expected: "Only .byte, .hword, .word, .dword, .qword and .ascii are allowed in .data sections.",
             })),
         }
         .map_err(Error::into_incomplete_match)?;
@@ -180,8 +179,6 @@ impl<'input> Parser<'input> for BssParser {
             .right()
             .parse(input, state)?;
 
-        println!("{directive:?}");
-
         match directive {
             Directive::Space => SpaceListParser
                 .parse(input, state)
@@ -198,7 +195,7 @@ impl<'input> Parser<'input> for BssParser {
                 return Err(Error::IncompleteMatch(ParserError::WrongDirective {
                     idx: state.idx,
                     got: directive.to_string(),
-                    expected: "Only .space is allowed in .bss section.".to_string(),
+                    expected: "Only .space is allowed in .bss section.",
                 }));
             }
         }
