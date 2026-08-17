@@ -6,7 +6,7 @@ use crate::{
         ParserError, ParserInput, ParserState,
         combinators::{Error, Parser},
     },
-    tokenizer::{ImmediateLiteral, Token},
+    tokenizer::{ImmediateLiteralKind, Token, TokenKind},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -17,15 +17,13 @@ impl<'input> Parser<'input> for IdentParser {
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
         match input.tokens.get(state.idx) {
-            Some(Token::Identifier(range)) => {
+            Some(Token { kind: TokenKind::Identifier, span }) => {
                 state.idx += 1;
-                Ok(*range)
+                Ok(*span)
             }
-            Some(token) => Err(ParserError::InvalidToken {
-                idx: state.idx,
-                expected: "Identifier",
-                got: token.resolve(input.raw),
-            }),
+            Some(token) => {
+                Err(ParserError::InvalidToken { idx: state.idx, expected: "Identifier", got: token.resolve(input.raw) })
+            }
             None => Err(ParserError::TokenNotFound { idx: state.idx }),
         }
         .map_err(Error::NoMatch)
@@ -40,16 +38,12 @@ impl<'input> Parser<'input> for EndParser {
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
         match input.tokens.get(state.idx) {
-            Some(Token::End) => {
+            Some(Token { kind: TokenKind::End, .. }) => {
                 state.idx += 1;
                 state.end = true;
                 Ok(())
             }
-            Some(token) => Err(ParserError::InvalidToken {
-                idx: state.idx,
-                expected: "End",
-                got: token.resolve(input.raw),
-            }),
+            Some(token) => Err(ParserError::InvalidToken { idx: state.idx, expected: "End", got: token.resolve(input.raw) }),
             None => Err(ParserError::TokenNotFound { idx: state.idx }),
         }
         .map_err(Error::NoMatch)
@@ -60,19 +54,17 @@ impl<'input> Parser<'input> for EndParser {
 pub(crate) struct ImmediateLiteralParser;
 
 impl<'input> Parser<'input> for ImmediateLiteralParser {
-    type Output = ImmediateLiteral;
+    type Output = (ImmediateLiteralKind, Range);
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
         match input.tokens.get(state.idx) {
-            Some(Token::ImmediateLiteral(lit)) => {
+            Some(Token { kind: TokenKind::ImmediateLiteral(lit), span }) => {
                 state.idx += 1;
-                Ok(*lit)
+                Ok((*lit, *span))
             }
-            Some(token) => Err(ParserError::InvalidToken {
-                idx: state.idx,
-                expected: "ImmediateLiteral",
-                got: token.resolve(input.raw),
-            }),
+            Some(token) => {
+                Err(ParserError::InvalidToken { idx: state.idx, expected: "ImmediateLiteral", got: token.resolve(input.raw) })
+            }
             None => Err(ParserError::TokenNotFound { idx: state.idx }),
         }
         .map_err(Error::NoMatch)
@@ -87,15 +79,13 @@ impl<'input> Parser<'input> for StringLiteralParser {
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
         match input.tokens.get(state.idx) {
-            Some(Token::StringLiteral(lit)) => {
+            Some(Token { kind: TokenKind::StringLiteral, span }) => {
                 state.idx += 1;
-                Ok(*lit)
+                Ok(*span)
             }
-            Some(token) => Err(ParserError::InvalidToken {
-                idx: state.idx,
-                expected: "StringLiteral",
-                got: token.resolve(input.raw),
-            }),
+            Some(token) => {
+                Err(ParserError::InvalidToken { idx: state.idx, expected: "StringLiteral", got: token.resolve(input.raw) })
+            }
             None => Err(ParserError::TokenNotFound { idx: state.idx }),
         }
         .map_err(Error::NoMatch)
@@ -110,9 +100,9 @@ impl<'input> Parser<'input> for DirectiveParser {
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
         match input.tokens.get(state.idx) {
-            Some(Token::Directive(range)) => Directive::try_from(&input.raw[range])
-                .inspect(|_| state.idx += 1)
-                .map_err(Error::IncompleteMatch),
+            Some(Token { kind: TokenKind::Directive, span }) => {
+                Directive::try_from(&input.raw[span]).inspect(|_| state.idx += 1).map_err(Error::IncompleteMatch)
+            }
             Some(token) => Err(Error::NoMatch(ParserError::InvalidToken {
                 idx: state.idx,
                 expected: "Directive",
@@ -133,7 +123,7 @@ macro_rules! simple_token_parser {
 
             fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
                 match input.tokens.get(state.idx) {
-                    Some(Token::$token) => {
+                    Some(Token { kind: TokenKind::$token, .. }) => {
                         state.idx += 1;
                         Ok(())
                     }

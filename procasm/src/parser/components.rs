@@ -21,9 +21,7 @@ impl<'input> Parser<'input> for RegisterParser {
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
         let range = IdentParser.parse(input, state)?;
-        Register::try_from(&input.raw[range])
-            .map_err(|err| ParserError::RegisterParsing { err })
-            .map_err(Error::NoMatch)
+        Register::try_from(&input.raw[range]).map_err(|err| ParserError::RegisterParsing { err }).map_err(Error::NoMatch)
     }
 }
 
@@ -38,10 +36,7 @@ impl<'input> Parser<'input> for MnemonicParser {
         let ident = &input.raw[range];
         ident
             .try_into()
-            .map_err(|()| ParserError::UnknownMnemonic {
-                idx: state.idx,
-                inst: string_from_u8_slice(ident),
-            })
+            .map_err(|()| ParserError::UnknownMnemonic { idx: state.idx, inst: string_from_u8_slice(ident) })
             .map_err(Error::NoMatch)
     }
 }
@@ -54,8 +49,8 @@ impl<'input> Parser<'input> for OperandParser {
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
         RegisterParser
             .map(|reg| Ok(Operand::Register(reg)))
-            .or(ImmediateLiteralParser.map(|lit| {
-                u64_from_literal(lit, input.raw) // TODO: This always u64?
+            .or(ImmediateLiteralParser.map(|(lit, span)| {
+                u64_from_literal(lit, span, input.raw) // TODO: This always u64?
                     .map(Operand::Value)
                     .map_err(Error::IncompleteMatch)
             }))
@@ -72,9 +67,7 @@ impl<'input> Parser<'input> for LabeledMemoryLocationParser {
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
         let range = IdentParser.parse(input, state)?;
 
-        state
-            .unlinked_instructions
-            .push(UnlinkedInstruction::new(state.instructions.len(), range));
+        state.unlinked_instructions.push(UnlinkedInstruction::new(state.instructions.len(), range));
 
         Ok(MemoryLocation::Labeled(u64::MAX))
     }
@@ -105,9 +98,7 @@ impl<'input> Parser<'input> for MemoryLocationParser {
     type Output = MemoryLocation;
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
-        LabeledMemoryLocationParser
-            .or(DirectMemoryLocationParser)
-            .parse(input, state)
+        LabeledMemoryLocationParser.or(DirectMemoryLocationParser).parse(input, state)
     }
 }
 
@@ -120,8 +111,8 @@ macro_rules! immediate_literal_list_parser {
             type Output = $ret_val;
 
             fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
-                let lit = ImmediateLiteralParser.parse(input, state)?;
-                $val_from_lit_fn(lit, input.raw).map_err(Error::IncompleteMatch)
+                let (lit, span) = ImmediateLiteralParser.parse(input, state)?;
+                $val_from_lit_fn(lit, span, input.raw).map_err(Error::IncompleteMatch)
             }
         }
 
@@ -136,9 +127,7 @@ macro_rules! immediate_literal_list_parser {
                 state.data.extend_from_slice(&val.to_le_bytes());
 
                 while let Ok(()) = CommaParser.parse(input, state) {
-                    let val = $parser_name
-                        .parse(input, state)
-                        .map_err(Error::into_incomplete_match)?;
+                    let val = $parser_name.parse(input, state).map_err(Error::into_incomplete_match)?;
                     state.data.extend_from_slice(&val.to_le_bytes());
                 }
                 Ok(())
@@ -165,9 +154,7 @@ impl<'input> Parser<'input> for AsciiListParser {
         state.data.extend_from_slice(&input.raw[range]);
 
         while let Ok(()) = CommaParser.parse(input, state) {
-            let range = StringLiteralParser
-                .parse(input, state)
-                .map_err(Error::into_incomplete_match)?;
+            let range = StringLiteralParser.parse(input, state).map_err(Error::into_incomplete_match)?;
             state.data.extend_from_slice(&input.raw[range]);
         }
         Ok(())
@@ -181,16 +168,13 @@ impl<'input> Parser<'input> for SpaceParser {
     type Output = ();
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
-        let range = ImmediateLiteralParser.parse(input, state)?;
-        let space = u64_from_literal(range, input.raw).map_err(Error::IncompleteMatch)?;
-        state.bss = state
-            .bss
-            .checked_add(space)
-            .ok_or(Error::IncompleteMatch(ParserError::BssOverflow {
-                idx: state.idx,
-                prev_bss: state.bss,
-                additional_bss: space,
-            }))?;
+        let (lit, span) = ImmediateLiteralParser.parse(input, state)?;
+        let space = u64_from_literal(lit, span, input.raw).map_err(Error::IncompleteMatch)?;
+        state.bss = state.bss.checked_add(space).ok_or(Error::IncompleteMatch(ParserError::BssOverflow {
+            idx: state.idx,
+            prev_bss: state.bss,
+            additional_bss: space,
+        }))?;
         Ok(())
     }
 }

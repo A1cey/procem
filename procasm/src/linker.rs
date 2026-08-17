@@ -18,11 +18,7 @@ pub struct Linker<'input, const MEM_SIZE: usize> {
 
 impl<'input, const MEM_SIZE: usize> Linker<'input, MEM_SIZE> {
     pub fn link(input: &'input [u8], parsed: Parsed<'input>) -> Result<AssembledProgram<MEM_SIZE>, Vec<LinkerError>> {
-        let mut linker = Self {
-            errors: Vec::new(),
-            input,
-            parsed,
-        };
+        let mut linker = Self { errors: Vec::new(), input, parsed };
 
         let program = linker.run();
 
@@ -74,7 +70,6 @@ impl<'input, const MEM_SIZE: usize> Linker<'input, MEM_SIZE> {
             .expect("The instruction index is always in range of the instructions.");
 
         // skips forrmatting the match
-        #[rustfmt::skip]
         let linked_instruction = match instruction {
             Inst::Jump { to: _, condition } => Inst::Jump { to: addr, condition: *condition },
             Inst::Adr { reg, addr: _ } => Inst::Adr { reg: *reg, addr },
@@ -152,8 +147,7 @@ impl<'input, const MEM_SIZE: usize> Linker<'input, MEM_SIZE> {
         let base_addr = self.parsed.data.len();
 
         if base_addr as u128 > u128::from(u64::MAX) {
-            self.errors
-                .push(LinkerError::DataSectionTooLarge { requested: base_addr });
+            self.errors.push(LinkerError::DataSectionTooLarge { requested: base_addr });
             return None;
         }
         let base_addr = base_addr as u64;

@@ -43,7 +43,7 @@
 //! Use *.byte*, *.hword*, *.word*, *.dword*, *.qword*, or *.ascii* followed by a *Literal* to declare data in the *.data* section. To declare an array of data multiple literals separated by commas can be used.
 //!
 //! Example:
-//! ```
+//! ```asm
 //! .data
 //!     .byte 5
 //!     .word 10, 20, 30, 40, 50
@@ -150,19 +150,14 @@ pub type AssembledProgram<const MEM_SIZE: usize> = Program<MEM_SIZE, Instruction
 ///     )
 /// );
 /// ```
-pub fn assemble<const MEM_SIZE: usize>(
-    input: impl AsRef<str>,
-) -> Result<AssembledProgram<MEM_SIZE>, Vec<AssemblerError>> {
+pub fn assemble<const MEM_SIZE: usize>(input: impl AsRef<str>) -> Result<AssembledProgram<MEM_SIZE>, Vec<AssemblerError>> {
     let input = input.as_ref().as_bytes();
 
-    let tokens =
-        Tokenizer::tokenize(input).map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())?;
+    let tokens = Tokenizer::tokenize(input).map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())?;
 
-    let parsed =
-        parse(&tokens, input).map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())?;
+    let parsed = parse(&tokens, input).map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())?;
 
-    Linker::<'_, MEM_SIZE>::link(input, parsed)
-        .map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())
+    Linker::<'_, MEM_SIZE>::link(input, parsed).map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]

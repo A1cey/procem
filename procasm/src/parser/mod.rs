@@ -16,7 +16,7 @@ use crate::{
         combinators::{Error, Parser},
         statements::{BssParser, DataParser},
     },
-    tokenizer::{ImmediateLiteral, Token},
+    tokenizer::{ImmediateLiteralKind, Token, TokenKind},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -129,11 +129,7 @@ pub(crate) fn parse<'input>(tokens: &'input [Token], input: &'input [u8]) -> Res
         }
     }
 
-    if errors.is_empty() {
-        Ok(Parsed::from(state))
-    } else {
-        Err(errors)
-    }
+    if errors.is_empty() { Ok(Parsed::from(state)) } else { Err(errors) }
 }
 
 //TODO: Maybe make this a parser?
@@ -141,19 +137,19 @@ fn skip_to_next_line(tokens: &[Token], state: &mut ParserState) {
     while let Some(token) = tokens.get(state.idx) {
         state.idx += 1;
         match *token {
-            Token::Newline => break,
-            Token::End => {
+            Token { kind: TokenKind::Newline, .. } => break,
+            Token { kind: TokenKind::End, .. } => {
                 state.end = true;
                 break;
             }
-            Token::Identifier(_)
-            | Token::ImmediateLiteral(_)
-            | Token::StringLiteral(_)
-            | Token::Comma
-            | Token::Colon
-            | Token::OpenBracket
-            | Token::ClosedBracket
-            | Token::Directive(_) => {}
+            Token { kind: TokenKind::Identifier, .. }
+            | Token { kind: TokenKind::ImmediateLiteral(_), .. }
+            | Token { kind: TokenKind::StringLiteral, .. }
+            | Token { kind: TokenKind::Comma, .. }
+            | Token { kind: TokenKind::Colon, .. }
+            | Token { kind: TokenKind::OpenBracket, .. }
+            | Token { kind: TokenKind::ClosedBracket, .. }
+            | Token { kind: TokenKind::Directive, .. } => {}
         }
     }
 }
@@ -167,41 +163,41 @@ fn string_from_u8_slice(slice: &[u8]) -> String {
 macro_rules! from_literal {
     ($unsigned:ty, $fn_name: ident) => {
         #[doc = concat!("Parse an `ImmediateLiteral` into an `", stringify!($unsigned), "`.")]
-        fn $fn_name(lit: ImmediateLiteral, input: &[u8]) -> Result<$unsigned, ParserError> {
+        fn $fn_name(
+            lit: crate::tokenizer::ImmediateLiteralKind,
+            span: ::ars::range::Range,
+            input: &[u8],
+        ) -> Result<$unsigned, ParserError> {
             match lit {
-                ImmediateLiteral::Char(c) => Ok(<$unsigned>::from(c)),
-                ImmediateLiteral::Binary(range) => {
-                    let lit = String::from_utf8_lossy(&input[range]);
-                    <$unsigned>::from_str_radix(&lit, 2).map_err(|err| ParserError::LiteralParsing {
-                        lit: lit.to_string(),
-                        err,
-                    })
+                ImmediateLiteralKind::Char => {
+                    let raw_lit = &input[span];
+                    debug_assert_eq!(raw_lit.len(), 1);
+                    Ok(<$unsigned>::from(raw_lit[0]))
                 }
-                ImmediateLiteral::Decimal(range) => {
-                    let lit = String::from_utf8_lossy(&input[range]);
-                    if let Some(lit) = lit.strip_prefix('-') {
-                        lit.parse::<$unsigned>().map(<$unsigned>::wrapping_neg)
+                ImmediateLiteralKind::Binary => {
+                    let raw_lit = String::from_utf8_lossy(&input[span]);
+
+                    <$unsigned>::from_str_radix(&raw_lit, 2)
+                        .map_err(|err| ParserError::LiteralParsing { lit: raw_lit.to_string(), err })
+                }
+                ImmediateLiteralKind::Decimal => {
+                    let raw_lit = String::from_utf8_lossy(&input[span]);
+                    if let Some(raw_lit) = raw_lit.strip_prefix('-') {
+                        raw_lit.parse::<$unsigned>().map(<$unsigned>::wrapping_neg)
                     } else {
-                        lit.parse()
+                        raw_lit.parse()
                     }
-                    .map_err(|err| ParserError::LiteralParsing {
-                        lit: lit.to_string(),
-                        err,
-                    })
+                    .map_err(|err| ParserError::LiteralParsing { lit: raw_lit.to_string(), err })
                 }
-                ImmediateLiteral::Hexadecimal(range) => {
-                    let lit = String::from_utf8_lossy(&input[range]);
-                    <$unsigned>::from_str_radix(&lit, 16).map_err(|err| ParserError::LiteralParsing {
-                        lit: lit.to_string(),
-                        err,
-                    })
+                ImmediateLiteralKind::Hexadecimal => {
+                    let raw_lit = String::from_utf8_lossy(&input[span]);
+                    <$unsigned>::from_str_radix(&raw_lit, 16)
+                        .map_err(|err| ParserError::LiteralParsing { lit: raw_lit.to_string(), err })
                 }
-                ImmediateLiteral::Octal(range) => {
-                    let lit = String::from_utf8_lossy(&input[range]);
-                    <$unsigned>::from_str_radix(&lit, 8).map_err(|err| ParserError::LiteralParsing {
-                        lit: lit.to_string(),
-                        err,
-                    })
+                ImmediateLiteralKind::Octal => {
+                    let raw_lit = String::from_utf8_lossy(&input[span]);
+                    <$unsigned>::from_str_radix(&raw_lit, 8)
+                        .map_err(|err| ParserError::LiteralParsing { lit: raw_lit.to_string(), err })
                 }
             }
         }
@@ -235,10 +231,7 @@ mod test {
             .Invalid
             ";
         let tokens = Tokenizer::tokenize(input).unwrap();
-        let input = ParserInput {
-            raw: input,
-            tokens: &tokens,
-        };
+        let input = ParserInput { raw: input, tokens: &tokens };
         let mut state = ParserState::default();
         let p = ProcasmParser;
 
@@ -292,7 +285,7 @@ mod test {
 
         assert_eq!(parsed.instructions.len(), 0);
         assert_eq!(parsed.labels().len(), 2);
-        assert_eq!(parsed.data().len(), 0);
+        assert_eq!(parsed.data.len(), 0);
         assert_eq!(parsed.bss, 5 + 10 + 5 + 10);
         assert_eq!(parsed.labels[b"a".as_slice()], 0);
         assert_eq!(parsed.labels[b"b".as_slice()], 5 + 10);
@@ -319,17 +312,11 @@ mod test {
         assert_eq!(parsed.instructions.len(), 0);
         assert_eq!(parsed.unlinked_instructions.len(), 0);
         assert_eq!(parsed.bss(), 0);
-        assert_eq!(
-            parsed.data.len(),
-            1 + 2 + 4 + 8 + 16 + b"Hello World!".len() + b"\0".len() + 4 + 4
-        ); // byte, hword, word, dword, qword, 2 ascii, 2 word allocations
+        assert_eq!(parsed.data.len(), 1 + 2 + 4 + 8 + 16 + b"Hello World!".len() + b"\0".len() + 4 + 4); // byte, hword, word, dword, qword, 2 ascii, 2 word allocations
         assert_eq!(parsed.labels.len(), 3);
         assert_eq!(parsed.labels[b"a".as_slice()], 0);
         assert_eq!(parsed.labels[b"b".as_slice()], 1 + 2 + 4 + 8 + 16);
-        assert_eq!(
-            parsed.labels[b"c".as_slice()],
-            1 + 2 + 4 + 8 + 16 + b"Hello World!".len() as u64 + b"\0".len() as u64
-        );
+        assert_eq!(parsed.labels[b"c".as_slice()], 1 + 2 + 4 + 8 + 16 + b"Hello World!".len() as u64 + b"\0".len() as u64);
     }
 
     #[test]
@@ -353,10 +340,7 @@ mod test {
         assert_eq!(parsed.data.len(), 1 + 1 + 2 + 2 + 4 + 4 + 4 + 8 + 8 + 16 + 16); // 2 byte, 2 hword, 3 word, 2 dword, 2 qword
         assert_eq!(parsed.labels.len(), 2);
         assert_eq!(parsed.labels[b"a".as_slice()], 0);
-        assert_eq!(
-            parsed.labels[b"b".as_slice()],
-            1 + 1 + 2 + 2 + 4 + 4 + 4 + 8 + 8 + 16 + 16
-        );
+        assert_eq!(parsed.labels[b"b".as_slice()], 1 + 1 + 2 + 2 + 4 + 4 + 4 + 8 + 8 + 16 + 16);
     }
 
     #[test]
@@ -398,7 +382,7 @@ mod test {
 
         assert_eq!(parsed.instructions.len(), 6);
         assert_eq!(parsed.labels().len(), 6);
-        assert_eq!(parsed.data().len(), 4 + 4); // 2 32bit allocations
+        assert_eq!(parsed.data.len(), 4 + 4); // 2 32bit allocations
         assert_eq!(parsed.bss(), 5 + 10 + 5);
 
         // code
@@ -433,78 +417,36 @@ mod test {
 
         let mut insts = parsed.instructions.iter();
 
-        match insts.next().unwrap() {
-            Instruction::Str { from, to } => {
-                assert_eq!(*from, Register::R0);
-                assert_eq!(
-                    *to,
-                    MemoryLocation::Offset {
-                        base: Register::R1,
-                        offset: Operand::Value(0)
-                    }
-                );
+        assert_eq!(
+            *insts.next().unwrap(),
+            Instruction::Str { from: Register::R0, to: MemoryLocation::Offset { base: Register::R1, offset: Operand::Value(0) } }
+        );
+        assert_eq!(
+            *insts.next().unwrap(),
+            Instruction::Str {
+                from: Register::R0,
+                to: MemoryLocation::Offset { base: Register::R1, offset: Operand::Register(Register::R2) }
             }
-            i => unreachable!("Expected Str instruction, got {i:?}"),
-        }
-        match insts.next().unwrap() {
-            Instruction::Str { from, to } => {
-                assert_eq!(*from, Register::R0);
-                assert_eq!(
-                    *to,
-                    MemoryLocation::Offset {
-                        base: Register::R1,
-                        offset: Operand::Register(Register::R2)
-                    }
-                );
+        );
+        assert_eq!(
+            *insts.next().unwrap(),
+            Instruction::Str { from: Register::R0, to: MemoryLocation::Offset { base: Register::R1, offset: Operand::Value(5) } }
+        );
+        assert_eq!(
+            *insts.next().unwrap(),
+            Instruction::Str {
+                from: Register::R0,
+                to: MemoryLocation::Offset { base: Register::R1, offset: Operand::Value(-1isize as u64) }
             }
-            i => unreachable!("Expected Str instruction, got {i:?}"),
-        }
-        match insts.next().unwrap() {
-            Instruction::Str { from, to } => {
-                assert_eq!(*from, Register::R0);
-                assert_eq!(
-                    *to,
-                    MemoryLocation::Offset {
-                        base: Register::R1,
-                        offset: Operand::Value(5)
-                    }
-                );
+        );
+        assert_eq!(
+            *insts.next().unwrap(),
+            Instruction::Str {
+                from: Register::R0,
+                to: MemoryLocation::Offset { base: Register::R1, offset: Operand::Value(10) }
             }
-            i => unreachable!("Expected Str instruction, got {i:?}"),
-        }
-        match insts.next().unwrap() {
-            Instruction::Str { from, to } => {
-                assert_eq!(*from, Register::R0);
-                assert_eq!(
-                    *to,
-                    MemoryLocation::Offset {
-                        base: Register::R1,
-                        offset: Operand::Value(-1isize as u64)
-                    }
-                );
-            }
-            i => unreachable!("Expected Str instruction, got {i:?}"),
-        }
-        match insts.next().unwrap() {
-            Instruction::Str { from, to } => {
-                assert_eq!(*from, Register::R0);
-                assert_eq!(
-                    *to,
-                    MemoryLocation::Offset {
-                        base: Register::R1,
-                        offset: Operand::Value(10)
-                    }
-                );
-            }
-            i => unreachable!("Expected Str instruction, got {i:?}"),
-        }
-        match insts.next().unwrap() {
-            Instruction::Str { from, to } => {
-                assert_eq!(*from, Register::R0);
-                assert_eq!(*to, MemoryLocation::Labeled(u64::MAX));
-            }
-            i => unreachable!("Expected Str instruction, got {i:?}"),
-        }
+        );
+        assert_eq!(*insts.next().unwrap(), Instruction::Str { from: Register::R0, to: MemoryLocation::Labeled(u64::MAX) });
     }
 
     #[test]
@@ -528,78 +470,37 @@ mod test {
 
         let mut insts = parsed.instructions.iter();
 
-        match insts.next().unwrap() {
-            Instruction::Ldr { to, from } => {
-                assert_eq!(*to, Register::R0);
-                assert_eq!(
-                    *from,
-                    MemoryLocation::Offset {
-                        base: Register::R1,
-                        offset: Operand::Value(0)
-                    }
-                );
+        assert_eq!(
+            *insts.next().unwrap(),
+            Instruction::Ldr { to: Register::R0, from: MemoryLocation::Offset { base: Register::R1, offset: Operand::Value(0) } }
+        );
+        assert_eq!(
+            *insts.next().unwrap(),
+            Instruction::Ldr {
+                to: Register::R0,
+                from: MemoryLocation::Offset { base: Register::R1, offset: Operand::Register(Register::R2) }
             }
-            i => unreachable!("Expected Ldr instruction, got {i:?}"),
-        }
-        match insts.next().unwrap() {
-            Instruction::Ldr { to, from } => {
-                assert_eq!(*to, Register::R0);
-                assert_eq!(
-                    *from,
-                    MemoryLocation::Offset {
-                        base: Register::R1,
-                        offset: Operand::Register(Register::R2)
-                    }
-                );
+        );
+        assert_eq!(
+            *insts.next().unwrap(),
+            Instruction::Ldr { to: Register::R0, from: MemoryLocation::Offset { base: Register::R1, offset: Operand::Value(5) } }
+        );
+
+        assert_eq!(
+            *insts.next().unwrap(),
+            Instruction::Ldr {
+                to: Register::R0,
+                from: MemoryLocation::Offset { base: Register::R1, offset: Operand::Value(-1isize as u64) }
             }
-            i => unreachable!("Expected Ldr instruction, got {i:?}"),
-        }
-        match insts.next().unwrap() {
-            Instruction::Ldr { to, from } => {
-                assert_eq!(*to, Register::R0);
-                assert_eq!(
-                    *from,
-                    MemoryLocation::Offset {
-                        base: Register::R1,
-                        offset: Operand::Value(5)
-                    }
-                );
+        );
+        assert_eq!(
+            *insts.next().unwrap(),
+            Instruction::Ldr {
+                to: Register::R0,
+                from: MemoryLocation::Offset { base: Register::R1, offset: Operand::Value(10) }
             }
-            i => unreachable!("Expected Ldr instruction, got {i:?}"),
-        }
-        match insts.next().unwrap() {
-            Instruction::Ldr { to, from } => {
-                assert_eq!(*to, Register::R0);
-                assert_eq!(
-                    *from,
-                    MemoryLocation::Offset {
-                        base: Register::R1,
-                        offset: Operand::Value(-1isize as u64)
-                    }
-                );
-            }
-            i => unreachable!("Expected Ldr instruction, got {i:?}"),
-        }
-        match insts.next().unwrap() {
-            Instruction::Ldr { to, from } => {
-                assert_eq!(*to, Register::R0);
-                assert_eq!(
-                    *from,
-                    MemoryLocation::Offset {
-                        base: Register::R1,
-                        offset: Operand::Value(10)
-                    }
-                );
-            }
-            i => unreachable!("Expected Ldr instruction, got {i:?}"),
-        }
-        match insts.next().unwrap() {
-            Instruction::Ldr { to, from } => {
-                assert_eq!(*to, Register::R0);
-                assert_eq!(*from, MemoryLocation::Labeled(u64::MAX));
-            }
-            i => unreachable!("Expected Ldr instruction, got {i:?}"),
-        }
+        );
+        assert_eq!(*insts.next().unwrap(), Instruction::Ldr { to: Register::R0, from: MemoryLocation::Labeled(u64::MAX) });
     }
 
     #[test]
@@ -614,12 +515,6 @@ mod test {
 
         assert_eq!(parsed.instructions.len(), 1);
         assert_eq!(parsed.unlinked_instructions.len(), 1);
-        assert_eq!(
-            parsed.instructions[0],
-            Instruction::Adr {
-                reg: Register::R0,
-                addr: u64::MAX
-            }
-        );
+        assert_eq!(parsed.instructions[0], Instruction::Adr { reg: Register::R0, addr: u64::MAX });
     }
 }

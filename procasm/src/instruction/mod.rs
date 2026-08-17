@@ -67,39 +67,19 @@ pub enum Instruction {
     Ret,
     /// Add the value of the operand (rhs) to the register (acc).
     /// The result is stored in acc. (ADD\[S\])
-    Add {
-        acc: Register,
-        rhs: Operand,
-        set_flags: bool,
-    },
+    Add { acc: Register, rhs: Operand, set_flags: bool },
     /// Subtract the value of the operand (rhs) from the register (acc).
     /// The result is stored in acc. (SUB\[S\])
-    Sub {
-        acc: Register,
-        rhs: Operand,
-        set_flags: bool,
-    },
+    Sub { acc: Register, rhs: Operand, set_flags: bool },
     /// Multiply the value of the operand (rhs) with the value of the register (acc).
     /// The result is stored in acc. (MUL\[S\])
-    Mul {
-        acc: Register,
-        rhs: Operand,
-        set_flags: bool,
-    },
+    Mul { acc: Register, rhs: Operand, set_flags: bool },
     /// Unsigned divide the value of the register (acc) by the value of the operand (rhs).
     /// The result is stored in acc. (DIV\[S\])
-    Div {
-        acc: Register,
-        rhs: Operand,
-        set_flags: bool,
-    },
+    Div { acc: Register, rhs: Operand, set_flags: bool },
     /// Signed divide the value of the register (acc) by the value of the operand (rhs).
     /// The result is stored in acc. (SDIV\[S\])
-    Sdiv {
-        acc: Register,
-        rhs: Operand,
-        set_flags: bool,
-    },
+    Sdiv { acc: Register, rhs: Operand, set_flags: bool },
     /// Increment the value in a register by one. (INC\[S\])
     Inc { reg: Register, set_flags: bool },
     /// Decrement the value in a register by one. (DEC\[S\])
@@ -183,120 +163,100 @@ impl InstructionTrait for Instruction {
 
 impl Instruction {
     // skips forrmatting the match
-    #[rustfmt::skip]
-    pub(crate) const fn from_reg_operand_mnemonic(
-        mnemonic: RegOperandMnemonic,
-        lhs: Register,
-        rhs: Operand
-    ) -> Self {
-        use RegOperandMnemonic as M;
+    pub(crate) const fn from_reg_operand_mnemonic(mnemonic: RegOperandMnemonic, lhs: Register, rhs: Operand) -> Self {
         match mnemonic {
-            M::Mov => Self::Mov { to: lhs, from: rhs },
-            M::Add => Self::Add { acc: lhs, rhs, set_flags: false },
-            M::AddS => Self::Add { acc: lhs, rhs, set_flags: true },
-            M::Sub => Self::Sub { acc: lhs, rhs, set_flags: false },
-            M::SubS => Self::Sub { acc: lhs, rhs, set_flags: true },
-            M::Mul => Self::Mul { acc: lhs, rhs, set_flags: false },
-            M::MulS => Self::Mul { acc: lhs, rhs, set_flags: true },
-            M::Div => Self::Div { acc: lhs, rhs, set_flags: false },
-            M::DivS => Self::Div { acc: lhs, rhs, set_flags: true },
-            M::Sdiv => Self::Sdiv { acc: lhs, rhs, set_flags: false },
-            M::SdivS => Self::Sdiv { acc: lhs, rhs, set_flags: true },
-            M::Or => Self::Or { reg: lhs, rhs },
-            M::And => Self::And { reg: lhs, rhs },
-            M::Xor => Self::Xor { reg: lhs, rhs },
+            RegOperandMnemonic::Mov => Self::Mov { to: lhs, from: rhs },
+            RegOperandMnemonic::Add => Self::Add { acc: lhs, rhs, set_flags: false },
+            RegOperandMnemonic::AddS => Self::Add { acc: lhs, rhs, set_flags: true },
+            RegOperandMnemonic::Sub => Self::Sub { acc: lhs, rhs, set_flags: false },
+            RegOperandMnemonic::SubS => Self::Sub { acc: lhs, rhs, set_flags: true },
+            RegOperandMnemonic::Mul => Self::Mul { acc: lhs, rhs, set_flags: false },
+            RegOperandMnemonic::MulS => Self::Mul { acc: lhs, rhs, set_flags: true },
+            RegOperandMnemonic::Div => Self::Div { acc: lhs, rhs, set_flags: false },
+            RegOperandMnemonic::DivS => Self::Div { acc: lhs, rhs, set_flags: true },
+            RegOperandMnemonic::Sdiv => Self::Sdiv { acc: lhs, rhs, set_flags: false },
+            RegOperandMnemonic::SdivS => Self::Sdiv { acc: lhs, rhs, set_flags: true },
+            RegOperandMnemonic::Or => Self::Or { reg: lhs, rhs },
+            RegOperandMnemonic::And => Self::And { reg: lhs, rhs },
+            RegOperandMnemonic::Xor => Self::Xor { reg: lhs, rhs },
         }
     }
 
     pub(crate) const fn from_single_reg_mnemonic(instr: SingleRegMnemonic, reg: Register) -> Self {
-        use SingleRegMnemonic as M;
         match instr {
-            M::Inc => Self::Inc { reg, set_flags: false },
-            M::IncS => Self::Inc { reg, set_flags: true },
-            M::Dec => Self::Dec { reg, set_flags: false },
-            M::DecS => Self::Dec { reg, set_flags: true },
-            M::Not => Self::Not { reg },
-            M::Pop => Self::Pop { to: reg },
+            SingleRegMnemonic::Inc => Self::Inc { reg, set_flags: false },
+            SingleRegMnemonic::IncS => Self::Inc { reg, set_flags: true },
+            SingleRegMnemonic::Dec => Self::Dec { reg, set_flags: false },
+            SingleRegMnemonic::DecS => Self::Dec { reg, set_flags: true },
+            SingleRegMnemonic::Not => Self::Not { reg },
+            SingleRegMnemonic::Pop => Self::Pop { to: reg },
         }
     }
 
     pub(crate) const fn from_single_operand_mnemonic(instr: SingleOperandMnemonic, operand: Operand) -> Self {
-        use SingleOperandMnemonic as M;
-
         match instr {
-            M::Call => Self::Call { addr: operand },
-            M::Push => Self::Push { from: operand },
+            SingleOperandMnemonic::Call => Self::Call { addr: operand },
+            SingleOperandMnemonic::Push => Self::Push { from: operand },
         }
     }
 
     pub(crate) const fn from_two_operand_mnemonic(instr: TwoOperandMnemonic, lhs: Operand, rhs: Operand) -> Self {
-        use TwoOperandMnemonic as M;
-
         match instr {
-            M::Cmp => Self::Cmp { lhs, rhs },
+            TwoOperandMnemonic::Cmp => Self::Cmp { lhs, rhs },
         }
     }
 
     pub(crate) const fn from_shift_mnemonic(instr: ShiftMnemonic, reg: Register, val: u64) -> Self {
-        use ShiftMnemonic as M;
-
         match instr {
-            M::Shl => Self::Shl { reg, val },
-            M::Shr => Self::Shr { reg, val },
+            ShiftMnemonic::Shl => Self::Shl { reg, val },
+            ShiftMnemonic::Shr => Self::Shr { reg, val },
         }
     }
 
     pub(crate) const fn from_rotate_mnemonic(instr: RotateMnemonic, reg: Register, val: u32) -> Self {
-        use RotateMnemonic as M;
-
         match instr {
-            M::Ror => Self::Ror { reg, val },
-            M::Rol => Self::Rol { reg, val },
+            RotateMnemonic::Ror => Self::Ror { reg, val },
+            RotateMnemonic::Rol => Self::Rol { reg, val },
         }
     }
 
     pub(crate) const fn from_jump_mnemonic(instr: JumpMnemonic, dest: u64) -> Self {
-        use JumpMnemonic as M;
-
         let condition = match instr {
-            M::Jmp => JumpCondition::Unconditional,
-            M::Jz => JumpCondition::Zero,
-            M::Jnz => JumpCondition::NotZero,
-            M::Jc => JumpCondition::Carry,
-            M::Jnc => JumpCondition::NotCarry,
-            M::Js => JumpCondition::Signed,
-            M::Jns => JumpCondition::NotSigned,
-            M::Jg => JumpCondition::Greater,
-            M::Jl => JumpCondition::Less,
-            M::Jge => JumpCondition::GreaterOrEq,
-            M::Jle => JumpCondition::LessOrEq,
+            JumpMnemonic::Jmp => JumpCondition::Unconditional,
+            JumpMnemonic::Jz => JumpCondition::Zero,
+            JumpMnemonic::Jnz => JumpCondition::NotZero,
+            JumpMnemonic::Jc => JumpCondition::Carry,
+            JumpMnemonic::Jnc => JumpCondition::NotCarry,
+            JumpMnemonic::Js => JumpCondition::Signed,
+            JumpMnemonic::Jns => JumpCondition::NotSigned,
+            JumpMnemonic::Jg => JumpCondition::Greater,
+            JumpMnemonic::Jl => JumpCondition::Less,
+            JumpMnemonic::Jge => JumpCondition::GreaterOrEq,
+            JumpMnemonic::Jle => JumpCondition::LessOrEq,
         };
 
         Self::Jump { to: dest, condition }
     }
 
     // skips forrmatting the match
-    #[rustfmt::skip]
     pub(crate) const fn from_ldr_or_str_mnemonic(
         instr: LoadOrStoreMnemonic,
         reg: Register,
         mem_location: MemoryLocation,
     ) -> Self {
-        use LoadOrStoreMnemonic as M;
-
         match instr {
-            M::Ldr => Self::Ldr { to: reg, from: mem_location },
-            M::Ldrb => Self::Ldrb { to: reg, from: mem_location },
-            M::Ldrh => Self::Ldrh { to: reg, from: mem_location },
-            M::Ldrw => Self::Ldrw { to: reg, from: mem_location },
-            M::Ldrd => Self::Ldrd { to: reg, from: mem_location },
-            M::Ldrq => Self::Ldrq { to: reg, from: mem_location },
-            M::Str => Self::Str { to: mem_location, from: reg },
-            M::Strb => Self::Strb { to: mem_location, from: reg },
-            M::Strh => Self::Strh { to: mem_location, from: reg },
-            M::Strw => Self::Strw { to: mem_location, from: reg },
-            M::Strd => Self::Strd { to: mem_location, from: reg },
-            M::Strq => Self::Strq { to: mem_location, from: reg },
+            LoadOrStoreMnemonic::Ldr => Self::Ldr { to: reg, from: mem_location },
+            LoadOrStoreMnemonic::Ldrb => Self::Ldrb { to: reg, from: mem_location },
+            LoadOrStoreMnemonic::Ldrh => Self::Ldrh { to: reg, from: mem_location },
+            LoadOrStoreMnemonic::Ldrw => Self::Ldrw { to: reg, from: mem_location },
+            LoadOrStoreMnemonic::Ldrd => Self::Ldrd { to: reg, from: mem_location },
+            LoadOrStoreMnemonic::Ldrq => Self::Ldrq { to: reg, from: mem_location },
+            LoadOrStoreMnemonic::Str => Self::Str { to: mem_location, from: reg },
+            LoadOrStoreMnemonic::Strb => Self::Strb { to: mem_location, from: reg },
+            LoadOrStoreMnemonic::Strh => Self::Strh { to: mem_location, from: reg },
+            LoadOrStoreMnemonic::Strw => Self::Strw { to: mem_location, from: reg },
+            LoadOrStoreMnemonic::Strd => Self::Strd { to: mem_location, from: reg },
+            LoadOrStoreMnemonic::Strq => Self::Strq { to: mem_location, from: reg },
         }
     }
 }
@@ -544,9 +504,7 @@ impl Instruction {
     /// Return from a subroutine.
     /// Pops the return address from the stack and sets the program counter to the popped value.
     #[inline]
-    fn ret<const MEM_SIZE: usize, Insts, Bytes>(
-        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
-    ) -> InstructionResult {
+    fn ret<const MEM_SIZE: usize, Insts, Bytes>(processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>) -> InstructionResult {
         Self::pop(Register::PC, processor)
     }
 
@@ -821,10 +779,7 @@ impl Instruction {
 
     /// Perform a not operation on the value in the register. (NOT)
     #[inline]
-    fn not<const MEM_SIZE: usize, Insts, Bytes>(
-        reg: Register,
-        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
-    ) {
+    fn not<const MEM_SIZE: usize, Insts, Bytes>(reg: Register, processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>) {
         let a = processor.registers.get_reg(reg);
         processor.registers.set_reg(reg, !a);
     }
@@ -891,29 +846,14 @@ mod test {
         fn test_move_reg() {
             let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
             processor.registers.set_reg(Register::R0, 10);
-            let _ = IS::execute(
-                Instruction::Mov {
-                    from: Operand::Register(Register::R0),
-                    to: Register::R1,
-                },
-                &mut processor,
-            );
-            assert_eq!(
-                processor.registers.get_reg(Register::R1),
-                processor.registers.get_reg(Register::R0)
-            );
+            let _ = IS::execute(Instruction::Mov { from: Operand::Register(Register::R0), to: Register::R1 }, &mut processor);
+            assert_eq!(processor.registers.get_reg(Register::R1), processor.registers.get_reg(Register::R0));
         }
 
         #[test]
         fn test_move_val() {
             let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
-            let _ = IS::execute(
-                Instruction::Mov {
-                    to: Register::R0,
-                    from: Operand::Value(10),
-                },
-                &mut processor,
-            );
+            let _ = IS::execute(Instruction::Mov { to: Register::R0, from: Operand::Value(10) }, &mut processor);
             assert_eq!(processor.registers.get_reg(Register::R0), 10);
         }
     }
@@ -927,13 +867,7 @@ mod test {
             let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
             processor.registers.set_reg(Register::R0, 42);
 
-            let _ = IS::execute(
-                Instruction::Str {
-                    from: Register::R0,
-                    to: MemoryLocation::Labeled(0),
-                },
-                &mut processor,
-            );
+            let _ = IS::execute(Instruction::Str { from: Register::R0, to: MemoryLocation::Labeled(0) }, &mut processor);
 
             assert_eq!(processor.mem.read(0), 42);
         }
@@ -948,10 +882,7 @@ mod test {
             let _ = IS::execute(
                 Instruction::Str {
                     from: Register::R0,
-                    to: MemoryLocation::Offset {
-                        base: Register::R1,
-                        offset: Operand::Value(0),
-                    },
+                    to: MemoryLocation::Offset { base: Register::R1, offset: Operand::Value(0) },
                 },
                 &mut processor,
             );
@@ -961,10 +892,7 @@ mod test {
             let _ = IS::execute(
                 Instruction::Str {
                     from: Register::R0,
-                    to: MemoryLocation::Offset {
-                        base: Register::R1,
-                        offset: Operand::Value(-1isize as u64),
-                    },
+                    to: MemoryLocation::Offset { base: Register::R1, offset: Operand::Value(-1isize as u64) },
                 },
                 &mut processor,
             );
@@ -974,10 +902,7 @@ mod test {
             let _ = IS::execute(
                 Instruction::Str {
                     from: Register::R0,
-                    to: MemoryLocation::Offset {
-                        base: Register::R1,
-                        offset: Operand::Register(Register::R1),
-                    },
+                    to: MemoryLocation::Offset { base: Register::R1, offset: Operand::Register(Register::R1) },
                 },
                 &mut processor,
             );
@@ -990,10 +915,7 @@ mod test {
             let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
 
             let _ = IS::execute(
-                Instruction::Str {
-                    from: Register::R0,
-                    to: MemoryLocation::Labeled(MEM_SIZE as u64),
-                },
+                Instruction::Str { from: Register::R0, to: MemoryLocation::Labeled(MEM_SIZE as u64) },
                 &mut processor,
             );
 
@@ -1005,13 +927,7 @@ mod test {
             let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
             processor.mem.write(0, 42);
 
-            let _ = IS::execute(
-                Instruction::Ldr {
-                    to: Register::R0,
-                    from: MemoryLocation::Labeled(0),
-                },
-                &mut processor,
-            );
+            let _ = IS::execute(Instruction::Ldr { to: Register::R0, from: MemoryLocation::Labeled(0) }, &mut processor);
 
             assert_eq!(processor.registers.get_reg(Register::R0), 42);
         }
@@ -1030,10 +946,7 @@ mod test {
             let _ = IS::execute(
                 Instruction::Ldrb {
                     to: Register::R0,
-                    from: MemoryLocation::Offset {
-                        base: Register::R1,
-                        offset: Operand::Value(0),
-                    },
+                    from: MemoryLocation::Offset { base: Register::R1, offset: Operand::Value(0) },
                 },
                 &mut processor,
             );
@@ -1043,10 +956,7 @@ mod test {
             let _ = IS::execute(
                 Instruction::Ldrb {
                     to: Register::R0,
-                    from: MemoryLocation::Offset {
-                        base: Register::R1,
-                        offset: Operand::Value(-1isize as u64),
-                    },
+                    from: MemoryLocation::Offset { base: Register::R1, offset: Operand::Value(-1isize as u64) },
                 },
                 &mut processor,
             );
@@ -1056,10 +966,7 @@ mod test {
             let _ = IS::execute(
                 Instruction::Ldrb {
                     to: Register::R0,
-                    from: MemoryLocation::Offset {
-                        base: Register::R1,
-                        offset: Operand::Register(Register::R1),
-                    },
+                    from: MemoryLocation::Offset { base: Register::R1, offset: Operand::Register(Register::R1) },
                 },
                 &mut processor,
             );
@@ -1072,10 +979,7 @@ mod test {
             let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
 
             let _ = IS::execute(
-                Instruction::Ldr {
-                    from: MemoryLocation::Labeled(MEM_SIZE as u64),
-                    to: Register::R0,
-                },
+                Instruction::Ldr { from: MemoryLocation::Labeled(MEM_SIZE as u64), to: Register::R0 },
                 &mut processor,
             );
 
@@ -1099,11 +1003,7 @@ mod test {
                 processor.registers.set_reg(Register::R0, $lhs);
                 processor.registers.set_reg(Register::R1, $rhs);
                 let res = IS::execute(
-                    Instruction::$instr {
-                        acc: Register::R0,
-                        rhs: Operand::Register(Register::R1),
-                        set_flags: true,
-                    },
+                    Instruction::$instr { acc: Register::R0, rhs: Operand::Register(Register::R1), set_flags: true },
                     &mut processor,
                 );
 
@@ -1343,17 +1243,7 @@ mod test {
 
             #[test]
             fn unsigned() {
-                mul(
-                    5,
-                    10,
-                    50,
-                    Flags {
-                        carry: false,
-                        signed: false,
-                        overflow: false,
-                        zero: false,
-                    },
-                );
+                mul(5, 10, 50, Flags { carry: false, signed: false, overflow: false, zero: false });
             }
 
             #[test]
@@ -1373,17 +1263,7 @@ mod test {
 
             #[test]
             fn res_zero() {
-                mul(
-                    0,
-                    5,
-                    0,
-                    Flags {
-                        carry: false,
-                        signed: false,
-                        overflow: false,
-                        zero: true,
-                    },
-                );
+                mul(0, 5, 0, Flags { carry: false, signed: false, overflow: false, zero: true });
             }
 
             #[test]
@@ -1507,34 +1387,12 @@ mod test {
 
             #[test]
             fn unsigned_fractional_truncation() {
-                div(
-                    5,
-                    10,
-                    0,
-                    Flags {
-                        carry: false,
-                        signed: false,
-                        overflow: false,
-                        zero: true,
-                    },
-                    Ok(()),
-                );
+                div(5, 10, 0, Flags { carry: false, signed: false, overflow: false, zero: true }, Ok(()));
             }
 
             #[test]
             fn signed_fractional_truncation() {
-                sdiv(
-                    -5i64 as u64,
-                    10,
-                    0,
-                    Flags {
-                        carry: false,
-                        signed: false,
-                        overflow: false,
-                        zero: true,
-                    },
-                    Ok(()),
-                );
+                sdiv(-5i64 as u64, 10, 0, Flags { carry: false, signed: false, overflow: false, zero: true }, Ok(()));
             }
 
             #[test]
@@ -1595,13 +1453,7 @@ mod test {
             fn normal() {
                 let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
                 processor.registers.set_reg(Register::R0, 10);
-                let _ = IS::execute(
-                    Instruction::Inc {
-                        reg: Register::R0,
-                        set_flags: true,
-                    },
-                    &mut processor,
-                );
+                let _ = IS::execute(Instruction::Inc { reg: Register::R0, set_flags: true }, &mut processor);
                 assert_eq!(processor.registers.get_reg(Register::R0), 11);
                 assert_eq!(processor.registers.get_flag(Flag::C), false, "carry");
                 assert_eq!(processor.registers.get_flag(Flag::S), false, "signed");
@@ -1613,13 +1465,7 @@ mod test {
             fn overflow() {
                 let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
                 processor.registers.set_reg(Register::R0, u64::MAX);
-                let _ = IS::execute(
-                    Instruction::Inc {
-                        reg: Register::R0,
-                        set_flags: true,
-                    },
-                    &mut processor,
-                );
+                let _ = IS::execute(Instruction::Inc { reg: Register::R0, set_flags: true }, &mut processor);
                 assert_eq!(processor.registers.get_reg(Register::R0), u64::MIN);
                 assert_eq!(processor.registers.get_flag(Flag::C), true, "carry");
                 assert_eq!(processor.registers.get_flag(Flag::S), false, "signed");
@@ -1635,13 +1481,7 @@ mod test {
             fn normal() {
                 let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
                 processor.registers.set_reg(Register::R0, 10);
-                let _ = IS::execute(
-                    Instruction::Dec {
-                        reg: Register::R0,
-                        set_flags: true,
-                    },
-                    &mut processor,
-                );
+                let _ = IS::execute(Instruction::Dec { reg: Register::R0, set_flags: true }, &mut processor);
                 assert_eq!(processor.registers.get_reg(Register::R0), 9);
                 assert_eq!(processor.registers.get_flag(Flag::C), false, "carry");
                 assert_eq!(processor.registers.get_flag(Flag::S), false, "signed");
@@ -1653,13 +1493,7 @@ mod test {
             fn unsigned_underflow() {
                 let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
                 processor.registers.set_reg(Register::R0, u64::MIN);
-                let _ = IS::execute(
-                    Instruction::Dec {
-                        reg: Register::R0,
-                        set_flags: true,
-                    },
-                    &mut processor,
-                );
+                let _ = IS::execute(Instruction::Dec { reg: Register::R0, set_flags: true }, &mut processor);
                 assert_eq!(processor.registers.get_reg(Register::R0), u64::MAX);
                 assert_eq!(processor.registers.get_flag(Flag::C), true, "carry"); // Unsigned Overflow: 0 < 1 (bits)
                 assert_eq!(processor.registers.get_flag(Flag::S), true, "signed");
@@ -1671,13 +1505,7 @@ mod test {
             fn signed_underflow() {
                 let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
                 processor.registers.set_reg(Register::R0, i64::MIN as u64);
-                let _ = IS::execute(
-                    Instruction::Dec {
-                        reg: Register::R0,
-                        set_flags: true,
-                    },
-                    &mut processor,
-                );
+                let _ = IS::execute(Instruction::Dec { reg: Register::R0, set_flags: true }, &mut processor);
                 assert_eq!(processor.registers.get_reg(Register::R0), i64::MAX as u64);
                 assert_eq!(processor.registers.get_flag(Flag::C), false, "carry"); // No unsigned overflow: i64::MIN > 1 (bits)
                 assert_eq!(processor.registers.get_flag(Flag::S), false, "signed");
@@ -1694,13 +1522,7 @@ mod test {
         fn test_jmp() {
             let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
             assert_eq!(processor.registers.get_reg(Register::PC), 0);
-            let _ = IS::execute(
-                Instruction::Jump {
-                    to: 2,
-                    condition: JumpCondition::Unconditional,
-                },
-                &mut processor,
-            );
+            let _ = IS::execute(Instruction::Jump { to: 2, condition: JumpCondition::Unconditional }, &mut processor);
             assert_eq!(processor.registers.get_reg(Register::PC), 2);
         }
 
@@ -1708,21 +1530,9 @@ mod test {
         fn test_jmp_overflow() {
             let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
             assert_eq!(processor.registers.get_reg(Register::PC), 0);
-            let _ = IS::execute(
-                Instruction::Jump {
-                    to: u64::MAX,
-                    condition: JumpCondition::Unconditional,
-                },
-                &mut processor,
-            );
+            let _ = IS::execute(Instruction::Jump { to: u64::MAX, condition: JumpCondition::Unconditional }, &mut processor);
             assert_eq!(processor.registers.get_reg(Register::PC), u64::MAX);
-            let _ = IS::execute(
-                Instruction::Inc {
-                    reg: Register::PC,
-                    set_flags: false,
-                },
-                &mut processor,
-            );
+            let _ = IS::execute(Instruction::Inc { reg: Register::PC, set_flags: false }, &mut processor);
             assert_eq!(processor.registers.get_reg(Register::PC), u64::MIN);
         }
 
@@ -1730,21 +1540,9 @@ mod test {
         fn test_jmp_underflow() {
             let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
             assert_eq!(processor.registers.get_reg(Register::PC), 0);
-            let _ = IS::execute(
-                Instruction::Jump {
-                    to: u64::MIN,
-                    condition: JumpCondition::Unconditional,
-                },
-                &mut processor,
-            );
+            let _ = IS::execute(Instruction::Jump { to: u64::MIN, condition: JumpCondition::Unconditional }, &mut processor);
             assert_eq!(processor.registers.get_reg(Register::PC), u64::MIN);
-            let _ = IS::execute(
-                Instruction::Dec {
-                    reg: Register::PC,
-                    set_flags: false,
-                },
-                &mut processor,
-            );
+            let _ = IS::execute(Instruction::Dec { reg: Register::PC, set_flags: false }, &mut processor);
             assert_eq!(processor.registers.get_reg(Register::PC), u64::MAX);
         }
     }
@@ -1760,10 +1558,7 @@ mod test {
             processor.registers.set_reg(Register::R1, 1);
 
             let _ = IS::execute(
-                Instruction::Cmp {
-                    lhs: Operand::Register(Register::R0),
-                    rhs: Operand::Register(Register::R1),
-                },
+                Instruction::Cmp { lhs: Operand::Register(Register::R0), rhs: Operand::Register(Register::R1) },
                 &mut processor,
             );
             assert_eq!(processor.registers.get_flag(Flag::C), false);
@@ -1778,13 +1573,8 @@ mod test {
 
             processor.registers.set_reg(Register::R0, 1);
 
-            let _ = IS::execute(
-                Instruction::Cmp {
-                    lhs: Operand::Register(Register::R0),
-                    rhs: Operand::Value(1),
-                },
-                &mut processor,
-            );
+            let _ =
+                IS::execute(Instruction::Cmp { lhs: Operand::Register(Register::R0), rhs: Operand::Value(1) }, &mut processor);
             assert_eq!(processor.registers.get_flag(Flag::C), false);
             assert_eq!(processor.registers.get_flag(Flag::S), false);
             assert_eq!(processor.registers.get_flag(Flag::V), false);
@@ -1795,13 +1585,7 @@ mod test {
         fn test_cmp_eq_val() {
             let mut processor = Processor::<MEM_SIZE, IS, P, Bytes>::new();
 
-            let _ = IS::execute(
-                Instruction::Cmp {
-                    lhs: Operand::Value(1),
-                    rhs: Operand::Value(1),
-                },
-                &mut processor,
-            );
+            let _ = IS::execute(Instruction::Cmp { lhs: Operand::Value(1), rhs: Operand::Value(1) }, &mut processor);
             assert_eq!(processor.registers.get_flag(Flag::C), false);
             assert_eq!(processor.registers.get_flag(Flag::S), false);
             assert_eq!(processor.registers.get_flag(Flag::V), false);
@@ -1816,10 +1600,7 @@ mod test {
             processor.registers.set_reg(Register::R1, 2);
 
             let _ = IS::execute(
-                Instruction::Cmp {
-                    lhs: Operand::Register(Register::R0),
-                    rhs: Operand::Register(Register::R1),
-                },
+                Instruction::Cmp { lhs: Operand::Register(Register::R0), rhs: Operand::Register(Register::R1) },
                 &mut processor,
             );
             assert_eq!(processor.registers.get_flag(Flag::C), true);
@@ -1836,10 +1617,7 @@ mod test {
             processor.registers.set_reg(Register::R1, 1);
 
             let _ = IS::execute(
-                Instruction::Cmp {
-                    lhs: Operand::Register(Register::R0),
-                    rhs: Operand::Register(Register::R1),
-                },
+                Instruction::Cmp { lhs: Operand::Register(Register::R0), rhs: Operand::Register(Register::R1) },
                 &mut processor,
             );
             assert_eq!(processor.registers.get_flag(Flag::C), false);
@@ -1860,16 +1638,10 @@ mod test {
             processor.registers.set_reg(Register::R0, 1);
 
             [
-                Instruction::Push {
-                    from: Operand::Register(Register::R0),
-                },
-                Instruction::Push {
-                    from: Operand::Register(Register::R0),
-                },
+                Instruction::Push { from: Operand::Register(Register::R0) },
+                Instruction::Push { from: Operand::Register(Register::R0) },
                 Instruction::Pop { to: Register::R1 },
-                Instruction::Push {
-                    from: Operand::Register(Register::R0),
-                },
+                Instruction::Push { from: Operand::Register(Register::R0) },
                 Instruction::Pop { to: Register::R2 },
                 Instruction::Pop { to: Register::R3 },
             ]

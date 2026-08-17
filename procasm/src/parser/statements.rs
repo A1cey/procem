@@ -24,10 +24,8 @@ impl<'input> Parser<'input> for CodeParser {
     type Output = ();
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
-        let mnemonic = Check(|state: &ParserState| check_section(Section::Code, state))
-            .and(MnemonicParser)
-            .right()
-            .parse(input, state)?;
+        let mnemonic =
+            Check(|state: &ParserState| check_section(Section::Code, state)).and(MnemonicParser).right().parse(input, state)?;
 
         let inst = match mnemonic {
             Mnemonic::NoArg(mnemonic) => match mnemonic {
@@ -43,9 +41,7 @@ impl<'input> Parser<'input> for CodeParser {
                     .parse(input, state)
                     .map_err(Error::into_incomplete_match)?;
 
-                state
-                    .unlinked_instructions
-                    .push(UnlinkedInstruction::new(state.instructions.len(), range));
+                state.unlinked_instructions.push(UnlinkedInstruction::new(state.instructions.len(), range));
                 Instruction::Adr { reg, addr: u64::MAX }
             }
             Mnemonic::RegOperand(mnemonic) => RegisterParser
@@ -58,9 +54,7 @@ impl<'input> Parser<'input> for CodeParser {
             Mnemonic::Jump(mnemonic) => {
                 let range = IdentParser.parse(input, state).map_err(Error::into_incomplete_match)?;
 
-                state
-                    .unlinked_instructions
-                    .push(UnlinkedInstruction::new(state.instructions.len(), range));
+                state.unlinked_instructions.push(UnlinkedInstruction::new(state.instructions.len(), range));
                 Instruction::from_jump_mnemonic(mnemonic, u64::MAX)
             }
             Mnemonic::TwoOperand(mnemonic) => OperandParser
@@ -79,31 +73,27 @@ impl<'input> Parser<'input> for CodeParser {
                 .parse(input, state)
                 .map_err(Error::into_incomplete_match)?,
             Mnemonic::Rotate(mnemonic) => {
-                let (reg, literal) = RegisterParser
+                let (reg, (literal, span)) = RegisterParser
                     .and(CommaParser)
                     .left()
                     .and(ImmediateLiteralParser)
                     .parse(input, state)
                     .map_err(Error::into_incomplete_match)?;
 
-                u64_from_literal(literal, input.raw)
-                    .and_then(|literal| {
-                        literal
-                            .try_into()
-                            .map_err(|err| ParserError::CannotConvertLiteralToU32 { literal, err })
-                    })
+                u64_from_literal(literal, span, input.raw)
+                    .and_then(|literal| literal.try_into().map_err(|err| ParserError::CannotConvertLiteralToU32 { literal, err }))
                     .map(|lit| Instruction::from_rotate_mnemonic(mnemonic, reg, lit))
                     .map_err(Error::IncompleteMatch)?
             }
             Mnemonic::Shift(mnemonic) => {
-                let (reg, lit) = RegisterParser
+                let (reg, (lit, span)) = RegisterParser
                     .and(CommaParser)
                     .left()
                     .and(ImmediateLiteralParser)
                     .parse(input, state)
                     .map_err(Error::into_incomplete_match)?;
 
-                u64_from_literal(lit, input.raw)
+                u64_from_literal(lit, span, input.raw)
                     .map(|word| Instruction::from_shift_mnemonic(mnemonic, reg, word))
                     .map_err(Error::IncompleteMatch)?
             }
@@ -130,10 +120,8 @@ impl<'input> Parser<'input> for DataParser {
     type Output = ();
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
-        let directive = Check(|state: &ParserState| check_section(Section::Data, state))
-            .and(DirectiveParser)
-            .right()
-            .parse(input, state)?;
+        let directive =
+            Check(|state: &ParserState| check_section(Section::Data, state)).and(DirectiveParser).right().parse(input, state)?;
 
         match directive {
             Directive::Byte => ByteListParser.parse(input, state),
@@ -174,24 +162,15 @@ impl<'input> Parser<'input> for BssParser {
     type Output = ();
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
-        let directive = Check(|state: &ParserState| check_section(Section::Bss, state))
-            .and(DirectiveParser)
-            .right()
-            .parse(input, state)?;
+        let directive =
+            Check(|state: &ParserState| check_section(Section::Bss, state)).and(DirectiveParser).right().parse(input, state)?;
 
         match directive {
-            Directive::Space => SpaceListParser
-                .parse(input, state)
-                .map_err(Error::into_incomplete_match)?,
+            Directive::Space => SpaceListParser.parse(input, state).map_err(Error::into_incomplete_match)?,
             Directive::Code => state.section = Section::Code,
             Directive::Data => state.section = Section::Data,
             Directive::Bss => state.section = Section::Bss,
-            Directive::Byte
-            | Directive::Hword
-            | Directive::Word
-            | Directive::Dword
-            | Directive::Qword
-            | Directive::Ascii => {
+            Directive::Byte | Directive::Hword | Directive::Word | Directive::Dword | Directive::Qword | Directive::Ascii => {
                 return Err(Error::IncompleteMatch(ParserError::WrongDirective {
                     idx: state.idx,
                     got: directive.to_string(),
@@ -216,10 +195,7 @@ impl<'input> Parser<'input> for SectionParser {
             Directive::Code => state.section = Section::Code,
             Directive::Data => state.section = Section::Data,
             Directive::Bss => state.section = Section::Bss,
-            dir => Err(Error::NoMatch(ParserError::InvalidSection {
-                idx: state.idx,
-                identifier: dir.to_string(),
-            }))?,
+            dir => Err(Error::NoMatch(ParserError::InvalidSection { idx: state.idx, identifier: dir.to_string() }))?,
         }
 
         // Every line must end with a newline, because the tokenizer adds one to the last line in the file if its missing
@@ -242,17 +218,12 @@ impl<'input> Parser<'input> for LabelParser {
             Section::Data => state.data.len() as u64,
             Section::Bss => state.bss,
             Section::Undefined => {
-                return Err(Error::IncompleteMatch(ParserError::LabelBeforeFirstSection {
-                    idx: state.idx,
-                }));
+                return Err(Error::IncompleteMatch(ParserError::LabelBeforeFirstSection { idx: state.idx }));
             }
         };
 
         if let Some(old_idx) = state.labels.insert(ident, idx) {
-            Err(Error::IncompleteMatch(ParserError::DuplicateLabel {
-                idx: state.idx,
-                old_idx,
-            }))?;
+            Err(Error::IncompleteMatch(ParserError::DuplicateLabel { idx: state.idx, old_idx }))?;
         }
 
         // Every line must end with a newline, because the tokenizer adds one to the last line in the file if its missing
@@ -264,9 +235,6 @@ fn check_section(expected: Section, state: &ParserState) -> Result<(), Error> {
     if state.section == expected {
         Ok(())
     } else {
-        Err(Error::NoMatch(ParserError::WrongSection {
-            current: state.section.to_string(),
-            expected: expected.to_string(),
-        }))
+        Err(Error::NoMatch(ParserError::WrongSection { current: state.section.to_string(), expected: expected.to_string() }))
     }
 }
