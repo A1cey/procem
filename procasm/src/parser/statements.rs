@@ -34,14 +34,14 @@ impl<'input> Parser<'input> for CodeParser {
             },
             // `_mnemonic` will be needed if there are future instructions like Adr
             Mnemonic::RegLabel(_mnemonic) => {
-                let (reg, range) = RegisterParser
+                let (reg, span) = RegisterParser
                     .and(CommaParser)
                     .left()
                     .and(IdentParser)
                     .parse(input, state)
                     .map_err(Error::into_incomplete_match)?;
 
-                state.unlinked_instructions.push(UnlinkedInstruction::new(state.instructions.len(), range));
+                state.unlinked_instructions.push(UnlinkedInstruction::new(state.instructions.len(), span));
                 Instruction::Adr { reg, addr: u64::MAX }
             }
             Mnemonic::RegOperand(mnemonic) => RegisterParser
@@ -52,9 +52,9 @@ impl<'input> Parser<'input> for CodeParser {
                 .parse(input, state)
                 .map_err(Error::into_incomplete_match)?,
             Mnemonic::Jump(mnemonic) => {
-                let range = IdentParser.parse(input, state).map_err(Error::into_incomplete_match)?;
+                let span = IdentParser.parse(input, state).map_err(Error::into_incomplete_match)?;
 
-                state.unlinked_instructions.push(UnlinkedInstruction::new(state.instructions.len(), range));
+                state.unlinked_instructions.push(UnlinkedInstruction::new(state.instructions.len(), span));
                 Instruction::from_jump_mnemonic(mnemonic, u64::MAX)
             }
             Mnemonic::TwoOperand(mnemonic) => OperandParser
@@ -210,8 +210,8 @@ impl<'input> Parser<'input> for LabelParser {
     type Output = ();
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
-        let range = IdentParser.and(ColonParser).left().parse(input, state)?;
-        let ident = &input.raw[range];
+        let span = IdentParser.and(ColonParser).left().parse(input, state)?;
+        let ident = &input.raw[span];
 
         let idx = match state.section {
             Section::Code => state.instructions.len() as u64,

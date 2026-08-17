@@ -20,8 +20,8 @@ impl<'input> Parser<'input> for RegisterParser {
     type Output = Register;
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
-        let range = IdentParser.parse(input, state)?;
-        Register::try_from(&input.raw[range]).map_err(|err| ParserError::RegisterParsing { err }).map_err(Error::NoMatch)
+        let span = IdentParser.parse(input, state)?;
+        Register::try_from(&input.raw[span]).map_err(|err| ParserError::RegisterParsing { err }).map_err(Error::NoMatch)
     }
 }
 
@@ -32,8 +32,8 @@ impl<'input> Parser<'input> for MnemonicParser {
     type Output = Mnemonic;
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
-        let range = IdentParser.parse(input, state)?;
-        let ident = &input.raw[range];
+        let span = IdentParser.parse(input, state)?;
+        let ident = &input.raw[span];
         ident
             .try_into()
             .map_err(|()| ParserError::UnknownMnemonic { idx: state.idx, inst: string_from_u8_slice(ident) })
@@ -65,9 +65,9 @@ impl<'input> Parser<'input> for LabeledMemoryLocationParser {
     type Output = MemoryLocation;
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
-        let range = IdentParser.parse(input, state)?;
+        let span = IdentParser.parse(input, state)?;
 
-        state.unlinked_instructions.push(UnlinkedInstruction::new(state.instructions.len(), range));
+        state.unlinked_instructions.push(UnlinkedInstruction::new(state.instructions.len(), span));
 
         Ok(MemoryLocation::Labeled(u64::MAX))
     }
@@ -150,12 +150,12 @@ impl<'input> Parser<'input> for AsciiListParser {
     type Output = ();
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
-        let range = StringLiteralParser.parse(input, state)?;
-        state.data.extend_from_slice(&input.raw[range]);
+        let span = StringLiteralParser.parse(input, state)?;
+        state.data.extend_from_slice(&input.raw[span]);
 
         while let Ok(()) = CommaParser.parse(input, state) {
-            let range = StringLiteralParser.parse(input, state).map_err(Error::into_incomplete_match)?;
-            state.data.extend_from_slice(&input.raw[range]);
+            let span = StringLiteralParser.parse(input, state).map_err(Error::into_incomplete_match)?;
+            state.data.extend_from_slice(&input.raw[span]);
         }
         Ok(())
     }

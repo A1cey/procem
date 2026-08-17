@@ -404,12 +404,12 @@ mod test {
 
         expect_newline(asm, &mut tokens);
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Directive, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), "code"),
+            Token { kind: TokenKind::Directive, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), "code"),
             t => panic!("expected Directive, got {}", t.resolve(asm)),
         }
         expect_newline(asm, &mut tokens);
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), "main"),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), "main"),
             t => panic!("expected Identifier (Label), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
@@ -418,11 +418,11 @@ mod test {
         }
         expect_newline(asm, &mut tokens);
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), "MOV"),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), "MOV"),
             t => panic!("expected Identifier (Instruction), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), ("R0")),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), ("R0")),
             t => panic!("expected Identifier (Register), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
@@ -430,23 +430,23 @@ mod test {
             t => panic!("expected Comma, got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Decimal), span: r } => {
-                assert_eq!(String::from_utf8_lossy(&asm[r]), "5")
+            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Decimal), span } => {
+                assert_eq!(String::from_utf8_lossy(&asm[span]), "5")
             }
             t => panic!("expected ImmediateLiteral(ImmediateLiteralKind::Decimal), got {}", t.resolve(asm)),
         }
         expect_newline(asm, &mut tokens);
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), ("nop")),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), ("nop")),
             t => panic!("expected Identifier (Instruction), got {}", t.resolve(asm)),
         }
         expect_newline(asm, &mut tokens);
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), ("MOV")),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), ("MOV")),
             t => panic!("expected Identifier (Instruction), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), ("R256")),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), ("R256")),
             t => panic!("expected Identifier (Register), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
@@ -461,11 +461,11 @@ mod test {
         }
         expect_newline(asm, &mut tokens);
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), ("Mul")),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), ("Mul")),
             t => panic!("expected Identifier (Instruction), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), ("R0")),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), ("R0")),
             t => panic!("expected Identifier (Register), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
@@ -473,16 +473,16 @@ mod test {
             t => panic!("expected Comma, got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), ("r256")),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), ("r256")),
             t => panic!("expected Identifier (Register), got {}", t.resolve(asm)),
         }
         expect_newline(asm, &mut tokens);
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), ("JMP")),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), ("JMP")),
             t => panic!("expected Identifier (Instruction), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), "main"),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), "main"),
             t => panic!("expected Identifier (Label), got {}", t.resolve(asm)),
         }
     }
@@ -516,13 +516,13 @@ mod test {
         expect_newline(asm, &mut tokens);
 
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Directive, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), "code"),
+            Token { kind: TokenKind::Directive, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), "code"),
             t => panic!("expected Directive, got {}", t.resolve(asm)),
         }
         expect_newline(asm, &mut tokens);
 
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), "_start"),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), "_start"),
             t => panic!("expected Identifier (Label), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
@@ -533,12 +533,12 @@ mod test {
         expect_newline(asm, &mut tokens);
         println!("{}", tokens.clone().next().unwrap().resolve(asm));
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), "mov"),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), "mov"),
             t => panic!("expected Identifier (Instruction), got {}", t.resolve(asm)),
         }
         println!("{}", tokens.clone().next().unwrap().resolve(asm));
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), ("R0")),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), ("R0")),
             t => panic!("expected Identifier (Register), got {}", t.resolve(asm)),
         }
         println!("{}", tokens.clone().next().unwrap().resolve(asm));
@@ -548,8 +548,8 @@ mod test {
         }
         println!("3: {}", tokens.clone().next().unwrap().resolve(asm));
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Decimal), span: r } => {
-                assert_eq!(String::from_utf8_lossy(&asm[r]), "0")
+            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Decimal), span } => {
+                assert_eq!(String::from_utf8_lossy(&asm[span]), "0")
             }
             t => panic!("expected ImmediateLiteral(ImmediateLiteralKind::Decimal), got {}", t.resolve(asm)),
         }
@@ -557,11 +557,11 @@ mod test {
         expect_newline(asm, &mut tokens);
         println!("1: {}", tokens.clone().next().unwrap().resolve(asm));
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), "mov"),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), "mov"),
             t => panic!("expected Identifier (Instruction), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), ("R1")),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), ("R1")),
             t => panic!("expected Identifier (Register), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
@@ -569,15 +569,15 @@ mod test {
             t => panic!("expected Comma, got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Decimal), span: r } => {
-                assert_eq!(String::from_utf8_lossy(&asm[r]), "5")
+            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Decimal), span } => {
+                assert_eq!(String::from_utf8_lossy(&asm[span]), "5")
             }
             t => panic!("expected ImmediateLiteral(ImmediateLiteralKind::Decimal), got {}", t.resolve(asm)),
         }
         expect_newline(asm, &mut tokens);
 
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), "loop"),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), "loop"),
             t => panic!("expected Identifier (Label), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
@@ -587,11 +587,11 @@ mod test {
         expect_newline(asm, &mut tokens);
 
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), "add"),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), "add"),
             t => panic!("expected Identifier (Instruction), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), ("R0")),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), ("R0")),
             t => panic!("expected Identifier (Register), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
@@ -599,19 +599,19 @@ mod test {
             t => panic!("expected Comma, got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Decimal), span: r } => {
-                assert_eq!(String::from_utf8_lossy(&asm[r]), "1")
+            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Decimal), span } => {
+                assert_eq!(String::from_utf8_lossy(&asm[span]), "1")
             }
             t => panic!("expected ImmediateLiteral(ImmediateLiteralKind::Decimal), got {}", t.resolve(asm)),
         }
         expect_newline(asm, &mut tokens);
 
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), "subs"),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), "subs"),
             t => panic!("expected Identifier (Instruction), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), ("R1")),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), ("R1")),
             t => panic!("expected Identifier (Register), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
@@ -619,19 +619,19 @@ mod test {
             t => panic!("expected Comma, got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Decimal), span: r } => {
-                assert_eq!(String::from_utf8_lossy(&asm[r]), "1")
+            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Decimal), span } => {
+                assert_eq!(String::from_utf8_lossy(&asm[span]), "1")
             }
             t => panic!("expected ImmediateLiteral(ImmediateLiteralKind::Decimal), got {}", t.resolve(asm)),
         }
         expect_newline(asm, &mut tokens);
 
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), ("jnz")),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), ("jnz")),
             t => panic!("expected Identifier (Instruction), got {}", t.resolve(asm)),
         }
         match tokens.next().unwrap() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), ("loop")),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), ("loop")),
             t => panic!("expected Identifier (Instruction), got {}", t.resolve(asm)),
         }
         expect_newline(asm, &mut tokens);
@@ -675,22 +675,22 @@ mod test {
         let mut t = Tokenizer::from(asm.as_slice());
         t.run();
         match t.tokens[0].clone() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), "main"),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), "main"),
             t => panic!("Expected Identifier got {t:?}"),
         }
         match t.tokens[1].clone() {
-            Token { kind: TokenKind::Colon, .. } => {}
+            Token { kind: TokenKind::Colon, span: Range(4, 5) } => {}
             t => panic!("Expected Colon got {t:?}"),
         }
         let asm = b"MAIN:";
         t = Tokenizer::from(asm.as_slice());
         t.run();
         match t.tokens[0].clone() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), "MAIN"),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), "MAIN"),
             t => panic!("Expected Identifier got {t:?}"),
         }
         match t.tokens[1].clone() {
-            Token { kind: TokenKind::Colon, .. } => {}
+            Token { kind: TokenKind::Colon, span: Range(4, 5) } => {}
             t => panic!("Expected Colon got {t:?}"),
         }
     }
@@ -701,14 +701,14 @@ mod test {
         let mut t = Tokenizer::from(asm.as_slice());
         t.expect_directive();
         match t.tokens[0].clone() {
-            Token { kind: TokenKind::Directive, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), "code"),
+            Token { kind: TokenKind::Directive, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), "code"),
             t => panic!("Expected Directive got {t:?}"),
         }
         let asm = b".DATA";
         t = Tokenizer::from(asm.as_slice());
         t.expect_directive();
         match t.tokens[0].clone() {
-            Token { kind: TokenKind::Directive, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), "DATA"),
+            Token { kind: TokenKind::Directive, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), "DATA"),
             t => panic!("Expected Directive got {t:?}"),
         }
     }
@@ -731,14 +731,14 @@ mod test {
         let mut t = Tokenizer::from(asm.as_slice());
         t.expect_identifier();
         match t.tokens[0].clone() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), "mov"),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), "mov"),
             t => panic!("Expected Identifier got {t:?}"),
         }
         let asm = b"JMP";
         t = Tokenizer::from(asm.as_slice());
         t.expect_identifier();
         match t.tokens[0].clone() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), "JMP"),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), "JMP"),
             t => panic!("Expected Identifier got {t:?}"),
         }
     }
@@ -749,14 +749,14 @@ mod test {
         let mut t = Tokenizer::from(asm.as_slice());
         t.expect_identifier();
         match t.tokens[0].clone() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), "R0"),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), "R0"),
             t => panic!("Expected Identifier got {t:?}"),
         }
         let asm = b"R4242";
         t = Tokenizer::from(asm.as_slice());
         t.expect_identifier();
         match t.tokens[0].clone() {
-            Token { kind: TokenKind::Identifier, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), "R4242"),
+            Token { kind: TokenKind::Identifier, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), "R4242"),
             t => panic!("Expected Identifier got {t:?}"),
         }
     }
@@ -775,8 +775,8 @@ mod test {
         let mut t = Tokenizer::from(asm.as_slice());
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Decimal), span: r } => {
-                assert_eq!(String::from_utf8_lossy(&asm[r]), ("42"))
+            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Decimal), span } => {
+                assert_eq!(String::from_utf8_lossy(&asm[span]), ("42"))
             }
             t => panic!("Expected ImmediateLiteral(ImmediateLiteralKind::Decimal) got {}", t.resolve(asm)),
         }
@@ -784,8 +784,8 @@ mod test {
         let mut t = Tokenizer::from(asm.as_slice());
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Hexadecimal), span: r } => {
-                assert_eq!(String::from_utf8_lossy(&asm[r]), ("4F"))
+            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Hexadecimal), span } => {
+                assert_eq!(String::from_utf8_lossy(&asm[span]), ("4F"))
             }
             t => panic!("Expected ImmediateLiteral(ImmediateLiteralKind::Hexadecimal) got {}", t.resolve(asm)),
         }
@@ -793,8 +793,8 @@ mod test {
         let mut t = Tokenizer::from(asm.as_slice());
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Binary), span: r } => {
-                assert_eq!(String::from_utf8_lossy(&asm[r]), ("010110"))
+            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Binary), span } => {
+                assert_eq!(String::from_utf8_lossy(&asm[span]), ("010110"))
             }
             t => panic!("Expected ImmediateLiteral(ImmediateLiteralKind::Binary) got {}", t.resolve(asm)),
         }
@@ -802,8 +802,8 @@ mod test {
         let mut t = Tokenizer::from(asm.as_slice());
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Octal), span: r } => {
-                assert_eq!(String::from_utf8_lossy(&asm[r]), ("743"))
+            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Octal), span } => {
+                assert_eq!(String::from_utf8_lossy(&asm[span]), ("743"))
             }
             t => panic!("Expected ImmediateLiteral(ImmediateLiteralKind::Octal) got {}", t.resolve(asm)),
         }
@@ -811,15 +811,15 @@ mod test {
         let mut t = Tokenizer::from(asm.as_slice());
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token { kind: TokenKind::StringLiteral, span: r } => assert_eq!(String::from_utf8_lossy(&asm[r]), ("Hello, there")),
+            Token { kind: TokenKind::StringLiteral, span } => assert_eq!(String::from_utf8_lossy(&asm[span]), ("Hello, there")),
             t => panic!("Expected StringLiteral got {t:?}"),
         }
         let asm = b"\'7\'";
         let mut t = Tokenizer::from(asm.as_slice());
         t.process_next_token();
         match t.tokens[0] {
-            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Char), span: r } => {
-                assert_eq!(String::from_utf8_lossy(&asm[r]), "7")
+            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Char), span } => {
+                assert_eq!(String::from_utf8_lossy(&asm[span]), "7")
             }
             t => panic!("Expected ImmediateLiteral(ImmediateLiteralKind::Char) got {t:?}"),
         }
@@ -831,8 +831,8 @@ mod test {
         let mut t = Tokenizer::from(asm.as_slice());
         t.process_next_token();
         match t.tokens[0] {
-            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Char), span: r } => {
-                assert_eq!(String::from_utf8_lossy(&asm[r]), "B")
+            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Char), span } => {
+                assert_eq!(String::from_utf8_lossy(&asm[span]), "B")
             }
             t => panic!("Expected ImmediateLiteral(ImmediateLiteral::Char) got {t:?}"),
         }
@@ -844,8 +844,8 @@ mod test {
         let mut t = Tokenizer::from(asm.as_slice());
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token { kind: TokenKind::StringLiteral, span: r } => {
-                assert_eq!(String::from_utf8_lossy(&asm[r]), ("Jajajajaja2498291849102+#amfl929r2jlsamfa3"))
+            Token { kind: TokenKind::StringLiteral, span } => {
+                assert_eq!(String::from_utf8_lossy(&asm[span]), ("Jajajajaja2498291849102+#amfl929r2jlsamfa3"))
             }
             t => panic!("Expected StringLiteral got: {t:?}"),
         }
@@ -857,8 +857,8 @@ mod test {
         let mut t = Tokenizer::from(asm.as_slice());
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Decimal), span: r } => {
-                assert_eq!(String::from_utf8_lossy(&asm[r]), ("42"))
+            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Decimal), span } => {
+                assert_eq!(String::from_utf8_lossy(&asm[span]), ("42"))
             }
             t => panic!("Expected ImmediateLiteral(ImmediateLiteralKind::Decimal) got {t:?}"),
         }
@@ -866,8 +866,8 @@ mod test {
         t = Tokenizer::from(asm.as_slice());
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Decimal), span: r } => {
-                assert_eq!(String::from_utf8_lossy(&asm[r]), ("42"))
+            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Decimal), span } => {
+                assert_eq!(String::from_utf8_lossy(&asm[span]), ("42"))
             }
             t => panic!("Expected ImmediateLiteral(ImmediateLiteralKind::Decimal) got {t:?}"),
         }
@@ -875,8 +875,8 @@ mod test {
         t = Tokenizer::from(asm.as_slice());
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Decimal), span: r } => {
-                assert_eq!(String::from_utf8_lossy(&asm[r]), ("-42"))
+            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Decimal), span } => {
+                assert_eq!(String::from_utf8_lossy(&asm[span]), ("-42"))
             }
             t => panic!("Expected ImmediateLiteral(ImmediateLiteralKind::Decimal) got {t:?}"),
         }
@@ -884,8 +884,8 @@ mod test {
         t = Tokenizer::from(asm.as_slice());
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Hexadecimal), span: r } => {
-                assert_eq!(String::from_utf8_lossy(&asm[r]), ("4F"))
+            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Hexadecimal), span } => {
+                assert_eq!(String::from_utf8_lossy(&asm[span]), ("4F"))
             }
             t => panic!("Expected ImmediateLiteral(ImmediateLiteralKind::Hexadecimal) got {t:?}"),
         }
@@ -893,8 +893,8 @@ mod test {
         t = Tokenizer::from(asm.as_slice());
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Binary), span: r } => {
-                assert_eq!(String::from_utf8_lossy(&asm[r]), ("010110"))
+            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Binary), span } => {
+                assert_eq!(String::from_utf8_lossy(&asm[span]), ("010110"))
             }
             t => panic!("Expected ImmediateLiteral(ImmediateLiteralKind::Binary) got {t:?}"),
         }
@@ -902,8 +902,8 @@ mod test {
         t = Tokenizer::from(asm.as_slice());
         t.process_next_token();
         match t.tokens[0].clone() {
-            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Octal), span: r } => {
-                assert_eq!(String::from_utf8_lossy(&asm[r]), ("743"))
+            Token { kind: TokenKind::ImmediateLiteral(ImmediateLiteralKind::Octal), span } => {
+                assert_eq!(String::from_utf8_lossy(&asm[span]), ("743"))
             }
             t => panic!("Expected ImmediateLiteral(ImmediateLiteralKind::Octal) got {t:?}"),
         }
