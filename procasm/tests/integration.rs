@@ -5,7 +5,6 @@ use pretty_assertions_sorted::assert_eq;
 use procasm::{
     AssembledProgram, assemble,
     instruction::{Instruction, jump_condition::JumpCondition, operand::Operand},
-    tokenizer,
 };
 use procem::{
     processor::Processor,
@@ -38,19 +37,9 @@ fn simple_5x2_multiplication() {
             Data::default(),
             Bss::default(),
             Code::from(vec![
-                Instruction::Mov {
-                    to: Register::R0,
-                    from: Operand::Value(2)
-                },
-                Instruction::Add {
-                    acc: Register::R1,
-                    rhs: Operand::Register(Register::R0),
-                    set_flags: false
-                },
-                Instruction::Jump {
-                    to: 0,
-                    condition: JumpCondition::Unconditional
-                }
+                Instruction::Mov { to: Register::R0, from: Operand::Value(2) },
+                Instruction::Add { acc: Register::R1, rhs: Operand::Register(Register::R0), set_flags: false },
+                Instruction::Jump { to: 0, condition: JumpCondition::Unconditional }
             ])
         )
     );
@@ -97,26 +86,11 @@ fn parse_various_literals() {
             Data::default(),
             Bss::default(),
             Code::from(vec![
-                Instruction::Mov {
-                    to: Register::R0,
-                    from: Operand::Value(42)
-                },
-                Instruction::Mov {
-                    to: Register::R1,
-                    from: Operand::Value(42),
-                },
-                Instruction::Mov {
-                    to: Register::R2,
-                    from: Operand::Value(42)
-                },
-                Instruction::Mov {
-                    to: Register::R3,
-                    from: Operand::Value(42)
-                },
-                Instruction::Mov {
-                    to: Register::R6,
-                    from: Operand::Value(65)
-                }
+                Instruction::Mov { to: Register::R0, from: Operand::Value(42) },
+                Instruction::Mov { to: Register::R1, from: Operand::Value(42) },
+                Instruction::Mov { to: Register::R2, from: Operand::Value(42) },
+                Instruction::Mov { to: Register::R3, from: Operand::Value(42) },
+                Instruction::Mov { to: Register::R6, from: Operand::Value(65) }
             ])
         )
     )

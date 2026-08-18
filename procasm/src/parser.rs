@@ -4,7 +4,8 @@ mod error;
 mod primitives;
 mod statements;
 
-pub use error::ParserError;
+use ars::range::Range;
+pub(crate) use error::ParserError;
 
 use primitives::{EndParser, NewlineParser};
 use statements::{CodeParser, LabelParser, SectionParser};
@@ -22,7 +23,7 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Parsed<'input> {
     pub instructions: Vec<Instruction>,
-    labels: HashMap<&'input [u8], u64>,
+    labels: HashMap<&'input [u8], (u64, Range)>,
     pub unlinked_instructions: Vec<UnlinkedInstruction>,
     pub data: Vec<u8>,
     bss: u64,
@@ -51,7 +52,7 @@ struct ParserState<'input> {
     idx: usize,
     end: bool,
     section: Section,
-    labels: HashMap<&'input [u8], u64>,
+    labels: HashMap<&'input [u8], (u64, Range)>,
     instructions: Vec<Instruction>,
     unlinked_instructions: Vec<UnlinkedInstruction>,
     data: Vec<u8>,
@@ -61,7 +62,7 @@ struct ParserState<'input> {
 impl Parsed<'_> {
     #[inline]
     #[must_use]
-    pub(crate) const fn labels(&self) -> &HashMap<&[u8], u64> {
+    pub(crate) const fn labels(&self) -> &HashMap<&[u8], (u64, Range)> {
         &self.labels
     }
 
@@ -73,7 +74,7 @@ impl Parsed<'_> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-enum Section {
+pub enum Section {
     Bss,
     Data,
     Code,
@@ -175,29 +176,41 @@ macro_rules! from_literal {
                     Ok(<$unsigned>::from(raw_lit[0]))
                 }
                 ImmediateLiteralKind::Binary => {
-                    let raw_lit = String::from_utf8_lossy(&input[span]);
-
-                    <$unsigned>::from_str_radix(&raw_lit, 2)
-                        .map_err(|err| ParserError::LiteralParsing { lit: raw_lit.to_string(), err })
+                    let raw_lit = ::core::str::from_utf8(&input[span])
+                        .map_err(|err| ParserError::ImmediateLiteralParsingUtf8 { span, lit, err })?;
+                    <$unsigned>::from_str_radix(raw_lit, 2).map_err(|err| ParserError::ImmediateLiteralParsingInt {
+                        span,
+                        lit,
+                        err,
+                    })
                 }
                 ImmediateLiteralKind::Decimal => {
-                    let raw_lit = String::from_utf8_lossy(&input[span]);
+                    let raw_lit = ::core::str::from_utf8(&input[span])
+                        .map_err(|err| ParserError::ImmediateLiteralParsingUtf8 { span, lit, err })?;
                     if let Some(raw_lit) = raw_lit.strip_prefix('-') {
                         raw_lit.parse::<$unsigned>().map(<$unsigned>::wrapping_neg)
                     } else {
                         raw_lit.parse()
                     }
-                    .map_err(|err| ParserError::LiteralParsing { lit: raw_lit.to_string(), err })
+                    .map_err(|err| ParserError::ImmediateLiteralParsingInt { span, lit, err })
                 }
                 ImmediateLiteralKind::Hexadecimal => {
-                    let raw_lit = String::from_utf8_lossy(&input[span]);
-                    <$unsigned>::from_str_radix(&raw_lit, 16)
-                        .map_err(|err| ParserError::LiteralParsing { lit: raw_lit.to_string(), err })
+                    let raw_lit = ::core::str::from_utf8(&input[span])
+                        .map_err(|err| ParserError::ImmediateLiteralParsingUtf8 { span, lit, err })?;
+                    <$unsigned>::from_str_radix(&raw_lit, 16).map_err(|err| ParserError::ImmediateLiteralParsingInt {
+                        span,
+                        lit,
+                        err,
+                    })
                 }
                 ImmediateLiteralKind::Octal => {
-                    let raw_lit = String::from_utf8_lossy(&input[span]);
-                    <$unsigned>::from_str_radix(&raw_lit, 8)
-                        .map_err(|err| ParserError::LiteralParsing { lit: raw_lit.to_string(), err })
+                    let raw_lit = ::core::str::from_utf8(&input[span])
+                        .map_err(|err| ParserError::ImmediateLiteralParsingUtf8 { span, lit, err })?;
+                    <$unsigned>::from_str_radix(&raw_lit, 8).map_err(|err| ParserError::ImmediateLiteralParsingInt {
+                        span,
+                        lit,
+                        err,
+                    })
                 }
             }
         }

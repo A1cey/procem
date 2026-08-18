@@ -21,10 +21,10 @@ impl<'input> Parser<'input> for IdentParser {
                 state.idx += 1;
                 Ok(*span)
             }
-            Some(token) => {
-                Err(ParserError::InvalidToken { idx: state.idx, expected: "Identifier", got: token.resolve(input.raw) })
-            }
-            None => Err(ParserError::TokenNotFound { idx: state.idx }),
+            Some(&token) => Err(ParserError::InvalidToken { expected: "Identifier", got: token }),
+            None => Err(ParserError::TokenNotFound {
+                span: input.tokens.get(state.idx - 1).expect("There was a previous token.").span,
+            }),
         }
         .map_err(Error::NoMatch)
     }
@@ -43,8 +43,10 @@ impl<'input> Parser<'input> for EndParser {
                 state.end = true;
                 Ok(())
             }
-            Some(token) => Err(ParserError::InvalidToken { idx: state.idx, expected: "End", got: token.resolve(input.raw) }),
-            None => Err(ParserError::TokenNotFound { idx: state.idx }),
+            Some(&token) => Err(ParserError::InvalidToken { expected: "End", got: token }),
+            None => Err(ParserError::TokenNotFound {
+                span: input.tokens.get(state.idx - 1).expect("There was a previous token.").span,
+            }),
         }
         .map_err(Error::NoMatch)
     }
@@ -62,10 +64,10 @@ impl<'input> Parser<'input> for ImmediateLiteralParser {
                 state.idx += 1;
                 Ok((*lit, *span))
             }
-            Some(token) => {
-                Err(ParserError::InvalidToken { idx: state.idx, expected: "ImmediateLiteral", got: token.resolve(input.raw) })
-            }
-            None => Err(ParserError::TokenNotFound { idx: state.idx }),
+            Some(&token) => Err(ParserError::InvalidToken { expected: "ImmediateLiteral", got: token }),
+            None => Err(ParserError::TokenNotFound {
+                span: input.tokens.get(state.idx - 1).expect("There was a previous token.").span,
+            }),
         }
         .map_err(Error::NoMatch)
     }
@@ -83,10 +85,10 @@ impl<'input> Parser<'input> for StringLiteralParser {
                 state.idx += 1;
                 Ok(*span)
             }
-            Some(token) => {
-                Err(ParserError::InvalidToken { idx: state.idx, expected: "StringLiteral", got: token.resolve(input.raw) })
-            }
-            None => Err(ParserError::TokenNotFound { idx: state.idx }),
+            Some(&token) => Err(ParserError::InvalidToken { expected: "StringLiteral", got: token }),
+            None => Err(ParserError::TokenNotFound {
+                span: input.tokens.get(state.idx - 1).expect("There was a previous token.").span,
+            }),
         }
         .map_err(Error::NoMatch)
     }
@@ -96,19 +98,20 @@ impl<'input> Parser<'input> for StringLiteralParser {
 pub(crate) struct DirectiveParser;
 
 impl<'input> Parser<'input> for DirectiveParser {
-    type Output = Directive;
+    type Output = (Directive, Range);
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
         match input.tokens.get(state.idx) {
-            Some(Token { kind: TokenKind::Directive, span }) => {
-                Directive::try_from(&input.raw[span]).inspect(|_| state.idx += 1).map_err(Error::IncompleteMatch)
-            }
-            Some(token) => Err(Error::NoMatch(ParserError::InvalidToken {
-                idx: state.idx,
-                expected: "Directive",
-                got: token.resolve(input.raw),
+            Some(Token { kind: TokenKind::Directive, span }) => Directive::try_from_slice(&input.raw[span], *span)
+                .map(|directive| {
+                    state.idx += 1;
+                    (directive, *span)
+                })
+                .map_err(Error::IncompleteMatch),
+            Some(&token) => Err(Error::NoMatch(ParserError::InvalidToken { expected: "Directive", got: token })),
+            None => Err(Error::NoMatch(ParserError::TokenNotFound {
+                span: input.tokens.get(state.idx - 1).expect("There was a previous token.").span,
             })),
-            None => Err(Error::NoMatch(ParserError::TokenNotFound { idx: state.idx })),
         }
     }
 }
@@ -127,12 +130,10 @@ macro_rules! simple_token_parser {
                         state.idx += 1;
                         Ok(())
                     }
-                    Some(token) => Err(ParserError::InvalidToken {
-                        idx: state.idx,
-                        expected: stringify!($token),
-                        got: token.resolve(input.raw),
+                    Some(&token) => Err(ParserError::InvalidToken { expected: stringify!($token), got: token }),
+                    None => Err(ParserError::TokenNotFound {
+                        span: input.tokens.get(state.idx - 1).expect("There was a previous token.").span,
                     }),
-                    None => Err(ParserError::TokenNotFound { idx: state.idx }),
                 }
                 .map_err(Error::NoMatch)
             }

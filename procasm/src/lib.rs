@@ -89,15 +89,15 @@
 
 use crate::instruction::Instruction;
 use crate::linker::{Linker, LinkerError};
-use crate::parser::{ParserError, parse};
+use crate::parser::parse;
 use crate::tokenizer::{Tokenizer, TokenizerError};
 use procem::program::Program;
 use thiserror::Error;
 
 pub mod instruction;
 mod linker;
-pub mod parser;
-pub mod tokenizer;
+pub(crate) mod parser;
+pub(crate) mod tokenizer;
 
 pub type AssembledProgram<const MEM_SIZE: usize> = Program<MEM_SIZE, Instruction, Vec<Instruction>, Vec<u8>>;
 
@@ -155,7 +155,9 @@ pub fn assemble<const MEM_SIZE: usize>(input: impl AsRef<str>) -> Result<Assembl
 
     let tokens = Tokenizer::tokenize(input).map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())?;
 
-    let parsed = parse(&tokens, input).map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())?;
+    let parsed = parse(&tokens, input).map_err(|err| {
+        err.into_iter().map(|err| AssemblerError::Parser { err: err.render(input) }).collect::<Vec<AssemblerError>>()
+    })?;
 
     Linker::<'_, MEM_SIZE>::link(input, parsed).map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())
 }
@@ -168,10 +170,7 @@ pub enum AssemblerError {
         err: TokenizerError,
     },
     #[error("Error during parsing: {err}")]
-    Parser {
-        #[from]
-        err: ParserError,
-    },
+    Parser { err: String },
     #[error("Error during linking: {err}")]
     Linker {
         #[from]

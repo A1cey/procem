@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+use ars::range::Range;
+
 use crate::parser::ParserError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -16,10 +18,10 @@ pub(crate) enum Directive {
     Space,
 }
 
-impl TryFrom<&[u8]> for Directive {
-    type Error = ParserError;
-
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+impl Directive {
+    #[inline]
+    #[must_use]
+    pub(crate) fn try_from_slice(value: &[u8], span: Range) -> Result<Self, ParserError> {
         let directive = match value {
             s if s.eq_ignore_ascii_case(b"code") => Self::Code,
             s if s.eq_ignore_ascii_case(b"data") => Self::Data,
@@ -31,10 +33,7 @@ impl TryFrom<&[u8]> for Directive {
             s if s.eq_ignore_ascii_case(b"qword") => Self::Qword,
             s if s.eq_ignore_ascii_case(b"ascii") => Self::Ascii,
             s if s.eq_ignore_ascii_case(b"space") => Self::Space,
-            s => Err(ParserError::InvalidDirective {
-                got: String::from_utf8_lossy(s).to_string(),
-                allowed: ".code, .data, .bss, .byte, .hword, .word, .dword, .qword, .ascii, or .space".to_string(),
-            })?,
+            s => Err(ParserError::InvalidDirective { span, directive: String::from_utf8_lossy(s).to_string() })?,
         };
 
         Ok(directive)

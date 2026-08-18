@@ -7,8 +7,8 @@ use crate::parser::primitives::{
     ClosedBracketParser, CommaParser, IdentParser, ImmediateLiteralParser, OpenBracketParser, StringLiteralParser,
 };
 use crate::parser::{
-    ParserError, ParserInput, ParserState, string_from_u8_slice, u8_from_literal, u16_from_literal, u32_from_literal,
-    u64_from_literal, u128_from_literal,
+    ParserError, ParserInput, ParserState, u8_from_literal, u16_from_literal, u32_from_literal, u64_from_literal,
+    u128_from_literal,
 };
 
 use procem::register::Register;
@@ -21,7 +21,7 @@ impl<'input> Parser<'input> for RegisterParser {
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
         let span = IdentParser.parse(input, state)?;
-        Register::try_from(&input.raw[span]).map_err(|err| ParserError::RegisterParsing { err }).map_err(Error::NoMatch)
+        Register::try_from(&input.raw[span]).map_err(|err| ParserError::RegisterParsing { span, err }).map_err(Error::NoMatch)
     }
 }
 
@@ -34,10 +34,7 @@ impl<'input> Parser<'input> for MnemonicParser {
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
         let span = IdentParser.parse(input, state)?;
         let ident = &input.raw[span];
-        ident
-            .try_into()
-            .map_err(|()| ParserError::UnknownMnemonic { idx: state.idx, inst: string_from_u8_slice(ident) })
-            .map_err(Error::NoMatch)
+        ident.try_into().map_err(|()| ParserError::UnknownMnemonic { span }).map_err(Error::NoMatch)
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -171,7 +168,7 @@ impl<'input> Parser<'input> for SpaceParser {
         let (lit, span) = ImmediateLiteralParser.parse(input, state)?;
         let space = u64_from_literal(lit, span, input.raw).map_err(Error::IncompleteMatch)?;
         state.bss = state.bss.checked_add(space).ok_or(Error::IncompleteMatch(ParserError::BssOverflow {
-            idx: state.idx,
+            span,
             prev_bss: state.bss,
             additional_bss: space,
         }))?;

@@ -53,7 +53,7 @@ impl<'input, const MEM_SIZE: usize> Linker<'input, MEM_SIZE> {
     fn link_instruction(&mut self, unlinked_instruction: UnlinkedInstruction) {
         let label = &self.input[unlinked_instruction.label()];
 
-        let addr = match self.parsed.labels().get(label) {
+        let (addr, _) = match self.parsed.labels().get(label) {
             Some(addr) => *addr,
             None => {
                 return self.errors.push(LinkerError::LabelNotFound {
@@ -72,7 +72,7 @@ impl<'input, const MEM_SIZE: usize> Linker<'input, MEM_SIZE> {
         // skips forrmatting the match
         let linked_instruction = match instruction {
             Inst::Jump { to: _, condition } => Inst::Jump { to: addr, condition: *condition },
-            Inst::Adr { reg, addr: _ } => Inst::Adr { reg: *reg, addr },
+            Inst::Adr { reg, .. } => Inst::Adr { reg: *reg, addr },
             Inst::Str { from, to: MemLoc::Labeled(_) } => Inst::Str { from: *from, to: MemLoc::Labeled(addr) },
             Inst::Strb { from, to: MemLoc::Labeled(_) } => Inst::Strb { from: *from, to: MemLoc::Labeled(addr) },
             Inst::Strh { from, to: MemLoc::Labeled(_) } => Inst::Strh { from: *from, to: MemLoc::Labeled(addr) },
@@ -111,7 +111,7 @@ impl<'input, const MEM_SIZE: usize> Linker<'input, MEM_SIZE> {
     fn get_init_pc(&mut self) -> Option<u64> {
         const START_LABEL: &[u8] = b"_start";
 
-        let pc = self.parsed.labels().get(START_LABEL);
+        let pc = self.parsed.labels().get(START_LABEL).map(|(pc, _)| pc);
 
         if pc.is_none() {
             self.errors.push(LinkerError::StartSymbolNotFound);

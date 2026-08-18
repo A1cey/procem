@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use thiserror::Error;
 
 use ars::range::Range;
@@ -6,20 +8,6 @@ use ars::range::Range;
 pub(crate) struct Token {
     pub(crate) kind: TokenKind,
     pub(crate) span: Range,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) enum TokenKind {
-    Identifier,
-    ImmediateLiteral(ImmediateLiteralKind),
-    StringLiteral,
-    Comma,
-    Colon,
-    OpenBracket,
-    ClosedBracket,
-    End,
-    Directive,
-    Newline,
 }
 
 impl Token {
@@ -44,12 +32,55 @@ impl Token {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) enum TokenKind {
+    Identifier,
+    ImmediateLiteral(ImmediateLiteralKind),
+    StringLiteral,
+    Comma,
+    Colon,
+    OpenBracket,
+    ClosedBracket,
+    End,
+    Directive,
+    Newline,
+}
+
+impl Display for TokenKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Identifier => writeln!(f, "Identifier"),
+            Self::ImmediateLiteral(lit) => writeln!(f, "ImmediateLiteral: {lit}"),
+            Self::StringLiteral => writeln!(f, "StringLiteral"),
+            Self::Comma => writeln!(f, "Comma"),
+            Self::Colon => writeln!(f, "Colon"),
+            Self::OpenBracket => writeln!(f, "OpenBracket"),
+            Self::ClosedBracket => writeln!(f, "ClosedBracket"),
+            Self::End => writeln!(f, "End"),
+            Self::Directive => writeln!(f, "Directive"),
+            Self::Newline => writeln!(f, "Newline"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum ImmediateLiteralKind {
     Decimal,
     Binary,
     Hexadecimal,
     Octal,
     Char,
+}
+
+impl Display for ImmediateLiteralKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Decimal => write!(f, "Decimal"),
+            Self::Binary => write!(f, "Binary"),
+            Self::Hexadecimal => write!(f, "Hexadecimal"),
+            Self::Octal => write!(f, "Octal"),
+            Self::Char => write!(f, "Char"),
+        }
+    }
 }
 
 impl ImmediateLiteralKind {
