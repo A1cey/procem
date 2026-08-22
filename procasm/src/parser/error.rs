@@ -12,7 +12,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum ParserError {
+pub enum ParserError {
     InvalidToken { got: Token, expected: &'static str },
     DuplicateLabel { first_occurence: Range, second_occurence: Range },
     UnknownMnemonic { span: Range },
@@ -48,7 +48,7 @@ impl ParserError {
                 format!("Error while parsing register: {} ({span:?}).\n{err}", String::from_utf8_lossy(&input[span]))
             }
             Self::ImmediateLiteralParsingInt { span, lit, err } => {
-                format!("Error while parsing immediate literal into integer: {} ({span:?}).\n{err}", lit.resolve(input, span),)
+                format!("Error while parsing immediate literal into integer: {} ({span:?}).\n{err}", lit.resolve(input, span))
             }
             Self::ImmediateLiteralParsingUtf8 { span, lit, err } => {
                 format!("UTF8 error while parsing immediate literal from input: {} ({span:?}).\n{err}", lit.resolve(input, span))

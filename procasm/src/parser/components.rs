@@ -3,18 +3,16 @@ use crate::instruction::mnemonics::Mnemonic;
 use crate::instruction::operand::Operand;
 use crate::instruction::unlinked::UnlinkedInstruction;
 use crate::parser::combinators::{Error, Parser, Value};
+use crate::parser::literal::FromImmediateLiteral;
 use crate::parser::primitives::{
     ClosedBracketParser, CommaParser, IdentParser, ImmediateLiteralParser, OpenBracketParser, StringLiteralParser,
 };
-use crate::parser::{
-    ParserError, ParserInput, ParserState, u8_from_literal, u16_from_literal, u32_from_literal, u64_from_literal,
-    u128_from_literal,
-};
+use crate::parser::{ParserError, ParserInput, ParserState};
 
 use procem::register::Register;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub(crate) struct RegisterParser;
+pub struct RegisterParser;
 
 impl<'input> Parser<'input> for RegisterParser {
     type Output = Register;
@@ -26,7 +24,7 @@ impl<'input> Parser<'input> for RegisterParser {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub(crate) struct MnemonicParser;
+pub struct MnemonicParser;
 
 impl<'input> Parser<'input> for MnemonicParser {
     type Output = Mnemonic;
@@ -38,7 +36,7 @@ impl<'input> Parser<'input> for MnemonicParser {
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub(crate) struct OperandParser;
+pub struct OperandParser;
 
 impl<'input> Parser<'input> for OperandParser {
     type Output = Operand;
@@ -47,7 +45,7 @@ impl<'input> Parser<'input> for OperandParser {
         RegisterParser
             .map(|reg| Ok(Operand::Register(reg)))
             .or(ImmediateLiteralParser.map(|(lit, span)| {
-                u64_from_literal(lit, span, input.raw) // TODO: This always u64?
+                u64::from_immediate_literal(lit, span, input.raw) // TODO: This always u64?
                     .map(Operand::Value)
                     .map_err(Error::IncompleteMatch)
             }))
@@ -56,7 +54,7 @@ impl<'input> Parser<'input> for OperandParser {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub(crate) struct LabeledMemoryLocationParser;
+pub struct LabeledMemoryLocationParser;
 
 impl<'input> Parser<'input> for LabeledMemoryLocationParser {
     type Output = MemoryLocation;
@@ -71,7 +69,7 @@ impl<'input> Parser<'input> for LabeledMemoryLocationParser {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub(crate) struct DirectMemoryLocationParser;
+pub struct DirectMemoryLocationParser;
 
 impl<'input> Parser<'input> for DirectMemoryLocationParser {
     type Output = MemoryLocation;
@@ -89,7 +87,7 @@ impl<'input> Parser<'input> for DirectMemoryLocationParser {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub(crate) struct MemoryLocationParser;
+pub struct MemoryLocationParser;
 
 impl<'input> Parser<'input> for MemoryLocationParser {
     type Output = MemoryLocation;
@@ -100,21 +98,22 @@ impl<'input> Parser<'input> for MemoryLocationParser {
 }
 
 macro_rules! immediate_literal_list_parser {
-    ($list_parser_name: ident, $parser_name: ident, $val_from_lit_fn: ident, $ret_val: ty) => {
+    ($list_parser_name: ident, $parser_name: ident, $ret_val: ty) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-        pub(crate) struct $parser_name;
+        pub struct $parser_name;
 
         impl<'input> Parser<'input> for $parser_name {
             type Output = $ret_val;
 
             fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
                 let (lit, span) = ImmediateLiteralParser.parse(input, state)?;
-                $val_from_lit_fn(lit, span, input.raw).map_err(Error::IncompleteMatch)
+                <$ret_val as crate::parser::literal::FromImmediateLiteral>::from_immediate_literal(lit, span, input.raw)
+                    .map_err(Error::IncompleteMatch)
             }
         }
 
         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-        pub(crate) struct $list_parser_name;
+        pub struct $list_parser_name;
 
         impl<'input> Parser<'input> for $list_parser_name {
             type Output = ();
@@ -123,7 +122,7 @@ macro_rules! immediate_literal_list_parser {
                 let val = $parser_name.parse(input, state)?;
                 state.data.extend_from_slice(&val.to_le_bytes());
 
-                while let Ok(()) = CommaParser.parse(input, state) {
+                while CommaParser.parse(input, state) == Ok(()) {
                     let val = $parser_name.parse(input, state).map_err(Error::into_incomplete_match)?;
                     state.data.extend_from_slice(&val.to_le_bytes());
                 }
@@ -134,14 +133,14 @@ macro_rules! immediate_literal_list_parser {
 }
 
 // TODO: Maybe move the from_literal macro into the data_value_list_parser if the functions arent needed somewhere else
-immediate_literal_list_parser!(ByteListParser, ByteParser, u8_from_literal, u8);
-immediate_literal_list_parser!(HwordListParser, HwordParser, u16_from_literal, u16);
-immediate_literal_list_parser!(WordListParser, WordParser, u32_from_literal, u32);
-immediate_literal_list_parser!(DwordListParser, DwordParser, u64_from_literal, u64);
-immediate_literal_list_parser!(QwordListParser, QwordParser, u128_from_literal, u128);
+immediate_literal_list_parser!(ByteListParser, ByteParser, u8);
+immediate_literal_list_parser!(HwordListParser, HwordParser, u16);
+immediate_literal_list_parser!(WordListParser, WordParser, u32);
+immediate_literal_list_parser!(DwordListParser, DwordParser, u64);
+immediate_literal_list_parser!(QwordListParser, QwordParser, u128);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub(crate) struct AsciiListParser;
+pub struct AsciiListParser;
 
 impl<'input> Parser<'input> for AsciiListParser {
     type Output = ();
@@ -150,7 +149,7 @@ impl<'input> Parser<'input> for AsciiListParser {
         let span = StringLiteralParser.parse(input, state)?;
         state.data.extend_from_slice(&input.raw[span]);
 
-        while let Ok(()) = CommaParser.parse(input, state) {
+        while CommaParser.parse(input, state) == Ok(()) {
             let span = StringLiteralParser.parse(input, state).map_err(Error::into_incomplete_match)?;
             state.data.extend_from_slice(&input.raw[span]);
         }
@@ -159,14 +158,14 @@ impl<'input> Parser<'input> for AsciiListParser {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub(crate) struct SpaceParser;
+pub struct SpaceParser;
 
 impl<'input> Parser<'input> for SpaceParser {
     type Output = ();
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
         let (lit, span) = ImmediateLiteralParser.parse(input, state)?;
-        let space = u64_from_literal(lit, span, input.raw).map_err(Error::IncompleteMatch)?;
+        let space = u64::from_immediate_literal(lit, span, input.raw).map_err(Error::IncompleteMatch)?;
         state.bss = state.bss.checked_add(space).ok_or(Error::IncompleteMatch(ParserError::BssOverflow {
             span,
             prev_bss: state.bss,
@@ -177,7 +176,7 @@ impl<'input> Parser<'input> for SpaceParser {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub(crate) struct SpaceListParser;
+pub struct SpaceListParser;
 
 impl<'input> Parser<'input> for SpaceListParser {
     type Output = ();
@@ -185,7 +184,7 @@ impl<'input> Parser<'input> for SpaceListParser {
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
         SpaceParser.parse(input, state)?;
 
-        while let Ok(()) = CommaParser.parse(input, state) {
+        while CommaParser.parse(input, state) == Ok(()) {
             SpaceParser.parse(input, state).map_err(Error::into_incomplete_match)?;
         }
         Ok(())

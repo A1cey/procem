@@ -31,14 +31,14 @@ impl Bss {
     /// Compute the end address of the BSS region (exclusive) by adding `base_addr` and `size`.
     #[must_use]
     #[inline]
-    pub fn end_addr(&self) -> u64 {
+    pub const fn end_addr(&self) -> u64 {
         self.base_addr + self.size
     }
 
     /// Whether the BSS region is empty (size == 0).
     #[must_use]
     #[inline]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.size == 0
     }
 }

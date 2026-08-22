@@ -10,7 +10,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub(crate) struct IdentParser;
+pub struct IdentParser;
 
 impl<'input> Parser<'input> for IdentParser {
     type Output = Range;
@@ -31,7 +31,7 @@ impl<'input> Parser<'input> for IdentParser {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub(crate) struct EndParser;
+pub struct EndParser;
 
 impl<'input> Parser<'input> for EndParser {
     type Output = ();
@@ -53,7 +53,7 @@ impl<'input> Parser<'input> for EndParser {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub(crate) struct ImmediateLiteralParser;
+pub struct ImmediateLiteralParser;
 
 impl<'input> Parser<'input> for ImmediateLiteralParser {
     type Output = (ImmediateLiteralKind, Range);
@@ -74,7 +74,7 @@ impl<'input> Parser<'input> for ImmediateLiteralParser {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub(crate) struct StringLiteralParser;
+pub struct StringLiteralParser;
 
 impl<'input> Parser<'input> for StringLiteralParser {
     type Output = Range;
@@ -95,7 +95,7 @@ impl<'input> Parser<'input> for StringLiteralParser {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub(crate) struct DirectiveParser;
+pub struct DirectiveParser;
 
 impl<'input> Parser<'input> for DirectiveParser {
     type Output = (Directive, Range);
@@ -119,7 +119,7 @@ impl<'input> Parser<'input> for DirectiveParser {
 macro_rules! simple_token_parser {
     ($name: ident, $token: ident) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-        pub(crate) struct $name;
+        pub struct $name;
 
         impl<'input> Parser<'input> for $name {
             type Output = ();

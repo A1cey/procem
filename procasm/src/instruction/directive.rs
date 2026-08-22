@@ -5,7 +5,7 @@ use ars::range::Range;
 use crate::parser::ParserError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) enum Directive {
+pub enum Directive {
     Code,
     Data,
     Bss,
@@ -20,7 +20,6 @@ pub(crate) enum Directive {
 
 impl Directive {
     #[inline]
-    #[must_use]
     pub(crate) fn try_from_slice(value: &[u8], span: Range) -> Result<Self, ParserError> {
         let directive = match value {
             s if s.eq_ignore_ascii_case(b"code") => Self::Code,

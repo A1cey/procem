@@ -14,13 +14,13 @@ use crate::{
             AsciiListParser, ByteListParser, DwordListParser, HwordListParser, MemoryLocationParser, MnemonicParser,
             OperandParser, QwordListParser, RegisterParser, SpaceListParser, WordListParser,
         },
+        literal::FromImmediateLiteral,
         primitives::{ColonParser, CommaParser, DirectiveParser, IdentParser, ImmediateLiteralParser, NewlineParser},
-        u64_from_literal,
     },
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub(crate) struct CodeParser;
+pub struct CodeParser;
 
 impl<'input> Parser<'input> for CodeParser {
     type Output = ();
@@ -90,7 +90,7 @@ impl<'input> Parser<'input> for CodeParser {
                     .parse(input, state)
                     .map_err(Error::into_incomplete_match)?;
 
-                u64_from_literal(literal, span, input.raw)
+                u64::from_immediate_literal(literal, span, input.raw)
                     .and_then(|lit| {
                         lit.try_into().map_err(|err| ParserError::CannotConvertImmediateLiteralToU32 { span, lit, err })
                     })
@@ -105,7 +105,7 @@ impl<'input> Parser<'input> for CodeParser {
                     .parse(input, state)
                     .map_err(Error::into_incomplete_match)?;
 
-                u64_from_literal(lit, span, input.raw)
+                u64::from_immediate_literal(lit, span, input.raw)
                     .map(|word| Instruction::from_shift_mnemonic(mnemonic, reg, word))
                     .map_err(Error::IncompleteMatch)?
             }
@@ -126,7 +126,7 @@ impl<'input> Parser<'input> for CodeParser {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub(crate) struct DataParser;
+pub struct DataParser;
 
 impl<'input> Parser<'input> for DataParser {
     type Output = ();
@@ -176,7 +176,7 @@ impl<'input> Parser<'input> for DataParser {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub(crate) struct BssParser;
+pub struct BssParser;
 
 impl<'input> Parser<'input> for BssParser {
     type Output = ();
@@ -213,7 +213,7 @@ impl<'input> Parser<'input> for BssParser {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub(crate) struct SectionParser;
+pub struct SectionParser;
 
 impl<'input> Parser<'input> for SectionParser {
     type Output = ();
@@ -234,7 +234,7 @@ impl<'input> Parser<'input> for SectionParser {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub(crate) struct LabelParser;
+pub struct LabelParser;
 
 impl<'input> Parser<'input> for LabelParser {
     type Output = ();

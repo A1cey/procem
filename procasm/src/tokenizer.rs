@@ -5,15 +5,15 @@ use thiserror::Error;
 use ars::range::Range;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct Token {
-    pub(crate) kind: TokenKind,
-    pub(crate) span: Range,
+pub struct Token {
+    pub kind: TokenKind,
+    pub span: Range,
 }
 
 impl Token {
     // skips forrmatting the match
     #[inline]
-    pub(crate) fn resolve(self, input: &[u8]) -> String {
+    pub fn resolve(self, input: &[u8]) -> String {
         use TokenKind as TK;
 
         match self {
@@ -32,7 +32,7 @@ impl Token {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) enum TokenKind {
+pub enum TokenKind {
     Identifier,
     ImmediateLiteral(ImmediateLiteralKind),
     StringLiteral,
@@ -63,7 +63,7 @@ impl Display for TokenKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) enum ImmediateLiteralKind {
+pub enum ImmediateLiteralKind {
     Decimal,
     Binary,
     Hexadecimal,
@@ -85,7 +85,7 @@ impl Display for ImmediateLiteralKind {
 
 impl ImmediateLiteralKind {
     #[inline]
-    pub(crate) fn resolve(self, input: &[u8], span: Range) -> String {
+    pub fn resolve(self, input: &[u8], span: Range) -> String {
         match self {
             Self::Decimal => format!("Decimal: '{}'", String::from_utf8_lossy(&input[span])),
             Self::Binary => format!("Binary: '{}'", String::from_utf8_lossy(&input[span])),
@@ -97,7 +97,7 @@ impl ImmediateLiteralKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Tokenizer<'input> {
+pub struct Tokenizer<'input> {
     tokens: Vec<Token>,
     curr_idx: usize,
     token_start_idx: usize,
@@ -119,7 +119,6 @@ impl Tokenizer<'_> {
         }
     }
 
-    #[doc(hidden)] // Only public for benchmarks.
     pub fn tokenize(input: &[u8]) -> Result<Vec<Token>, Vec<TokenizerError>> {
         let mut tokenizer = Self::from(input);
 
@@ -155,7 +154,6 @@ impl Tokenizer<'_> {
         }
     }
 
-    // TODO: no labels or instructions can start with f or r as this will be interpreted as boolean literal or register
     fn process_next_token(&mut self) {
         self.token_start_idx = self.curr_idx;
 

@@ -450,7 +450,7 @@ impl<const MEM_SIZE: usize> Memory<MEM_SIZE> {
     /// * The `start_addr` or `start_addr + values.len()` is out of bounds.
     /// * The address range in memory overlaps with the address range of `values`.
     #[expect(clippy::cast_possible_truncation, reason = "Not more than usize is addressable")]
-    pub unsafe fn write_slice_unchecked(&mut self, start_addr: u64, values: &[u8]) {
+    pub const unsafe fn write_slice_unchecked(&mut self, start_addr: u64, values: &[u8]) {
         // Not more than usize is addressable
         let start_addr = start_addr as usize;
 

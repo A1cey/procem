@@ -624,13 +624,11 @@ impl Instruction {
 
         let res = a / b; // unsigned div cannot overflow
 
+        processor.registers.set_reg(acc, res);
         if set_flags {
-            processor.registers.set_reg(acc, res);
             processor.registers.set_flag(Flag::V, false); // unsigned div cannot overflow
             processor.registers.set_flag(Flag::C, false); // division never carries
             Self::set_signed_and_zero_flags(res.cast_signed(), processor);
-        } else {
-            processor.registers.set_reg(acc, res);
         }
 
         Ok(())
@@ -654,14 +652,12 @@ impl Instruction {
 
         let (res, overflow) = a.overflowing_div(b);
 
+        processor.registers.set_reg(acc, res.cast_unsigned());
         if set_flags {
-            processor.registers.set_reg(acc, res.cast_unsigned());
             processor.registers.set_flag(Flag::V, overflow);
             processor.registers.set_flag(Flag::C, false); // division never carries
 
             Self::set_signed_and_zero_flags(res, processor);
-        } else {
-            processor.registers.set_reg(acc, res.cast_unsigned());
         }
 
         Ok(())

@@ -1,12 +1,12 @@
 mod combinators;
 mod components;
 mod error;
+mod literal;
 mod primitives;
 mod statements;
 
 use ars::range::Range;
-pub(crate) use error::ParserError;
-
+pub use error::ParserError;
 use primitives::{EndParser, NewlineParser};
 use statements::{CodeParser, LabelParser, SectionParser};
 use std::{collections::HashMap, fmt::Display};
@@ -17,11 +17,11 @@ use crate::{
         combinators::{Error, Parser},
         statements::{BssParser, DataParser},
     },
-    tokenizer::{ImmediateLiteralKind, Token, TokenKind},
+    tokenizer::{Token, TokenKind},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Parsed<'input> {
+pub struct Parsed<'input> {
     pub instructions: Vec<Instruction>,
     labels: HashMap<&'input [u8], (u64, Range)>,
     pub unlinked_instructions: Vec<UnlinkedInstruction>,
@@ -62,13 +62,13 @@ struct ParserState<'input> {
 impl Parsed<'_> {
     #[inline]
     #[must_use]
-    pub(crate) const fn labels(&self) -> &HashMap<&[u8], (u64, Range)> {
+    pub const fn labels(&self) -> &HashMap<&[u8], (u64, Range)> {
         &self.labels
     }
 
     #[inline]
     #[must_use]
-    pub(crate) const fn bss(&self) -> u64 {
+    pub const fn bss(&self) -> u64 {
         self.bss
     }
 }
@@ -116,7 +116,7 @@ impl<'input> Parser<'input> for ProcasmParser {
 ///
 /// # Errors
 /// Returns a list of errors that occurred during parsing.
-pub(crate) fn parse<'input>(tokens: &'input [Token], input: &'input [u8]) -> Result<Parsed<'input>, Vec<ParserError>> {
+pub fn parse<'input>(tokens: &'input [Token], input: &'input [u8]) -> Result<Parsed<'input>, Vec<ParserError>> {
     let input = ParserInput { raw: input, tokens };
     let mut state = ParserState::default();
     let mut errors = Vec::new();
@@ -155,81 +155,14 @@ fn skip_to_next_line(tokens: &[Token], state: &mut ParserState) {
     }
 }
 
-#[inline]
-#[must_use]
-fn string_from_u8_slice(slice: &[u8]) -> String {
-    String::from_utf8_lossy(slice).to_string()
-}
-
-macro_rules! from_literal {
-    ($unsigned:ty, $fn_name: ident) => {
-        #[doc = concat!("Parse an `ImmediateLiteral` into an `", stringify!($unsigned), "`.")]
-        fn $fn_name(
-            lit: crate::tokenizer::ImmediateLiteralKind,
-            span: ::ars::range::Range,
-            input: &[u8],
-        ) -> Result<$unsigned, ParserError> {
-            match lit {
-                ImmediateLiteralKind::Char => {
-                    let raw_lit = &input[span];
-                    debug_assert_eq!(raw_lit.len(), 1);
-                    Ok(<$unsigned>::from(raw_lit[0]))
-                }
-                ImmediateLiteralKind::Binary => {
-                    let raw_lit = ::core::str::from_utf8(&input[span])
-                        .map_err(|err| ParserError::ImmediateLiteralParsingUtf8 { span, lit, err })?;
-                    <$unsigned>::from_str_radix(raw_lit, 2).map_err(|err| ParserError::ImmediateLiteralParsingInt {
-                        span,
-                        lit,
-                        err,
-                    })
-                }
-                ImmediateLiteralKind::Decimal => {
-                    let raw_lit = ::core::str::from_utf8(&input[span])
-                        .map_err(|err| ParserError::ImmediateLiteralParsingUtf8 { span, lit, err })?;
-                    if let Some(raw_lit) = raw_lit.strip_prefix('-') {
-                        raw_lit.parse::<$unsigned>().map(<$unsigned>::wrapping_neg)
-                    } else {
-                        raw_lit.parse()
-                    }
-                    .map_err(|err| ParserError::ImmediateLiteralParsingInt { span, lit, err })
-                }
-                ImmediateLiteralKind::Hexadecimal => {
-                    let raw_lit = ::core::str::from_utf8(&input[span])
-                        .map_err(|err| ParserError::ImmediateLiteralParsingUtf8 { span, lit, err })?;
-                    <$unsigned>::from_str_radix(&raw_lit, 16).map_err(|err| ParserError::ImmediateLiteralParsingInt {
-                        span,
-                        lit,
-                        err,
-                    })
-                }
-                ImmediateLiteralKind::Octal => {
-                    let raw_lit = ::core::str::from_utf8(&input[span])
-                        .map_err(|err| ParserError::ImmediateLiteralParsingUtf8 { span, lit, err })?;
-                    <$unsigned>::from_str_radix(&raw_lit, 8).map_err(|err| ParserError::ImmediateLiteralParsingInt {
-                        span,
-                        lit,
-                        err,
-                    })
-                }
-            }
-        }
-    };
-}
-
-from_literal! {u8,  u8_from_literal}
-from_literal! {u16, u16_from_literal}
-from_literal! {u32, u32_from_literal}
-from_literal! {u64, u64_from_literal}
-from_literal! {u128, u128_from_literal}
-
 #[cfg(test)]
 mod test {
     use crate::{
         instruction::{Instruction, memory_location::MemoryLocation, operand::Operand},
         parser::{Parser, ParserError, ParserInput, ParserState, ProcasmParser, Section, combinators::Error, parse},
-        tokenizer::Tokenizer,
+        tokenizer::{Token, TokenKind, Tokenizer},
     };
+    use ars::range::Range;
     use pretty_assertions_sorted::assert_eq;
     use procem::register::Register;
 
@@ -272,13 +205,9 @@ mod test {
         match p.parse(input, &mut state) {
             Ok(()) => panic!("Expected error, but succeeded"),
             Err(Error::NoMatch(err)) => panic!("Expected IncompleteMatch error, but got {err:?}"),
-            Err(Error::IncompleteMatch(err)) => assert_eq!(
-                err,
-                ParserError::InvalidDirective {
-                    got: "Invalid".to_string(),
-                    allowed: ".code, .data, .bss, .byte, .hword, .word, .dword, .qword, .ascii, or .space".to_string()
-                }
-            ),
+            Err(Error::IncompleteMatch(err)) => {
+                assert_eq!(err, ParserError::InvalidDirective { directive: "Invalid".to_string(), span: Range(102, 109) })
+            }
         }
         check!(Code, state);
     }
@@ -300,8 +229,8 @@ mod test {
         assert_eq!(parsed.labels().len(), 2);
         assert_eq!(parsed.data.len(), 0);
         assert_eq!(parsed.bss, 5 + 10 + 5 + 10);
-        assert_eq!(parsed.labels[b"a".as_slice()], 0);
-        assert_eq!(parsed.labels[b"b".as_slice()], 5 + 10);
+        assert_eq!(parsed.labels[b"a".as_slice()], (0, Range(30, 31)));
+        assert_eq!(parsed.labels[b"b".as_slice()], (5 + 10, Range(96, 97)));
     }
 
     #[test]
@@ -327,9 +256,12 @@ mod test {
         assert_eq!(parsed.bss(), 0);
         assert_eq!(parsed.data.len(), 1 + 2 + 4 + 8 + 16 + b"Hello World!".len() + b"\0".len() + 4 + 4); // byte, hword, word, dword, qword, 2 ascii, 2 word allocations
         assert_eq!(parsed.labels.len(), 3);
-        assert_eq!(parsed.labels[b"a".as_slice()], 0);
-        assert_eq!(parsed.labels[b"b".as_slice()], 1 + 2 + 4 + 8 + 16);
-        assert_eq!(parsed.labels[b"c".as_slice()], 1 + 2 + 4 + 8 + 16 + b"Hello World!".len() as u64 + b"\0".len() as u64);
+        assert_eq!(parsed.labels[b"a".as_slice()], (0, Range(31, 32)));
+        assert_eq!(parsed.labels[b"b".as_slice()], (1 + 2 + 4 + 8 + 16, Range(169, 170)));
+        assert_eq!(
+            parsed.labels[b"c".as_slice()],
+            (1 + 2 + 4 + 8 + 16 + b"Hello World!".len() as u64 + b"\0".len() as u64, Range(227, 228))
+        );
     }
 
     #[test]
@@ -352,8 +284,8 @@ mod test {
         assert_eq!(parsed.bss(), 0);
         assert_eq!(parsed.data.len(), 1 + 1 + 2 + 2 + 4 + 4 + 4 + 8 + 8 + 16 + 16); // 2 byte, 2 hword, 3 word, 2 dword, 2 qword
         assert_eq!(parsed.labels.len(), 2);
-        assert_eq!(parsed.labels[b"a".as_slice()], 0);
-        assert_eq!(parsed.labels[b"b".as_slice()], 1 + 1 + 2 + 2 + 4 + 4 + 4 + 8 + 8 + 16 + 16);
+        assert_eq!(parsed.labels[b"a".as_slice()], (0, Range(31, 32)));
+        assert_eq!(parsed.labels[b"b".as_slice()], (1 + 1 + 2 + 2 + 4 + 4 + 4 + 8 + 8 + 16 + 16, Range(185, 186)));
     }
 
     #[test]
@@ -384,13 +316,12 @@ mod test {
             e:
                 .word 8
 
-            .code
+            .code 
             f:
                 add R1, 0o1
                 jmp c
             ";
         let tokens = Tokenizer::tokenize(input).unwrap();
-        println!("{tokens:#?}");
         let parsed = parse(&tokens, input).unwrap();
 
         assert_eq!(parsed.instructions.len(), 6);
@@ -399,14 +330,14 @@ mod test {
         assert_eq!(parsed.bss(), 5 + 10 + 5);
 
         // code
-        assert_eq!(parsed.labels()[b"a".as_slice()], 0);
-        assert_eq!(parsed.labels()[b"c".as_slice()], 2);
-        assert_eq!(parsed.labels()[b"f".as_slice()], 4);
+        assert_eq!(parsed.labels()[b"a".as_slice()], (0, Range(31, 32)));
+        assert_eq!(parsed.labels()[b"c".as_slice()], (2, Range(176, 177)));
+        assert_eq!(parsed.labels()[b"f".as_slice()], (4, Range(419, 420)));
         // bss
-        assert_eq!(parsed.labels()[b"b".as_slice()], 0);
+        assert_eq!(parsed.labels()[b"b".as_slice()], (0, Range(112, 113)));
         // data
-        assert_eq!(parsed.labels()[b"d".as_slice()], 0);
-        assert_eq!(parsed.labels()[b"e".as_slice()], 4);
+        assert_eq!(parsed.labels()[b"d".as_slice()], (0, Range(259, 260)));
+        assert_eq!(parsed.labels()[b"e".as_slice()], (4, Range(360, 361)));
     }
 
     #[test]
