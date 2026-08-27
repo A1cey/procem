@@ -4,7 +4,7 @@ use ars::fmt::slice::FmtSlice;
 use pretty_assertions_sorted::assert_eq;
 use procasm::{
     AssembledProgram, assemble,
-    instruction::{Instruction, jump_condition::JumpCondition, operand::Operand},
+    instruction::{Instruction, JumpCondition, Operand},
 };
 use procem::{
     processor::Processor,

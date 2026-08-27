@@ -1,7 +1,7 @@
 use ars::range::Range;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct UnlinkedInstruction {
+pub struct UnlinkedInstruction {
     instr_idx: usize,
     label: Range,
 }

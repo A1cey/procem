@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    instruction::directive::Directive,
+    instruction::Directive,
     parser::{ParserInput, Section},
     tokenizer::{ImmediateLiteralKind, Token, TokenKind},
 };

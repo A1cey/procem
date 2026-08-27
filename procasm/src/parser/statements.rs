@@ -1,7 +1,6 @@
 use crate::{
     instruction::{
-        Instruction,
-        directive::Directive,
+        Directive, Instruction,
         mnemonics::{Mnemonic, NoArgMnemonic},
         unlinked::UnlinkedInstruction,
     },

@@ -1,6 +1,6 @@
-use crate::instruction::memory_location::MemoryLocation;
+use crate::instruction::MemoryLocation;
+use crate::instruction::Operand;
 use crate::instruction::mnemonics::Mnemonic;
-use crate::instruction::operand::Operand;
 use crate::instruction::unlinked::UnlinkedInstruction;
 use crate::parser::combinators::{Error, Parser, Value};
 use crate::parser::literal::FromImmediateLiteral;

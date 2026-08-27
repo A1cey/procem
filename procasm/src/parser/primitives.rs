@@ -1,7 +1,7 @@
 use ars::range::Range;
 
 use crate::{
-    instruction::directive::Directive,
+    instruction::Directive,
     parser::{
         ParserError, ParserInput, ParserState,
         combinators::{Error, Parser},

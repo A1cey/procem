@@ -109,7 +109,7 @@ pub type AssembledProgram<const MEM_SIZE: usize> = Program<MEM_SIZE, Instruction
 /// # Example
 /// ```
 /// use procem::{program::{Program, Code, Header, Bss, Data}, register::Register};
-/// use procasm::{assemble, AssembledProgram, instruction::{Instruction, jump_condition::JumpCondition, operand::Operand}};
+/// use procasm::{assemble, AssembledProgram, instruction::{Instruction, JumpCondition, Operand}};
 ///
 /// const MEM_SIZE: usize = 1024;
 ///

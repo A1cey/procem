@@ -1,9 +1,14 @@
-pub(crate) mod directive;
-pub mod jump_condition;
-pub mod memory_location;
+mod directive;
+mod jump_condition;
+mod memory_location;
 pub(crate) mod mnemonics;
-pub mod operand;
-pub mod unlinked;
+mod operand;
+pub(crate) mod unlinked;
+
+pub use directive::Directive;
+pub use jump_condition::JumpCondition;
+pub use memory_location::MemoryLocation;
+pub use operand::Operand;
 
 use core::cmp::Ordering;
 use procem::{
@@ -12,14 +17,9 @@ use procem::{
     register::{Flag, Register},
 };
 
-use crate::instruction::{
-    jump_condition::JumpCondition,
-    memory_location::MemoryLocation,
-    mnemonics::{
-        JumpMnemonic, LoadOrStoreMnemonic, RegOperandMnemonic, RotateMnemonic, ShiftMnemonic, SingleOperandMnemonic,
-        SingleRegMnemonic, TwoOperandMnemonic,
-    },
-    operand::Operand,
+use crate::instruction::mnemonics::{
+    JumpMnemonic, LoadOrStoreMnemonic, RegOperandMnemonic, RotateMnemonic, ShiftMnemonic, SingleOperandMnemonic,
+    SingleRegMnemonic, TwoOperandMnemonic,
 };
 
 /// A default instruction set implementation, that can be used for the [procem](../../procem/index.html) crate.

@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use crate::{
     AssembledProgram,
-    instruction::{Instruction as Inst, memory_location::MemoryLocation as MemLoc, unlinked::UnlinkedInstruction},
+    instruction::{Instruction as Inst, MemoryLocation as MemLoc, unlinked::UnlinkedInstruction},
     parser::Parsed,
 };
 

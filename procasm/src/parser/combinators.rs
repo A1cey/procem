@@ -79,23 +79,6 @@ pub trait Parser<'input> {
     {
         Map(self, f)
     }
-
-    #[inline]
-    fn check<F>(self, f: F) -> Check<F>
-    where
-        Self: Sized,
-        F: FnOnce(&ParserState<'input>) -> Result<(), Error>,
-    {
-        Check(f)
-    }
-
-    #[inline]
-    fn opt(self) -> Opt<Self>
-    where
-        Self: Sized,
-    {
-        Opt(self)
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -211,20 +194,5 @@ where
     #[inline]
     fn parse(self, _input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
         (self.0)(state)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct Opt<P>(P);
-
-impl<'input, P> Parser<'input> for Opt<P>
-where
-    P: Parser<'input>,
-{
-    type Output = Option<P::Output>;
-
-    #[inline]
-    fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
-        Ok(self.0.parse(input, state).ok())
     }
 }

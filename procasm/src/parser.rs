@@ -156,11 +156,10 @@ fn skip_to_next_line(tokens: &[Token], state: &mut ParserState) {
 #[cfg(test)]
 mod test {
     use crate::{
-        instruction::{Instruction, memory_location::MemoryLocation, operand::Operand},
+        instruction::{Instruction, MemoryLocation, Operand},
         parser::{Parser, ParserError, ParserInput, ParserState, ProcasmParser, Section, combinators::Error, parse},
         tokenizer::Tokenizer,
     };
-    use ars::range::Range;
     use pretty_assertions_sorted::assert_eq;
     use procem::register::Register;
 
