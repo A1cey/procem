@@ -5,7 +5,6 @@ mod literal;
 mod primitives;
 mod statements;
 
-use ars::range::Range;
 pub use error::ParserError;
 use primitives::{EndParser, NewlineParser};
 use statements::{CodeParser, LabelParser, SectionParser};
@@ -23,7 +22,7 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Parsed<'input> {
     pub instructions: Vec<Instruction>,
-    labels: HashMap<&'input [u8], (u64, Range)>,
+    labels: HashMap<&'input [u8], (u64, usize)>,
     pub unlinked_instructions: Vec<UnlinkedInstruction>,
     pub data: Vec<u8>,
     bss: u64,
@@ -42,9 +41,9 @@ impl<'input> From<ParserState<'input>> for Parsed<'input> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct ParserInput<'input> {
-    raw: &'input [u8],
-    tokens: &'input [Token],
+pub struct ParserInput<'input> {
+    pub raw: &'input [u8],
+    pub tokens: &'input [Token],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -52,7 +51,7 @@ struct ParserState<'input> {
     idx: usize,
     end: bool,
     section: Section,
-    labels: HashMap<&'input [u8], (u64, Range)>,
+    labels: HashMap<&'input [u8], (u64, usize)>,
     instructions: Vec<Instruction>,
     unlinked_instructions: Vec<UnlinkedInstruction>,
     data: Vec<u8>,
@@ -62,7 +61,7 @@ struct ParserState<'input> {
 impl Parsed<'_> {
     #[inline]
     #[must_use]
-    pub const fn labels(&self) -> &HashMap<&[u8], (u64, Range)> {
+    pub const fn labels(&self) -> &HashMap<&[u8], (u64, usize)> {
         &self.labels
     }
 
@@ -116,17 +115,16 @@ impl<'input> Parser<'input> for ProcasmParser {
 ///
 /// # Errors
 /// Returns a list of errors that occurred during parsing.
-pub fn parse<'input>(tokens: &'input [Token], input: &'input [u8]) -> Result<Parsed<'input>, Vec<ParserError>> {
-    let input = ParserInput { raw: input, tokens };
+pub fn parse(input: ParserInput) -> Result<Parsed, Vec<ParserError>> {
     let mut state = ParserState::default();
     let mut errors = Vec::new();
 
     let parser = ProcasmParser;
 
-    while !state.end && state.idx < tokens.len() {
+    while !state.end && state.idx < input.tokens.len() {
         if let Err(err) = parser.parse(input, &mut state) {
             errors.push(err.inner());
-            skip_to_next_line(tokens, &mut state);
+            skip_to_next_line(input.tokens, &mut state);
         }
     }
 
@@ -160,7 +158,7 @@ mod test {
     use crate::{
         instruction::{Instruction, memory_location::MemoryLocation, operand::Operand},
         parser::{Parser, ParserError, ParserInput, ParserState, ProcasmParser, Section, combinators::Error, parse},
-        tokenizer::{Token, TokenKind, Tokenizer},
+        tokenizer::Tokenizer,
     };
     use ars::range::Range;
     use pretty_assertions_sorted::assert_eq;
@@ -206,7 +204,7 @@ mod test {
             Ok(()) => panic!("Expected error, but succeeded"),
             Err(Error::NoMatch(err)) => panic!("Expected IncompleteMatch error, but got {err:?}"),
             Err(Error::IncompleteMatch(err)) => {
-                assert_eq!(err, ParserError::InvalidDirective { directive: "Invalid".to_string(), span: Range(102, 109) })
+                assert_eq!(err, ParserError::InvalidDirective { directive: "Invalid".to_string(), token_idx: 11 })
             }
         }
         check!(Code, state);
@@ -223,14 +221,14 @@ mod test {
                 .space 5, 0xA
             ";
         let tokens = Tokenizer::tokenize(input).unwrap();
-        let parsed = parse(&tokens, input).unwrap();
+        let parsed = parse(ParserInput { raw: input, tokens: &tokens }).unwrap();
 
         assert_eq!(parsed.instructions.len(), 0);
         assert_eq!(parsed.labels().len(), 2);
         assert_eq!(parsed.data.len(), 0);
         assert_eq!(parsed.bss, 5 + 10 + 5 + 10);
-        assert_eq!(parsed.labels[b"a".as_slice()], (0, Range(30, 31)));
-        assert_eq!(parsed.labels[b"b".as_slice()], (5 + 10, Range(96, 97)));
+        assert_eq!(parsed.labels[b"a".as_slice()], (0, 5));
+        assert_eq!(parsed.labels[b"b".as_slice()], (5 + 10, 14));
     }
 
     #[test]
@@ -249,19 +247,16 @@ mod test {
                 .word 5, 0xA
             ";
         let tokens = Tokenizer::tokenize(input).unwrap();
-        let parsed = parse(&tokens, input).unwrap();
+        let parsed = parse(ParserInput { raw: input, tokens: &tokens }).unwrap();
 
         assert_eq!(parsed.instructions.len(), 0);
         assert_eq!(parsed.unlinked_instructions.len(), 0);
         assert_eq!(parsed.bss(), 0);
         assert_eq!(parsed.data.len(), 1 + 2 + 4 + 8 + 16 + b"Hello World!".len() + b"\0".len() + 4 + 4); // byte, hword, word, dword, qword, 2 ascii, 2 word allocations
         assert_eq!(parsed.labels.len(), 3);
-        assert_eq!(parsed.labels[b"a".as_slice()], (0, Range(31, 32)));
-        assert_eq!(parsed.labels[b"b".as_slice()], (1 + 2 + 4 + 8 + 16, Range(169, 170)));
-        assert_eq!(
-            parsed.labels[b"c".as_slice()],
-            (1 + 2 + 4 + 8 + 16 + b"Hello World!".len() as u64 + b"\0".len() as u64, Range(227, 228))
-        );
+        assert_eq!(parsed.labels[b"a".as_slice()], (0, 5));
+        assert_eq!(parsed.labels[b"b".as_slice()], (1 + 2 + 4 + 8 + 16, 23));
+        assert_eq!(parsed.labels[b"c".as_slice()], (1 + 2 + 4 + 8 + 16 + b"Hello World!".len() as u64 + b"\0".len() as u64, 31));
     }
 
     #[test]
@@ -277,15 +272,15 @@ mod test {
             b:
             ";
         let tokens = Tokenizer::tokenize(input).unwrap();
-        let parsed = parse(&tokens, input).unwrap();
+        let parsed = parse(ParserInput { raw: input, tokens: &tokens }).unwrap();
 
         assert_eq!(parsed.instructions.len(), 0);
         assert_eq!(parsed.unlinked_instructions.len(), 0);
         assert_eq!(parsed.bss(), 0);
         assert_eq!(parsed.data.len(), 1 + 1 + 2 + 2 + 4 + 4 + 4 + 8 + 8 + 16 + 16); // 2 byte, 2 hword, 3 word, 2 dword, 2 qword
         assert_eq!(parsed.labels.len(), 2);
-        assert_eq!(parsed.labels[b"a".as_slice()], (0, Range(31, 32)));
-        assert_eq!(parsed.labels[b"b".as_slice()], (1 + 1 + 2 + 2 + 4 + 4 + 4 + 8 + 8 + 16 + 16, Range(185, 186)));
+        assert_eq!(parsed.labels[b"a".as_slice()], (0, 5));
+        assert_eq!(parsed.labels[b"b".as_slice()], (1 + 1 + 2 + 2 + 4 + 4 + 4 + 8 + 8 + 16 + 16, 35));
     }
 
     #[test]
@@ -316,13 +311,13 @@ mod test {
             e:
                 .word 8
 
-            .code 
+            .code
             f:
                 add R1, 0o1
                 jmp c
             ";
         let tokens = Tokenizer::tokenize(input).unwrap();
-        let parsed = parse(&tokens, input).unwrap();
+        let parsed = parse(ParserInput { raw: input, tokens: &tokens }).unwrap();
 
         assert_eq!(parsed.instructions.len(), 6);
         assert_eq!(parsed.labels().len(), 6);
@@ -330,14 +325,14 @@ mod test {
         assert_eq!(parsed.bss(), 5 + 10 + 5);
 
         // code
-        assert_eq!(parsed.labels()[b"a".as_slice()], (0, Range(31, 32)));
-        assert_eq!(parsed.labels()[b"c".as_slice()], (2, Range(176, 177)));
-        assert_eq!(parsed.labels()[b"f".as_slice()], (4, Range(419, 420)));
+        assert_eq!(parsed.labels()[b"a".as_slice()], (0, 5));
+        assert_eq!(parsed.labels()[b"c".as_slice()], (2, 30));
+        assert_eq!(parsed.labels()[b"f".as_slice()], (4, 68));
         // bss
-        assert_eq!(parsed.labels()[b"b".as_slice()], (0, Range(112, 113)));
+        assert_eq!(parsed.labels()[b"b".as_slice()], (0, 19));
         // data
-        assert_eq!(parsed.labels()[b"d".as_slice()], (0, Range(259, 260)));
-        assert_eq!(parsed.labels()[b"e".as_slice()], (4, Range(360, 361)));
+        assert_eq!(parsed.labels()[b"d".as_slice()], (0, 44));
+        assert_eq!(parsed.labels()[b"e".as_slice()], (4, 59));
     }
 
     #[test]
@@ -353,7 +348,7 @@ mod test {
             ";
 
         let tokens = Tokenizer::tokenize(input).unwrap();
-        let parsed = parse(&tokens, input).unwrap();
+        let parsed = parse(ParserInput { raw: input, tokens: &tokens }).unwrap();
 
         assert_eq!(parsed.instructions.len(), 6);
         assert_eq!(parsed.unlinked_instructions.len(), 1);
@@ -406,7 +401,7 @@ mod test {
             ";
 
         let tokens = Tokenizer::tokenize(input).unwrap();
-        let parsed = parse(&tokens, input).unwrap();
+        let parsed = parse(ParserInput { raw: input, tokens: &tokens }).unwrap();
 
         assert_eq!(parsed.instructions.len(), 6);
         assert_eq!(parsed.unlinked_instructions.len(), 1);
@@ -455,7 +450,7 @@ mod test {
             ";
 
         let tokens = Tokenizer::tokenize(input).unwrap();
-        let parsed = parse(&tokens, input).unwrap();
+        let parsed = parse(ParserInput { raw: input, tokens: &tokens }).unwrap();
 
         assert_eq!(parsed.instructions.len(), 1);
         assert_eq!(parsed.unlinked_instructions.len(), 1);

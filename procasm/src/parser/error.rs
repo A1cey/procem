@@ -7,77 +7,176 @@ use std::{
 
 use crate::{
     instruction::directive::Directive,
-    parser::Section,
-    tokenizer::{ImmediateLiteralKind, Token},
+    parser::{ParserInput, Section},
+    tokenizer::{ImmediateLiteralKind, Token, TokenKind},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParserError {
-    InvalidToken { got: Token, expected: &'static str },
-    DuplicateLabel { first_occurence: Range, second_occurence: Range },
-    UnknownMnemonic { span: Range },
-    RegisterParsing { span: Range, err: RegisterError },
-    ImmediateLiteralParsingInt { span: Range, lit: ImmediateLiteralKind, err: ParseIntError },
-    ImmediateLiteralParsingUtf8 { span: Range, lit: ImmediateLiteralKind, err: Utf8Error },
-    CannotConvertImmediateLiteralToU32 { span: Range, lit: u64, err: TryFromIntError },
-    InvalidSection { span: Range, section: Directive },
-    WrongSection { span: Range, section: Section, expected: Section },
-    InvalidDirective { span: Range, directive: String },
-    WrongDirective { span: Range, directive: Directive, expected: &'static str },
-    TokenNotFound { span: Range },
-    LabelBeforeFirstSection { span: Range },
-    BssOverflow { span: Range, prev_bss: u64, additional_bss: u64 },
+    InvalidToken { got_token_idx: usize, expected: &'static str },
+    DuplicateLabel { first_token_idx: usize, second_token_idx: usize },
+    UnknownMnemonic { token_idx: usize },
+    RegisterParsing { token_idx: usize, err: RegisterError },
+    ImmediateLiteralParsingInt { token_idx: usize, lit: ImmediateLiteralKind, err: ParseIntError },
+    ImmediateLiteralParsingUtf8 { token_idx: usize, lit: ImmediateLiteralKind, err: Utf8Error },
+    CannotConvertImmediateLiteralToU32 { token_idx: usize, lit: u64, err: TryFromIntError },
+    InvalidSection { token_idx: usize, section: Directive },
+    WrongSection { token_idx: usize, section: Section, expected: Section },
+    InvalidDirective { token_idx: usize, directive: String },
+    WrongDirective { token_idx: usize, directive: Directive, expected: &'static str },
+    TokenNotFound { token_idx: usize },
+    LabelBeforeFirstSection { token_idx: usize },
+    BssOverflow { token_idx: usize, prev_bss: u64, additional_bss: u64 },
 }
 
 impl ParserError {
     #[must_use]
-    pub fn render(self, input: &[u8]) -> String {
+    pub fn render(self, input: ParserInput) -> String {
         match self {
-            Self::InvalidToken { got, expected } => {
-                format!("Invalid token. Expected {expected}, but got {} ({:?}).", got.resolve(input), got.span)
-            }
-            Self::DuplicateLabel { first_occurence, second_occurence } => {
+            Self::InvalidToken { got_token_idx, expected } => {
+                let token = input.tokens[got_token_idx];
+                let line = Self::line(input.tokens, got_token_idx);
                 format!(
-                    "Duplicate label found. First occurrence: {} ({first_occurence:?}), second occurence at {} ({second_occurence:?}).",
-                    String::from_utf8_lossy(&input[first_occurence]),
-                    String::from_utf8_lossy(&input[second_occurence])
+                    "Invalid token. Expected {expected}, but got {} ({:?}).\n{}",
+                    token.resolve(input.raw),
+                    token.span,
+                    String::from_utf8_lossy(&input.raw[line])
                 )
             }
-            Self::UnknownMnemonic { span } => format!("Unknown Mnemonic: {} ({span:?}).", String::from_utf8_lossy(&input[span])),
-            Self::RegisterParsing { span, err } => {
-                format!("Error while parsing register: {} ({span:?}).\n{err}", String::from_utf8_lossy(&input[span]))
-            }
-            Self::ImmediateLiteralParsingInt { span, lit, err } => {
-                format!("Error while parsing immediate literal into integer: {} ({span:?}).\n{err}", lit.resolve(input, span))
-            }
-            Self::ImmediateLiteralParsingUtf8 { span, lit, err } => {
-                format!("UTF8 error while parsing immediate literal from input: {} ({span:?}).\n{err}", lit.resolve(input, span))
-            }
-            Self::CannotConvertImmediateLiteralToU32 { span, lit, err } => {
+            Self::DuplicateLabel { first_token_idx, second_token_idx } => {
+                let first_token = input.tokens[first_token_idx];
+                let second_token = input.tokens[second_token_idx];
+                let first_line = Self::line(input.tokens, first_token_idx);
+                let second_line = Self::line(input.tokens, second_token_idx);
                 format!(
-                    "Cannot convert immediate literal {lit} into u32. This is likely due to the literal being too large.\nLiteral defined here: {span:?}.\n{err}",
+                    "Duplicate label found. First occurrence: {} ({:?})\n{}\nSecond occurence at {} ({:?})\n{}",
+                    String::from_utf8_lossy(&input.raw[first_token.span]),
+                    first_token.span,
+                    String::from_utf8_lossy(&input.raw[first_line]),
+                    String::from_utf8_lossy(&input.raw[second_token.span]),
+                    second_token.span,
+                    String::from_utf8_lossy(&input.raw[second_line])
                 )
             }
-            Self::InvalidSection { span, section } => {
-                format!("Invalid section: {section} ({span:?}).")
+            Self::UnknownMnemonic { token_idx } => {
+                let token = input.tokens[token_idx];
+                let line = Self::line(input.tokens, token_idx);
+                format!(
+                    "Unknown Mnemonic: {} ({:?}).\n{}",
+                    String::from_utf8_lossy(&input.raw[token.span]),
+                    token.span,
+                    String::from_utf8_lossy(&input.raw[line])
+                )
             }
-            Self::WrongSection { span, section: directive, expected } => {
-                format!("Wrong section. Got {directive} ({span:?}), expected {expected}.")
+            Self::RegisterParsing { token_idx, err } => {
+                let token = input.tokens[token_idx];
+                let line = Self::line(input.tokens, token_idx);
+                format!(
+                    "Error while parsing register: {} ({:?}).\n{}\n{err}",
+                    String::from_utf8_lossy(&input.raw[token.span]),
+                    token.span,
+                    String::from_utf8_lossy(&input.raw[line])
+                )
             }
-            Self::InvalidDirective { span, directive } => {
-                format!("Invalid directive: {directive} ({span:?}).")
+            Self::ImmediateLiteralParsingInt { token_idx, lit, err } => {
+                let token = input.tokens[token_idx];
+                let line = Self::line(input.tokens, token_idx);
+                format!(
+                    "Error while parsing immediate literal into integer: {} ({:?}).\n{}\n{err}",
+                    lit.resolve(input.raw, token.span),
+                    token.span,
+                    String::from_utf8_lossy(&input.raw[line])
+                )
             }
-            Self::WrongDirective { span, directive, expected } => {
-                format!("Wrong directive. Got {directive} ({span:?}), expected {expected}.")
+            Self::ImmediateLiteralParsingUtf8 { token_idx, lit, err } => {
+                let token = input.tokens[token_idx];
+                let line = Self::line(input.tokens, token_idx);
+                format!(
+                    "UTF8 error while parsing immediate literal from input: {} ({:?}).\n{}\n{err}",
+                    lit.resolve(input.raw, token.span),
+                    token.span,
+                    String::from_utf8_lossy(&input.raw[line])
+                )
             }
-            Self::TokenNotFound { span } => format!("Expected token at {span:?} but got nothing."),
-            Self::LabelBeforeFirstSection { span } => {
-                format!("Found label before first section: {} ({span:?})", String::from_utf8_lossy(&input[span]))
+            Self::CannotConvertImmediateLiteralToU32 { token_idx, lit, err } => {
+                let token = input.tokens[token_idx];
+                let line = Self::line(input.tokens, token_idx);
+                format!(
+                    "Cannot convert immediate literal {lit} into u32. This is likely due to the literal being too large.\nLiteral defined here: {:?}.\n{}\n{err}",
+                    token.span,
+                    String::from_utf8_lossy(&input.raw[line])
+                )
             }
-            Self::BssOverflow { span, prev_bss, additional_bss } => format!(
-                "Bss overflow. Bss cannot reserve more than u64::MAX space but tries to reserve more at {span:?}.\nPrevious bss size: {prev_bss}, tried to add: {additional_bss}, result: {}.",
-                u128::from(prev_bss) + u128::from(additional_bss)
-            ),
+            Self::InvalidSection { token_idx, section } => {
+                let token = input.tokens[token_idx];
+                let line = Self::line(input.tokens, token_idx);
+                format!("Invalid section: {section} ({:?}).\n{}", token.span, String::from_utf8_lossy(&input.raw[line]))
+            }
+            Self::WrongSection { token_idx, section: directive, expected } => {
+                let token = input.tokens[token_idx];
+                let line = Self::line(input.tokens, token_idx);
+                format!(
+                    "Wrong section. Got {directive} ({:?}), expected {expected}.\n{}",
+                    token.span,
+                    String::from_utf8_lossy(&input.raw[line])
+                )
+            }
+            Self::InvalidDirective { token_idx, directive } => {
+                let token = input.tokens[token_idx];
+                let line = Self::line(input.tokens, token_idx);
+                format!("Invalid directive: {directive} ({:?}).\n{}", token.span, String::from_utf8_lossy(&input.raw[line]))
+            }
+            Self::WrongDirective { token_idx, directive, expected } => {
+                let token = input.tokens[token_idx];
+                let line = Self::line(input.tokens, token_idx);
+                format!(
+                    "Wrong directive. Got {directive} ({:?}), expected {expected}.\n{}",
+                    token.span,
+                    String::from_utf8_lossy(&input.raw[line])
+                )
+            }
+            Self::TokenNotFound { token_idx } => {
+                let token = input.tokens[token_idx];
+                let line = Self::line(input.tokens, token_idx);
+                format!("Expected token at {:?} but got nothing.\n{}", token.span, String::from_utf8_lossy(&input.raw[line]))
+            }
+            Self::LabelBeforeFirstSection { token_idx } => {
+                let token = input.tokens[token_idx];
+                let line = Self::line(input.tokens, token_idx);
+                format!(
+                    "Found label before first section: {} ({:?}).\n{}",
+                    String::from_utf8_lossy(&input.raw[token.span]),
+                    token.span,
+                    String::from_utf8_lossy(&input.raw[line])
+                )
+            }
+            Self::BssOverflow { token_idx, prev_bss, additional_bss } => {
+                let token = input.tokens[token_idx];
+                let line = Self::line(input.tokens, token_idx);
+                format!(
+                    "Bss overflow. Bss cannot reserve more than u64::MAX space but tries to reserve more at {:?}.\nPrevious bss size: {prev_bss}, tried to add: {additional_bss}, result: {}.\n{}",
+                    token.span,
+                    u128::from(prev_bss) + u128::from(additional_bss),
+                    String::from_utf8_lossy(&input.raw[line])
+                )
+            }
         }
+    }
+
+    fn line(tokens: &[Token], token_idx: usize) -> Range {
+        // token_idx exclusive because if curr token is already a newline we still want the previous one
+        let prev_newline = tokens[..token_idx].iter().rev().find(|t| t.kind == TokenKind::Newline).map(|t| t.span);
+        let next_newline = tokens[token_idx..].iter().find(|t| t.kind == TokenKind::Newline).map(|t| t.span);
+
+        let line_start = match prev_newline {
+            Some(Range(_start, end)) => end,
+            None => 0,
+        };
+
+        let Some(Range(line_end, _)) = next_newline else {
+            unreachable!("There is always a following newline in `tokens` or the current token is a newline.")
+        };
+
+        Range::from(line_start..line_end)
     }
 }

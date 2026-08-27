@@ -1,7 +1,5 @@
 use std::fmt::Display;
 
-use ars::range::Range;
-
 use crate::parser::ParserError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -20,7 +18,7 @@ pub enum Directive {
 
 impl Directive {
     #[inline]
-    pub(crate) fn try_from_slice(value: &[u8], span: Range) -> Result<Self, ParserError> {
+    pub(crate) fn try_from_slice(value: &[u8], token_idx: usize) -> Result<Self, ParserError> {
         let directive = match value {
             s if s.eq_ignore_ascii_case(b"code") => Self::Code,
             s if s.eq_ignore_ascii_case(b"data") => Self::Data,
@@ -32,7 +30,7 @@ impl Directive {
             s if s.eq_ignore_ascii_case(b"qword") => Self::Qword,
             s if s.eq_ignore_ascii_case(b"ascii") => Self::Ascii,
             s if s.eq_ignore_ascii_case(b"space") => Self::Space,
-            s => Err(ParserError::InvalidDirective { span, directive: String::from_utf8_lossy(s).to_string() })?,
+            s => Err(ParserError::InvalidDirective { token_idx, directive: String::from_utf8_lossy(s).to_string() })?,
         };
 
         Ok(directive)

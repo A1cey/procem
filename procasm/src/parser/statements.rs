@@ -1,5 +1,3 @@
-use ars::range::Range;
-
 use crate::{
     instruction::{
         Instruction,
@@ -26,16 +24,8 @@ impl<'input> Parser<'input> for CodeParser {
     type Output = ();
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
-        let mnemonic = Check(|state: &ParserState| {
-            check_section(
-                Section::Code,
-                state,
-                input.tokens.get(state.idx).expect("There should always be a token as the outer loop checks this.").span,
-            )
-        })
-        .and(MnemonicParser)
-        .right()
-        .parse(input, state)?;
+        let mnemonic =
+            Check(|state: &ParserState| check_section(Section::Code, state)).and(MnemonicParser).right().parse(input, state)?;
 
         let inst = match mnemonic {
             Mnemonic::NoArg(mnemonic) => match mnemonic {
@@ -83,29 +73,33 @@ impl<'input> Parser<'input> for CodeParser {
                 .parse(input, state)
                 .map_err(Error::into_incomplete_match)?,
             Mnemonic::Rotate(mnemonic) => {
-                let (reg, (literal, span)) = RegisterParser
+                let (reg, (literal, span, _token_idx)) = RegisterParser
                     .and(CommaParser)
                     .left()
                     .and(ImmediateLiteralParser)
                     .parse(input, state)
                     .map_err(Error::into_incomplete_match)?;
 
-                u64::from_immediate_literal(literal, span, input.raw)
+                u64::from_immediate_literal(literal, span, state.idx, input.raw)
                     .and_then(|lit| {
-                        lit.try_into().map_err(|err| ParserError::CannotConvertImmediateLiteralToU32 { span, lit, err })
+                        lit.try_into().map_err(|err| ParserError::CannotConvertImmediateLiteralToU32 {
+                            token_idx: state.idx,
+                            lit,
+                            err,
+                        })
                     })
                     .map(|lit| Instruction::from_rotate_mnemonic(mnemonic, reg, lit))
                     .map_err(Error::IncompleteMatch)?
             }
             Mnemonic::Shift(mnemonic) => {
-                let (reg, (lit, span)) = RegisterParser
+                let (reg, (lit, span, _token_idx)) = RegisterParser
                     .and(CommaParser)
                     .left()
                     .and(ImmediateLiteralParser)
                     .parse(input, state)
                     .map_err(Error::into_incomplete_match)?;
 
-                u64::from_immediate_literal(lit, span, input.raw)
+                u64::from_immediate_literal(lit, span, state.idx, input.raw)
                     .map(|word| Instruction::from_shift_mnemonic(mnemonic, reg, word))
                     .map_err(Error::IncompleteMatch)?
             }
@@ -132,16 +126,8 @@ impl<'input> Parser<'input> for DataParser {
     type Output = ();
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
-        let (directive, span) = Check(|state: &ParserState| {
-            check_section(
-                Section::Data,
-                state,
-                input.tokens.get(state.idx).expect("There should always be a token as the outer loop checks this.").span,
-            )
-        })
-        .and(DirectiveParser)
-        .right()
-        .parse(input, state)?;
+        let directive =
+            Check(|state: &ParserState| check_section(Section::Data, state)).and(DirectiveParser).right().parse(input, state)?;
 
         match directive {
             Directive::Byte => ByteListParser.parse(input, state),
@@ -163,7 +149,7 @@ impl<'input> Parser<'input> for DataParser {
                 Ok(())
             }
             Directive::Space => Err(Error::IncompleteMatch(ParserError::WrongDirective {
-                span,
+                token_idx: state.idx,
                 directive,
                 expected: "Only .byte, .hword, .word, .dword, .qword and .ascii are allowed in .data sections.",
             })),
@@ -182,16 +168,8 @@ impl<'input> Parser<'input> for BssParser {
     type Output = ();
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
-        let (directive, span) = Check(|state: &ParserState| {
-            check_section(
-                Section::Bss,
-                state,
-                input.tokens.get(state.idx).expect("There should always be a token as the outer loop checks this.").span,
-            )
-        })
-        .and(DirectiveParser)
-        .right()
-        .parse(input, state)?;
+        let directive =
+            Check(|state: &ParserState| check_section(Section::Bss, state)).and(DirectiveParser).right().parse(input, state)?;
 
         match directive {
             Directive::Space => SpaceListParser.parse(input, state).map_err(Error::into_incomplete_match)?,
@@ -200,7 +178,7 @@ impl<'input> Parser<'input> for BssParser {
             Directive::Bss => state.section = Section::Bss,
             Directive::Byte | Directive::Hword | Directive::Word | Directive::Dword | Directive::Qword | Directive::Ascii => {
                 return Err(Error::IncompleteMatch(ParserError::WrongDirective {
-                    span,
+                    token_idx: state.idx,
                     directive,
                     expected: "Only .space is allowed in .bss section.",
                 }));
@@ -219,13 +197,13 @@ impl<'input> Parser<'input> for SectionParser {
     type Output = ();
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
-        let (directive, span) = DirectiveParser.parse(input, state)?;
+        let directive = DirectiveParser.parse(input, state)?;
 
         match directive {
             Directive::Code => state.section = Section::Code,
             Directive::Data => state.section = Section::Data,
             Directive::Bss => state.section = Section::Bss,
-            directive => Err(Error::NoMatch(ParserError::InvalidSection { span, section: directive }))?,
+            directive => Err(Error::NoMatch(ParserError::InvalidSection { token_idx: state.idx, section: directive }))?,
         }
 
         // Every line must end with a newline, because the tokenizer adds one to the last line in the file if its missing
@@ -243,17 +221,20 @@ impl<'input> Parser<'input> for LabelParser {
         let span = IdentParser.and(ColonParser).left().parse(input, state)?;
         let ident = &input.raw[span];
 
-        let idx = match state.section {
+        let mem_idx = match state.section {
             Section::Code => state.instructions.len() as u64,
             Section::Data => state.data.len() as u64,
             Section::Bss => state.bss,
             Section::Undefined => {
-                return Err(Error::IncompleteMatch(ParserError::LabelBeforeFirstSection { span }));
+                return Err(Error::IncompleteMatch(ParserError::LabelBeforeFirstSection { token_idx: state.idx }));
             }
         };
 
-        if let Some((_old_idx, old_span)) = state.labels.insert(ident, (idx, span)) {
-            Err(Error::IncompleteMatch(ParserError::DuplicateLabel { first_occurence: old_span, second_occurence: span }))?;
+        if let Some((_old_mem_idx, old_token_idx)) = state.labels.insert(ident, (mem_idx, state.idx)) {
+            Err(Error::IncompleteMatch(ParserError::DuplicateLabel {
+                first_token_idx: old_token_idx,
+                second_token_idx: state.idx,
+            }))?;
         }
 
         // Every line must end with a newline, because the tokenizer adds one to the last line in the file if its missing
@@ -261,10 +242,10 @@ impl<'input> Parser<'input> for LabelParser {
     }
 }
 
-fn check_section(expected: Section, state: &ParserState, span: Range) -> Result<(), Error> {
+fn check_section(expected: Section, state: &ParserState) -> Result<(), Error> {
     if state.section == expected {
         Ok(())
     } else {
-        Err(Error::NoMatch(ParserError::WrongSection { span, section: state.section, expected }))
+        Err(Error::NoMatch(ParserError::WrongSection { token_idx: state.idx, section: state.section, expected }))
     }
 }

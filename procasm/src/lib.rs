@@ -89,7 +89,7 @@
 
 use crate::instruction::Instruction;
 use crate::linker::{Linker, LinkerError};
-use crate::parser::parse;
+use crate::parser::{ParserInput, parse};
 use crate::tokenizer::{Tokenizer, TokenizerError};
 use procem::program::Program;
 use thiserror::Error;
@@ -155,8 +155,9 @@ pub fn assemble<const MEM_SIZE: usize>(input: impl AsRef<str>) -> Result<Assembl
 
     let tokens = Tokenizer::tokenize(input).map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())?;
 
-    let parsed = parse(&tokens, input).map_err(|err| {
-        err.into_iter().map(|err| AssemblerError::Parser { err: err.render(input) }).collect::<Vec<AssemblerError>>()
+    let parser_input = ParserInput { raw: input, tokens: &tokens };
+    let parsed = parse(parser_input).map_err(|err| {
+        err.into_iter().map(|err| AssemblerError::Parser { err: err.render(parser_input) }).collect::<Vec<AssemblerError>>()
     })?;
 
     Linker::<'_, MEM_SIZE>::link(input, parsed).map_err(|err| err.into_iter().map(Into::into).collect::<Vec<AssemblerError>>())

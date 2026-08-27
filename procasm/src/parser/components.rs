@@ -19,7 +19,9 @@ impl<'input> Parser<'input> for RegisterParser {
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
         let span = IdentParser.parse(input, state)?;
-        Register::try_from(&input.raw[span]).map_err(|err| ParserError::RegisterParsing { span, err }).map_err(Error::NoMatch)
+        Register::try_from(&input.raw[span])
+            .map_err(|err| ParserError::RegisterParsing { token_idx: state.idx, err })
+            .map_err(Error::NoMatch)
     }
 }
 
@@ -32,7 +34,7 @@ impl<'input> Parser<'input> for MnemonicParser {
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
         let span = IdentParser.parse(input, state)?;
         let ident = &input.raw[span];
-        ident.try_into().map_err(|()| ParserError::UnknownMnemonic { span }).map_err(Error::NoMatch)
+        ident.try_into().map_err(|()| ParserError::UnknownMnemonic { token_idx: state.idx }).map_err(Error::NoMatch)
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -44,8 +46,8 @@ impl<'input> Parser<'input> for OperandParser {
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
         RegisterParser
             .map(|reg| Ok(Operand::Register(reg)))
-            .or(ImmediateLiteralParser.map(|(lit, span)| {
-                u64::from_immediate_literal(lit, span, input.raw) // TODO: This always u64?
+            .or(ImmediateLiteralParser.map(|(lit, span, token_idx)| {
+                u64::from_immediate_literal(lit, span, token_idx, input.raw) // TODO: This always u64?
                     .map(Operand::Value)
                     .map_err(Error::IncompleteMatch)
             }))
@@ -106,9 +108,11 @@ macro_rules! immediate_literal_list_parser {
             type Output = $ret_val;
 
             fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
-                let (lit, span) = ImmediateLiteralParser.parse(input, state)?;
-                <$ret_val as crate::parser::literal::FromImmediateLiteral>::from_immediate_literal(lit, span, input.raw)
-                    .map_err(Error::IncompleteMatch)
+                let (lit, span, token_idx) = ImmediateLiteralParser.parse(input, state)?;
+                <$ret_val as crate::parser::literal::FromImmediateLiteral>::from_immediate_literal(
+                    lit, span, token_idx, input.raw,
+                )
+                .map_err(Error::IncompleteMatch)
             }
         }
 
@@ -164,10 +168,10 @@ impl<'input> Parser<'input> for SpaceParser {
     type Output = ();
 
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
-        let (lit, span) = ImmediateLiteralParser.parse(input, state)?;
-        let space = u64::from_immediate_literal(lit, span, input.raw).map_err(Error::IncompleteMatch)?;
+        let (lit, span, token_idx) = ImmediateLiteralParser.parse(input, state)?;
+        let space = u64::from_immediate_literal(lit, span, token_idx, input.raw).map_err(Error::IncompleteMatch)?;
         state.bss = state.bss.checked_add(space).ok_or(Error::IncompleteMatch(ParserError::BssOverflow {
-            span,
+            token_idx,
             prev_bss: state.bss,
             additional_bss: space,
         }))?;
