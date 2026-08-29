@@ -10,7 +10,7 @@ All assembly is interpreted as ASCII.
 All instructions, registers and immediate values can be written in mixed case.
 All operations that can be suffixed with an 'S' set the flag registers depending on the operation.
 
-- *Labels* (**\<LABEL>**) are used to mark specific locations in the program. They are denoted by a string of alphanumeric or underscore ('_') or dash ('-') characters followed by a colon (':') (e.g., 'label:'). Labels are case-sensitive.
+- *Labels* (**\<LABEL>**) are used to mark specific locations in the program. They are denoted by a string of alphanumeric or underscore ('_') or dash ('-') characters followed by a colon (':') (e.g., 'label:'). Labels are case-sensitive and can start a line.
 - *Registers* (**\<REG>**) must be a valid register name (e.g., 'R0', 'r1', 'R2', 'PC', 'sp').
 - *Literals* (**\<LIT>**) are decimal, binary, hexadecimal, octal, boolean or char constants.
   - Decimal values start with '0d' (optional), followed by a sequence of '0's through '9's. Decimal values can be negative.
@@ -251,6 +251,12 @@ Shift the value in the register left by the specified number of bits. Only use v
 Shift the value in the register right by the specified number of bits. Only use values between 1 and the number of bits of the Word size minus 1.
 
 `SHR` `<REG>` `,` `<LIT>`
+
+#### **ASR**
+
+Arithmetic shift the value in the register right by the specified number of bits, preserving the sign bit. Only use values between 1 and the number of bits of the Word size minus 1.
+
+`ASR` `<REG>` `,` `<LIT>`
 
 #### **STR**
 

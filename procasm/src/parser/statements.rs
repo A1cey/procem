@@ -236,8 +236,7 @@ impl<'input> Parser<'input> for LabelParser {
             }))?;
         }
 
-        // Every line must end with a newline, because the tokenizer adds one to the last line in the file if its missing
-        NewlineParser.parse(input, state).map_err(Error::into_incomplete_match)
+        Ok(())
     }
 }
 

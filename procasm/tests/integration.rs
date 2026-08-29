@@ -134,8 +134,7 @@ fn control_flow_and_labels() {
         _start:
             mov R0, 0
             mov R1, 5
-        loop:
-            add R0, 1
+        loop: add R0, 1
             subs R1, 1
             jnz loop
         ",

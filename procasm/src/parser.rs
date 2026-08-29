@@ -156,7 +156,7 @@ fn skip_to_next_line(tokens: &[Token], state: &mut ParserState) {
 #[cfg(test)]
 mod test {
     use crate::{
-        instruction::{Instruction, MemoryLocation, Operand},
+        instruction::{Instruction, JumpCondition, MemoryLocation, Operand},
         parser::{Parser, ParserError, ParserInput, ParserState, ProcasmParser, Section, combinators::Error, parse},
         tokenizer::Tokenizer,
     };
@@ -280,6 +280,37 @@ mod test {
         assert_eq!(parsed.labels.len(), 2);
         assert_eq!(parsed.labels[b"a".as_slice()], (0, 5));
         assert_eq!(parsed.labels[b"b".as_slice()], (1 + 1 + 2 + 2 + 4 + 4 + 4 + 8 + 8 + 16 + 16, 35));
+    }
+
+    #[test]
+    fn parse_labels() {
+        let input = b"
+            .code
+            a:
+                nop
+            b: jmp a
+            c: d: nop
+            e: .bss
+            f: .space 1
+            ";
+
+        let tokens = Tokenizer::tokenize(input).unwrap();
+        let parsed = parse(ParserInput { raw: input, tokens: &tokens }).unwrap();
+
+        assert_eq!(parsed.labels().len(), 6);
+
+        assert_eq!(parsed.labels()[b"a".as_slice()], (0, 5));
+        assert_eq!(parsed.labels()[b"b".as_slice()], (1, 10));
+        assert_eq!(parsed.labels()[b"c".as_slice()], (2, 15));
+        assert_eq!(parsed.labels()[b"d".as_slice()], (2, 17));
+        assert_eq!(parsed.labels()[b"e".as_slice()], (3, 21));
+        assert_eq!(parsed.labels()[b"f".as_slice()], (0, 25));
+
+        assert_eq!(parsed.instructions.len(), 3);
+        assert_eq!(parsed.instructions[0], Instruction::Nop);
+        assert_eq!(parsed.instructions[1], Instruction::Jump { to: u64::MAX, condition: JumpCondition::Unconditional });
+        assert_eq!(parsed.instructions[2], Instruction::Nop);
+        assert_eq!(parsed.bss, 1);
     }
 
     #[test]
