@@ -98,7 +98,7 @@ impl<'input> Parser<'input> for CodeParser {
                     .parse(input, state)
                     .map_err(Error::into_incomplete_match)?;
 
-                u64::from_immediate_literal(lit, span, state.idx, input.raw)
+                u32::from_immediate_literal(lit, span, state.idx, input.raw)
                     .map(|word| Instruction::from_shift_mnemonic(mnemonic, reg, word))
                     .map_err(Error::IncompleteMatch)?
             }

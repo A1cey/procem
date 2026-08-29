@@ -100,10 +100,13 @@ pub enum Instruction {
     Not { reg: Register },
     /// Shift the value in the register left by the specified number of bits.
     /// The assembler only accepts values between 1 and the number of bits of the Word size minus 1.
-    Shl { reg: Register, val: u64 },
+    Shl { reg: Register, val: u32 },
     /// Shift the value in the register right by the specified number of bits.
     /// The assembler only accepts values between 1 and the number of bits of the Word size minus 1.
-    Shr { reg: Register, val: u64 },
+    Shr { reg: Register, val: u32 },
+    /// Arithmetic shift the value in the register right by the specified number of bits, preserving the sign bit.
+    /// The assembler only accepts values between 1 and the number of bits of the Word size minus 1.
+    Asr { reg: Register, val: u32 },
     /// Rotate the value in the register left by the specified number of bits.
     /// The assembler only accepts values between 1 and the number of bits of the Word size minus 1.
     Rol { reg: Register, val: u32 },
@@ -153,6 +156,7 @@ impl InstructionTrait for Instruction {
             Self::Not { reg } => Self::not(reg, processor),
             Self::Shl { reg, val } => Self::shl(reg, val, processor),
             Self::Shr { reg, val } => Self::shr(reg, val, processor),
+            Self::Asr { reg, val } => Self::asr(reg, val, processor),
             Self::Rol { reg, val } => Self::rol(reg, val, processor),
             Self::Ror { reg, val } => Self::ror(reg, val, processor),
         }
@@ -206,10 +210,11 @@ impl Instruction {
         }
     }
 
-    pub(crate) const fn from_shift_mnemonic(instr: ShiftMnemonic, reg: Register, val: u64) -> Self {
+    pub(crate) const fn from_shift_mnemonic(instr: ShiftMnemonic, reg: Register, val: u32) -> Self {
         match instr {
             ShiftMnemonic::Shl => Self::Shl { reg, val },
             ShiftMnemonic::Shr => Self::Shr { reg, val },
+            ShiftMnemonic::Asr => Self::Asr { reg, val },
         }
     }
 
@@ -784,22 +789,36 @@ impl Instruction {
     #[inline]
     fn shl<const MEM_SIZE: usize, Insts, Bytes>(
         reg: Register,
-        val: u64,
+        val: u32,
         processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         let a = processor.registers.get_reg(reg);
-        processor.registers.set_reg(reg, a << val);
+        processor.registers.set_reg(reg, a.checked_shl(val).unwrap_or(0));
     }
 
     /// Shift the value in the register right by the specified number of bits.
     #[inline]
     fn shr<const MEM_SIZE: usize, Insts, Bytes>(
         reg: Register,
-        val: u64,
+        val: u32,
         processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
     ) {
         let a = processor.registers.get_reg(reg);
-        processor.registers.set_reg(reg, a >> val);
+        processor.registers.set_reg(reg, a.checked_shr(val).unwrap_or(0));
+    }
+
+    /// Arithmetic shift the value in the register right by the specified number of bits, preserving the sign bit.
+    #[inline]
+    fn asr<const MEM_SIZE: usize, Insts, Bytes>(
+        reg: Register,
+        val: u32,
+        processor: &mut Processor<MEM_SIZE, Self, Insts, Bytes>,
+    ) {
+        let a = processor.registers.get_reg(reg);
+
+        // Stop at 63 so the sign bit fills the rest of the register
+        let result = (a.cast_signed() >> val.min(63)).cast_unsigned();
+        processor.registers.set_reg(reg, result);
     }
 
     /// Rotate the value in the register left by the specified number of bits.

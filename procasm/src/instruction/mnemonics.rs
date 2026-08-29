@@ -52,6 +52,7 @@ pub enum RotateMnemonic {
 pub enum ShiftMnemonic {
     Shl,
     Shr,
+    Asr,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Hash)]
@@ -154,6 +155,7 @@ impl TryFrom<&[u8]> for Mnemonic {
             inst if inst.eq_ignore_ascii_case(b"ROR") => Self::Rotate(RotateMnemonic::Ror),
             inst if inst.eq_ignore_ascii_case(b"SHL") => Self::Shift(ShiftMnemonic::Shl),
             inst if inst.eq_ignore_ascii_case(b"SHR") => Self::Shift(ShiftMnemonic::Shr),
+            inst if inst.eq_ignore_ascii_case(b"ASR") => Self::Shift(ShiftMnemonic::Asr),
             inst if inst.eq_ignore_ascii_case(b"STR") => Self::LoadOrStore(LoadOrStoreMnemonic::Str),
             inst if inst.eq_ignore_ascii_case(b"STRB") => Self::LoadOrStore(LoadOrStoreMnemonic::Strb),
             inst if inst.eq_ignore_ascii_case(b"STRH") => Self::LoadOrStore(LoadOrStoreMnemonic::Strh),
