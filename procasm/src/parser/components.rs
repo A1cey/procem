@@ -127,7 +127,7 @@ macro_rules! immediate_literal_list_parser {
                 state.data.extend_from_slice(&val.to_le_bytes());
 
                 while CommaParser.parse(input, state) == Ok(()) {
-                    let val = $parser_name.parse(input, state).map_err(Error::into_incomplete_match)?;
+                    let val = $parser_name.commit().parse(input, state)?;
                     state.data.extend_from_slice(&val.to_le_bytes());
                 }
                 Ok(())
@@ -154,7 +154,7 @@ impl<'input> Parser<'input> for AsciiListParser {
         state.data.extend_from_slice(&input.raw[span]);
 
         while CommaParser.parse(input, state) == Ok(()) {
-            let span = StringLiteralParser.parse(input, state).map_err(Error::into_incomplete_match)?;
+            let span = StringLiteralParser.commit().parse(input, state)?;
             state.data.extend_from_slice(&input.raw[span]);
         }
         Ok(())
@@ -189,7 +189,7 @@ impl<'input> Parser<'input> for SpaceListParser {
         SpaceParser.parse(input, state)?;
 
         while CommaParser.parse(input, state) == Ok(()) {
-            SpaceParser.parse(input, state).map_err(Error::into_incomplete_match)?;
+            SpaceParser.commit().parse(input, state)?;
         }
         Ok(())
     }

@@ -9,24 +9,6 @@ pub enum Error {
 impl Error {
     #[must_use]
     #[inline]
-    pub fn into_no_match(self) -> Self {
-        match self {
-            Self::NoMatch(_) => self,
-            Self::IncompleteMatch(err) => Self::NoMatch(err),
-        }
-    }
-
-    #[must_use]
-    #[inline]
-    pub fn into_incomplete_match(self) -> Self {
-        match self {
-            Self::IncompleteMatch(_) => self,
-            Self::NoMatch(err) => Self::IncompleteMatch(err),
-        }
-    }
-
-    #[must_use]
-    #[inline]
     pub fn inner(self) -> ParserError {
         match self {
             Self::IncompleteMatch(err) | Self::NoMatch(err) => err,
@@ -78,6 +60,14 @@ pub trait Parser<'input> {
         F: FnOnce(Self::Output) -> T2,
     {
         Map(self, f)
+    }
+
+    #[inline]
+    fn commit(self) -> Commit<Self>
+    where
+        Self: Sized,
+    {
+        Commit(self)
     }
 }
 
@@ -194,5 +184,22 @@ where
     #[inline]
     fn parse(self, _input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
         (self.0)(state)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Commit<P>(P);
+
+impl<'input, P> Parser<'input> for Commit<P>
+where
+    P: Parser<'input>,
+{
+    type Output = P::Output;
+
+    fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
+        self.0.parse(input, state).map_err(|err| match err {
+            Error::IncompleteMatch(_) => err,
+            Error::NoMatch(err) => Error::IncompleteMatch(err),
+        })
     }
 }

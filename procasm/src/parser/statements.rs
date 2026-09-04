@@ -33,12 +33,7 @@ impl<'input> Parser<'input> for CodeParser {
             },
             // `_mnemonic` will be needed if there are future instructions like Adr
             Mnemonic::RegLabel(_mnemonic) => {
-                let (reg, span) = RegisterParser
-                    .and(CommaParser)
-                    .left()
-                    .and(IdentParser)
-                    .parse(input, state)
-                    .map_err(Error::into_incomplete_match)?;
+                let (reg, span) = RegisterParser.and(CommaParser).left().and(IdentParser).commit().parse(input, state)?;
 
                 state.unlinked_instructions.push(UnlinkedInstruction::new(state.instructions.len(), span));
                 Instruction::Adr { reg, addr: u64::MAX }
@@ -48,10 +43,10 @@ impl<'input> Parser<'input> for CodeParser {
                 .left()
                 .and(OperandParser)
                 .map(|(reg, op)| Instruction::from_reg_operand_mnemonic(mnemonic, reg, op))
-                .parse(input, state)
-                .map_err(Error::into_incomplete_match)?,
+                .commit()
+                .parse(input, state)?,
             Mnemonic::Jump(mnemonic) => {
-                let span = IdentParser.parse(input, state).map_err(Error::into_incomplete_match)?;
+                let span = IdentParser.commit().parse(input, state)?;
 
                 state.unlinked_instructions.push(UnlinkedInstruction::new(state.instructions.len(), span));
                 Instruction::from_jump_mnemonic(mnemonic, u64::MAX)
@@ -61,23 +56,18 @@ impl<'input> Parser<'input> for CodeParser {
                 .left()
                 .and(OperandParser)
                 .map(|ops| Instruction::from_two_operand_mnemonic(mnemonic, ops.0, ops.1))
-                .parse(input, state)
-                .map_err(Error::into_incomplete_match)?,
-            Mnemonic::SingleOperand(mnemonic) => OperandParser
-                .map(|op| Instruction::from_single_operand_mnemonic(mnemonic, op))
-                .parse(input, state)
-                .map_err(Error::into_incomplete_match)?,
-            Mnemonic::SingleReg(mnemonic) => RegisterParser
-                .map(|reg| Instruction::from_single_reg_mnemonic(mnemonic, reg))
-                .parse(input, state)
-                .map_err(Error::into_incomplete_match)?,
+                .commit()
+                .parse(input, state)?,
+            Mnemonic::SingleOperand(mnemonic) => {
+                OperandParser.map(|op| Instruction::from_single_operand_mnemonic(mnemonic, op)).commit().parse(input, state)?
+            }
+
+            Mnemonic::SingleReg(mnemonic) => {
+                RegisterParser.map(|reg| Instruction::from_single_reg_mnemonic(mnemonic, reg)).commit().parse(input, state)?
+            }
             Mnemonic::Rotate(mnemonic) => {
-                let (reg, (literal, span, _token_idx)) = RegisterParser
-                    .and(CommaParser)
-                    .left()
-                    .and(ImmediateLiteralParser)
-                    .parse(input, state)
-                    .map_err(Error::into_incomplete_match)?;
+                let (reg, (literal, span, _token_idx)) =
+                    RegisterParser.and(CommaParser).left().and(ImmediateLiteralParser).commit().parse(input, state)?;
 
                 u64::from_immediate_literal(literal, span, state.idx, input.raw)
                     .and_then(|lit| {
@@ -91,12 +81,8 @@ impl<'input> Parser<'input> for CodeParser {
                     .map_err(Error::IncompleteMatch)?
             }
             Mnemonic::Shift(mnemonic) => {
-                let (reg, (lit, span, _token_idx)) = RegisterParser
-                    .and(CommaParser)
-                    .left()
-                    .and(ImmediateLiteralParser)
-                    .parse(input, state)
-                    .map_err(Error::into_incomplete_match)?;
+                let (reg, (lit, span, _token_idx)) =
+                    RegisterParser.and(CommaParser).left().and(ImmediateLiteralParser).commit().parse(input, state)?;
 
                 u32::from_immediate_literal(lit, span, state.idx, input.raw)
                     .map(|word| Instruction::from_shift_mnemonic(mnemonic, reg, word))
@@ -107,14 +93,14 @@ impl<'input> Parser<'input> for CodeParser {
                 .left()
                 .and(MemoryLocationParser)
                 .map(|(reg, mem_location)| Instruction::from_ldr_or_str_mnemonic(mnemonic, reg, mem_location))
-                .parse(input, state)
-                .map_err(Error::into_incomplete_match)?,
+                .commit()
+                .parse(input, state)?,
         };
 
         state.instructions.push(inst);
 
         // Every line must end with a newline, because the tokenizer adds one to the last line in the file if its missing
-        NewlineParser.parse(input, state).map_err(Error::into_incomplete_match)
+        NewlineParser.commit().parse(input, state)
     }
 }
 
@@ -129,12 +115,12 @@ impl<'input> Parser<'input> for DataParser {
             Check(|state: &ParserState| check_section(Section::Data, state)).and(DirectiveParser).right().parse(input, state)?;
 
         match directive {
-            Directive::Byte => ByteListParser.parse(input, state),
-            Directive::Hword => HwordListParser.parse(input, state),
-            Directive::Word => WordListParser.parse(input, state),
-            Directive::Dword => DwordListParser.parse(input, state),
-            Directive::Qword => QwordListParser.parse(input, state),
-            Directive::Ascii => AsciiListParser.parse(input, state),
+            Directive::Byte => ByteListParser.commit().parse(input, state),
+            Directive::Hword => HwordListParser.commit().parse(input, state),
+            Directive::Word => WordListParser.commit().parse(input, state),
+            Directive::Dword => DwordListParser.commit().parse(input, state),
+            Directive::Qword => QwordListParser.commit().parse(input, state),
+            Directive::Ascii => AsciiListParser.commit().parse(input, state),
             Directive::Code => {
                 state.section = Section::Code;
                 Ok(())
@@ -152,11 +138,10 @@ impl<'input> Parser<'input> for DataParser {
                 directive,
                 expected: "Only .byte, .hword, .word, .dword, .qword and .ascii are allowed in .data sections.",
             })),
-        }
-        .map_err(Error::into_incomplete_match)?;
+        }?;
 
         // Every line must end with a newline, because the tokenizer adds one to the last line in the file if its missing
-        NewlineParser.parse(input, state).map_err(Error::into_incomplete_match)
+        NewlineParser.commit().parse(input, state)
     }
 }
 
@@ -171,7 +156,7 @@ impl<'input> Parser<'input> for BssParser {
             Check(|state: &ParserState| check_section(Section::Bss, state)).and(DirectiveParser).right().parse(input, state)?;
 
         match directive {
-            Directive::Space => SpaceListParser.parse(input, state).map_err(Error::into_incomplete_match)?,
+            Directive::Space => SpaceListParser.commit().parse(input, state)?,
             Directive::Code => state.section = Section::Code,
             Directive::Data => state.section = Section::Data,
             Directive::Bss => state.section = Section::Bss,
@@ -185,7 +170,7 @@ impl<'input> Parser<'input> for BssParser {
         }
 
         // Every line must end with a newline, because the tokenizer adds one to the last line in the file if its missing
-        NewlineParser.parse(input, state).map_err(Error::into_incomplete_match)
+        NewlineParser.commit().parse(input, state)
     }
 }
 
@@ -206,7 +191,7 @@ impl<'input> Parser<'input> for SectionParser {
         }
 
         // Every line must end with a newline, because the tokenizer adds one to the last line in the file if its missing
-        NewlineParser.parse(input, state).map_err(Error::into_incomplete_match)
+        NewlineParser.commit().parse(input, state)
     }
 }
 
