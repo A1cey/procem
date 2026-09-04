@@ -3,10 +3,6 @@
 - Add more tests
 
 **Parser Findings**
-1. 🔴 [tokenizer.rs:374](https://github.com/A1cey/procem/blob/23f51ee9b95b72128ccb45827386b8e0dc5cb558/procasm/src/tokenizer.rs#L374): valid literals panic when `0` is followed by punctuation. `.byte 0, 1` reaches `todo!()`. Treat standalone zero as decimal regardless of delimiter.
-
-2. 🔴 [tokenizer.rs:285](https://github.com/A1cey/procem/blob/23f51ee9b95b72128ccb45827386b8e0dc5cb558/procasm/src/tokenizer.rs#L285): unterminated strings read past the input and panic. Bound the scan and return `TokenizerError`.
-
 3. 🟡 [parser.rs:101](https://github.com/A1cey/procem/blob/23f51ee9b95b72128ccb45827386b8e0dc5cb558/procasm/src/parser.rs#L101): alternative parsing discards useful errors. `wat r0` reports “expected Newline” instead of “unknown mnemonic.” Preserve the furthest or most committed error.
 
 4. 🟡 [components.rs:23](https://github.com/A1cey/procem/blob/23f51ee9b95b72128ccb45827386b8e0dc5cb558/procasm/src/parser/components.rs#L23): diagnostics frequently record `state.idx` after consuming the offending token. Capture the token index before parsing.

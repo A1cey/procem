@@ -283,10 +283,20 @@ impl Tokenizer<'_> {
     }
 
     fn expect_string_literal(&mut self) {
+        let start_idx = self.curr_idx;
         self.curr_idx += 1; // skip start '"'
 
-        while self.get_curr_byte() != b'"' {
+        let mut found = false;
+        while self.curr_idx < self.input_len {
+            if self.get_curr_byte() == b'"' {
+                found = true;
+                break;
+            }
             self.curr_idx += 1;
+        }
+
+        if !found {
+            return self.add_error(TokenizerError::UnterminatedString { start_idx });
         }
 
         self.tokens.push(Token {
@@ -407,6 +417,8 @@ pub enum TokenizerError {
     InvalidLabelName { token_start_idx: usize, idx: usize, character: char },
     #[error("Invalid number at idx {idx}")]
     InvalidNumber { idx: usize },
+    #[error("Unterminated string at idx: {start_idx}")]
+    UnterminatedString { start_idx: usize },
 }
 
 #[cfg(test)]
@@ -885,6 +897,15 @@ mod test {
             }
             t => panic!("Expected StringLiteral got: {t:?}"),
         }
+    }
+
+    #[test]
+    fn expect_unterminated_string() {
+        let asm = b"\"Test";
+        let mut t = Tokenizer::from(asm.as_slice());
+        t.process_next_token();
+        assert!(matches!(t.errors[0], TokenizerError::UnterminatedString { start_idx: 0 }));
+        assert_eq!(t.curr_idx, asm.len());
     }
 
     #[test]
