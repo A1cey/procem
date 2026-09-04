@@ -221,7 +221,7 @@ fn parse_data_multi_alloc() {
         .data
         a:
             .byte -1,2
-            .hword 3, 4
+            .hword 0, 4
             .word 5, 6,7
             .dword 8, 9
             .qword 10, 11
@@ -238,7 +238,7 @@ fn parse_data_multi_alloc() {
     offset += 1; // byte offset
     assert_eq!(processor.mem.read(program.data().base_addr() + offset), 2);
     offset += 1; // byte offset
-    assert_eq!(processor.mem.read(program.data().base_addr() + offset), 3);
+    assert_eq!(processor.mem.read(program.data().base_addr() + offset), 0);
     offset += 2; // hword offset
     assert_eq!(processor.mem.read(program.data().base_addr() + offset), 4);
     offset += 2; // hword offset

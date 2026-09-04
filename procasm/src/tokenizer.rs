@@ -371,7 +371,12 @@ impl Tokenizer<'_> {
                     )
                 }
 
-                _ => todo!("Error case no matching digit after 0 (allowed: x,d,b,o)"),
+                b',' => {
+                    // only '0' with following ','
+                    self.curr_idx -= 1;
+                    (ImmediateLiteralKind::Decimal, Range(self.curr_idx, self.curr_idx + 1))
+                }
+                _ => return self.add_error(TokenizerError::InvalidNumber { idx: self.curr_idx - 1 }),
             }
         } else {
             if self.get_curr_byte() == b'-' {
@@ -400,6 +405,8 @@ pub enum TokenizerError {
     CharLiteral { idx: usize },
     #[error("Invalid character {character} at idx: {idx} in label name starting at idx {token_start_idx}.")]
     InvalidLabelName { token_start_idx: usize, idx: usize, character: char },
+    #[error("Invalid number at idx {idx}")]
+    InvalidNumber { idx: usize },
 }
 
 #[cfg(test)]
