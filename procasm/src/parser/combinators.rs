@@ -113,14 +113,30 @@ where
 
     #[inline]
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
-        let saved_idx = state.idx;
+        let start_state = state.clone();
 
         match self.0.parse(input, state) {
             Ok(item) => Ok(item),
+            // Return IncompleteMatch err immediately
             Err(Error::IncompleteMatch(err)) => Err(Error::IncompleteMatch(err)),
-            Err(Error::NoMatch(_)) => {
-                state.idx = saved_idx;
-                self.1.parse(input, state)
+            Err(err_p1) => {
+                let end_idx_p1 = state.idx;
+                *state = start_state;
+
+                match self.1.parse(input, state) {
+                    Ok(item) => Ok(item),
+                    // Return IncompleteMatch err immediately
+                    Err(Error::IncompleteMatch(err)) => Err(Error::IncompleteMatch(err)),
+                    // Return parser 1 err if it parsed equal or more than parser 2 else return
+                    // parser 2 err
+                    Err(err_p2) => {
+                        if end_idx_p1 >= state.idx {
+                            Err(err_p1)
+                        } else {
+                            Err(err_p2)
+                        }
+                    }
+                }
             }
         }
     }
@@ -201,5 +217,145 @@ where
             Error::IncompleteMatch(_) => err,
             Error::NoMatch(err) => Error::IncompleteMatch(err),
         })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::cell::Cell;
+
+    use super::*;
+    thread_local! { static FIRST_PARSER_RAN: Cell<bool> = const {Cell::new(false)}; }
+
+    /// Returns 0 or 1 depending on the order of the parsers.
+    /// First parser that runs will return 0, second will return 1.
+    fn get_parser_idx() -> usize {
+        if !FIRST_PARSER_RAN.get() {
+            FIRST_PARSER_RAN.set(true);
+            false
+        } else {
+            true
+        }
+        .into()
+    }
+
+    struct NoMatchAfterOneStep;
+    impl<'input> Parser<'input> for NoMatchAfterOneStep {
+        type Output = usize;
+        fn parse(self, _input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
+            state.idx += 1;
+
+            // parser reports if they're first or second
+            Err(Error::NoMatch(ParserError::TokenNotFound { token_idx: get_parser_idx() }))
+        }
+    }
+
+    struct NoMatchAfterTwoSteps;
+    impl<'input> Parser<'input> for NoMatchAfterTwoSteps {
+        type Output = usize;
+        fn parse(self, _input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
+            state.idx += 2;
+
+            // parser report if their first or second through the end flag
+            Err(Error::NoMatch(ParserError::TokenNotFound { token_idx: get_parser_idx() }))
+        }
+    }
+
+    struct IncompleteMatch;
+    impl<'input> Parser<'input> for IncompleteMatch {
+        type Output = usize;
+        fn parse(self, _input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
+            state.idx += 1;
+
+            // parser report if their first or second through the end flag
+            Err(Error::IncompleteMatch(ParserError::TokenNotFound { token_idx: get_parser_idx() }))
+        }
+    }
+
+    struct Match;
+    impl<'input> Parser<'input> for Match {
+        type Output = usize;
+        fn parse(self, _input: ParserInput<'input>, _state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
+            // parser report if their first or second through the end flag
+            Ok(get_parser_idx())
+        }
+    }
+
+    mod or {
+        use super::*;
+        #[test]
+        fn no_match_err_parser_1_parses_more() {
+            let res = NoMatchAfterTwoSteps
+                .or(NoMatchAfterOneStep)
+                .parse(ParserInput { raw: b"", tokens: &[] }, &mut ParserState::default())
+                .unwrap_err();
+            assert_eq!(res, Error::NoMatch(ParserError::TokenNotFound { token_idx: 0 }));
+        }
+
+        #[test]
+        fn no_match_err_parser_2_parses_more() {
+            let res = NoMatchAfterOneStep
+                .or(NoMatchAfterTwoSteps)
+                .parse(ParserInput { raw: b"", tokens: &[] }, &mut ParserState::default())
+                .unwrap_err();
+            assert_eq!(res, Error::NoMatch(ParserError::TokenNotFound { token_idx: 1 }));
+        }
+
+        #[test]
+        fn no_match_err_parse_eq_parser_1_reports() {
+            let res = NoMatchAfterOneStep
+                .or(NoMatchAfterOneStep)
+                .parse(ParserInput { raw: b"", tokens: &[] }, &mut ParserState::default())
+                .unwrap_err();
+            assert_eq!(res, Error::NoMatch(ParserError::TokenNotFound { token_idx: 0 }));
+        }
+
+        #[test]
+        fn incomplete_match_always_reports() {
+            let res = IncompleteMatch
+                .or(NoMatchAfterOneStep)
+                .parse(ParserInput { raw: b"", tokens: &[] }, &mut ParserState::default())
+                .unwrap_err();
+            assert_eq!(res, Error::IncompleteMatch(ParserError::TokenNotFound { token_idx: 0 }));
+
+            FIRST_PARSER_RAN.set(false);
+            let res = NoMatchAfterTwoSteps
+                .or(IncompleteMatch)
+                .parse(ParserInput { raw: b"", tokens: &[] }, &mut ParserState::default())
+                .unwrap_err();
+            assert_eq!(res, Error::IncompleteMatch(ParserError::TokenNotFound { token_idx: 1 }));
+
+            FIRST_PARSER_RAN.set(false);
+            let res =
+                IncompleteMatch.or(Match).parse(ParserInput { raw: b"", tokens: &[] }, &mut ParserState::default()).unwrap_err();
+            assert_eq!(res, Error::IncompleteMatch(ParserError::TokenNotFound { token_idx: 0 }));
+        }
+
+        #[test]
+        fn match_over_no_match() {
+            assert_eq!(
+                NoMatchAfterOneStep.or(Match).parse(ParserInput { raw: b"", tokens: &[] }, &mut ParserState::default()).unwrap(),
+                1
+            );
+
+            FIRST_PARSER_RAN.set(false);
+            assert_eq!(
+                Match.or(NoMatchAfterOneStep).parse(ParserInput { raw: b"", tokens: &[] }, &mut ParserState::default()).unwrap(),
+                0
+            );
+        }
+
+        #[test]
+        fn first_match() {
+            assert_eq!(Match.or(Match).parse(ParserInput { raw: b"", tokens: &[] }, &mut ParserState::default()).unwrap(), 0);
+        }
+
+        #[test]
+        fn match_over_following_incomplete_match() {
+            assert_eq!(
+                Match.or(IncompleteMatch).parse(ParserInput { raw: b"", tokens: &[] }, &mut ParserState::default()).unwrap(),
+                0
+            );
+        }
     }
 }
