@@ -101,12 +101,12 @@ impl<'input> Parser<'input> for ProcasmParser {
     // TODO: This results in discarding every error and replacing it with expected Newline, because NewlineParser is last
     fn parse(self, input: ParserInput<'input>, state: &mut ParserState<'input>) -> Result<Self::Output, Error> {
         CodeParser
-            .or(BssParser)
             .or(DataParser)
+            .or(BssParser)
             .or(LabelParser)
             .or(SectionParser)
-            .or(EndParser)
             .or(NewlineParser)
+            .or(EndParser)
             .parse(input, state)
     }
 }
@@ -485,5 +485,17 @@ mod test {
         assert_eq!(parsed.instructions.len(), 1);
         assert_eq!(parsed.unlinked_instructions.len(), 1);
         assert_eq!(parsed.instructions[0], Instruction::Adr { reg: Register::R0, addr: u64::MAX });
+    }
+
+    #[test]
+    fn parse_invalid_mnemonic() {
+        let input = b"
+            move r0, 0
+            ";
+        let tokens = Tokenizer::tokenize(input).unwrap();
+        let errs = parse(ParserInput { raw: input, tokens: &tokens }).unwrap_err();
+
+        assert_eq!(errs.len(), 1);
+        assert_eq!(errs[0], ParserError::UnknownMnemonic { token_idx: 1 })
     }
 }

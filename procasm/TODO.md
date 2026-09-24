@@ -3,26 +3,20 @@
 - Add more tests
 
 **Parser Findings**
-3. 🟡 [parser.rs:101](https://github.com/A1cey/procem/blob/23f51ee9b95b72128ccb45827386b8e0dc5cb558/procasm/src/parser.rs#L101): alternative parsing discards useful errors. `wat r0` reports “expected Newline” instead of “unknown mnemonic.” Preserve the furthest or most committed error.
+3. [parser.rs:101]: alternative parsing discards useful errors. `wat r0` reports “expected Newline” instead of “unknown mnemonic.” Preserve the furthest or most committed error.
 
-4. 🟡 [components.rs:23](https://github.com/A1cey/procem/blob/23f51ee9b95b72128ccb45827386b8e0dc5cb558/procasm/src/parser/components.rs#L23): diagnostics frequently record `state.idx` after consuming the offending token. Capture the token index before parsing.
+4. [components.rs:23]: diagnostics frequently record `state.idx` after consuming the offending token. Capture the token index before parsing.
 
-5. 🟡 Parser combinators restore only `idx`, not the complete `ParserState`. This is fragile because parsers also mutate labels, data, BSS, and unresolved instructions. Either make alternatives side-effect-free or checkpoint/restore all state.
-
-The combinator structure itself is compact and readable, and ownership/lifetime use is sensible. The largest parser weakness is that malformed input is not yet reliably panic-free.
+The largest parser weakness is that malformed input is not yet reliably panic-free.
 
 **Project Findings**
-1. 🔴 [linker.rs:53](https://github.com/A1cey/procem/blob/23f51ee9b95b72128ccb45827386b8e0dc5cb558/procasm/src/linker.rs#L53): symbols have no section/type. Consequently `jmp data_label` is accepted, `_start` can be non-code, and `adr` cannot distinguish code addresses from data addresses.
+1. [linker.rs:53]: symbols have no section/type. Consequently `jmp data_label` is accepted, `_start` can be non-code, and `adr` cannot distinguish code addresses from data addresses.
 
-2. 🔴 [linker.rs:142](https://github.com/A1cey/procem/blob/23f51ee9b95b72128ccb45827386b8e0dc5cb558/procasm/src/linker.rs#L142): BSS symbols remain section-relative. With one byte of data, the first BSS symbol still resolves to address `0`, not `1`.
+2. [linker.rs:142]: BSS symbols remain section-relative. With one byte of data, the first BSS symbol still resolves to address `0`, not `1`.
 
-3. 🔴 Static data+BSS size is not checked against `MEM_SIZE`. Assembly succeeds, then loading the resulting program panics in [processor.rs:75](https://github.com/A1cey/procem/blob/23f51ee9b95b72128ccb45827386b8e0dc5cb558/procem/src/processor.rs#L75).
+3. `Instruction` has no assembly formatter, while the parser and linker are private. An LLVM backend must either build text manually or duplicate linking. Expose a structured assembly module with typed symbols and relocations, plus a canonical emitter.
 
-4. 🔴 [jump_condition.rs:48](https://github.com/A1cey/procem/blob/23f51ee9b95b72128ccb45827386b8e0dc5cb558/procasm/src/instruction/jump_condition.rs#L48): signed comparisons ignore overflow. Signed less-than must use $N \ne V$; signed greater-than must use $Z=0 \land N=V$. A probe showed `i64::MIN > 1` branching as true.
-
-5. 🟡 `Instruction` has no assembly formatter, while the parser and linker are private. An LLVM backend must either build text manually or duplicate linking. Expose a structured assembly module with typed symbols and relocations, plus a canonical emitter.
-
-6. 🟡 There is no normal termination instruction. `run_program()` only ends with an error such as `PCOutOfBounds`. Add `HALT`/`EXIT` semantics before compiling complete programs.
+4. There is no normal termination instruction. `run_program()` only ends with an error such as `PCOutOfBounds`. Add `HALT`/`EXIT` semantics before compiling complete programs.
 
 **Required Before LLVM Lowering**
 1. Define a target specification: 64-bit little-endian pointers/registers, stack layout and alignment, integer widths, memory map, entry point, and unsupported LLVM features.

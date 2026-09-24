@@ -30,6 +30,15 @@ impl<'input, const MEM_SIZE: usize> Linker<'input, MEM_SIZE> {
     }
 
     fn run(&mut self) -> Option<AssembledProgram<MEM_SIZE>> {
+        if self.parsed.data.len() + self.parsed.bss() as usize > MEM_SIZE {
+            self.errors.push(LinkerError::DataAndBssSectionTooLarge {
+                data_size: self.parsed.data.len(),
+                bss_size: self.parsed.bss() as usize,
+                mem_size: MEM_SIZE,
+            });
+            return None;
+        }
+
         let unlinked_instructions = mem::take(&mut self.parsed.unlinked_instructions);
 
         for unlinked_instruction in unlinked_instructions {
@@ -180,4 +189,9 @@ pub enum LinkerError {
         u64::MAX
     )]
     DataSectionTooLarge { requested: usize },
+    #[error(
+        "Specified data section plus bss section is too large for memory size. Data size: {}. Bss size: {}. Summed: {}. Memory size: {}.",
+        data_size,bss_size,data_size+bss_size,mem_size
+    )]
+    DataAndBssSectionTooLarge { data_size: usize, bss_size: usize, mem_size: usize },
 }
